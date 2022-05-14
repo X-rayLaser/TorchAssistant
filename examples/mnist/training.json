@@ -1,0 +1,36 @@
+{
+  "pipeline": {
+    "data": {
+      "dataset_name": "MNIST",
+      "transform": [{"name": "totensor"}],
+      "batch_size": 32,
+      "inputs": ["x"],
+      "targets": ["y"]
+    },
+    "training": {
+      "model": {
+        "arch": "examples.mnist.models.LeNet5",
+        "inputs": ["x"],
+        "outputs": ["y_hat"],
+        "optimizer": {
+          "class": "Adam",
+          "params": {
+            "lr": 0.001
+          }
+        }
+      },
+      "num_epochs": 10,
+      "loss": {
+        "class": "CrossEntropyLoss",
+        "args": ["y_hat", "y"]
+      },
+      "metrics": {
+        "loss": {},
+        "accuracy": {
+          "args": ["y_hat", "y"],
+          "transform": "AccuracyTransform"
+        }
+      }
+    }
+  }
+}

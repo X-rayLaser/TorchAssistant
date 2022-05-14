@@ -1,0 +1,98 @@
+{
+  "pipeline": {
+    "data": {
+      "dataset_name": "examples.language_translation.datasets.FrenchToEnglishDataset",
+      "dataset_kwargs": {"path": "examples/language_translation/dataset/eng-fra.txt"},
+      "transform": [],
+      "batch_size": 1,
+      "preprocessors": [
+        {
+          "class": "examples.language_translation.preprocessors.FrenchEncoder",
+          "expose_attributes": ["num_french_words"]
+        },
+        {
+          "class": "examples.language_translation.preprocessors.EnglishEncoder",
+          "expose_attributes": ["num_english_words"]
+        }
+      ],
+      "collator": {
+        "class": "examples.language_translation.collators.MyCollator",
+        "dynamic_kwargs": {
+          "num_french_words": "num_french_words",
+          "num_english_words": "num_english_words"
+        }
+      },
+      "batch_adapter": {
+        "class": "examples.language_translation.adapters.BatchAdapter",
+        "kwargs": {"hidden_size": 32}
+      },
+      "inputs": ["x", "h", "y_shifted"],
+      "targets": ["y"]
+    },
+    "training": {
+      "model": [
+        {
+          "name": "encoder",
+          "arch": "examples.language_translation.models.Encoder",
+          "args": [],
+          "kwargs": {
+            "hidden_size": 32
+          },
+          "dynamic_kwargs": {
+            "input_size": "num_french_words"
+          },
+          "inputs": ["x", "h"],
+          "outputs": [
+            "outputs", "h_e"
+          ],
+          "optimizer": {
+            "class": "SGD",
+            "params": {
+              "lr": 0.001,
+              "momentum": 0.9
+            }
+          }
+        },
+        {
+          "name": "decoder",
+          "arch": "examples.language_translation.models.Decoder",
+          "args": [],
+          "kwargs": {
+            "hidden_size": 32
+          },
+          "dynamic_kwargs": {
+            "output_size": "num_english_words"
+          },
+          "inputs": ["y_shifted", "h_e"],
+          "outputs": [
+            "y_hat", "h_d"
+          ],
+          "optimizer": {
+            "class": "SGD",
+            "params": {
+              "lr": 0.001,
+              "momentum": 0.9
+            }
+          }
+        }],
+      "loss": {
+        "class": "CrossEntropyLoss",
+        "kwargs": {
+          "reduction": "sum"
+        },
+        "inputs": ["y_hat", "y"],
+        "transform": "examples.language_translation.transforms.transform"
+      },
+      "metrics": {
+        "loss": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.language_translation.transforms.transform"
+        }
+      },
+      "num_epochs": 20
+    },
+    "inference": {
+
+    }
+  }
+}
