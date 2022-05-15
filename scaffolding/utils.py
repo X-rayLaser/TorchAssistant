@@ -1,6 +1,11 @@
 import importlib
+import os
+from collections import namedtuple
 
+import torch
+from torch import optim
 from torch.utils.data import Dataset
+
 from scaffolding.exceptions import ClassImportError, FunctionImportError
 
 
@@ -93,10 +98,6 @@ def import_function(dotted_path):
 
 
 def load_pipeline(pipeline_dict, inference_mode=False):
-    from collections import namedtuple
-    import torch
-    from torch import optim
-
     data_pipeline = pipeline_dict["data"]
 
     def parse_submodel(config):
@@ -121,7 +122,6 @@ def load_pipeline(pipeline_dict, inference_mode=False):
             sub_model.eval()
         else:
             checkpoint = torch.load(checkpoint_path)
-            sub_model.load_state_dict(torch.load(weights_path))
             sub_model.train()
             sub_model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -133,6 +133,50 @@ def load_pipeline(pipeline_dict, inference_mode=False):
 
     model_pipeline = [parse_submodel(config) for config in pipeline_dict["inference"]]
     return data_pipeline, model_pipeline
+
+
+def save_session(train_pipeline, epoch, checkpoints_dir):
+    epoch_dir = os.path.join(checkpoints_dir, str(epoch))
+
+    os.makedirs(epoch_dir, exist_ok=True)
+
+    for number, pipe in enumerate(train_pipeline, start=1):
+        save_path = os.path.join(epoch_dir, pipe.name)
+        d = {
+            'name': pipe.name,
+            'number': number,
+            'inputs': pipe.inputs,
+            'outputs': pipe.outputs,
+            'epoch': epoch
+        }
+        d.update(pipe.net.to_dict())
+        d.update(pipe.optimizer.to_dict())
+
+        torch.save(d, save_path)
+
+
+def load_session(checkpoints_dir, epoch):
+    from scaffolding.parse import Node, SerializableModel, SerializableOptimizer
+
+    epoch_dir = os.path.join(checkpoints_dir, str(epoch))
+
+    nodes_with_numbers = []
+    for file_name in os.listdir(epoch_dir):
+        path = os.path.join(epoch_dir, file_name)
+        checkpoint = torch.load(path)
+
+        serializable_model = SerializableModel.from_dict(checkpoint)
+        serializable_optimizer = SerializableOptimizer.from_dict(
+            checkpoint, serializable_model.instance
+        )
+
+        node = Node(name=checkpoint["name"], serializable_model=serializable_model,
+                    serializable_optimizer=serializable_optimizer, inputs=checkpoint["inputs"],
+                    outputs=["outputs"])
+        nodes_with_numbers.append((node, checkpoint["number"]))
+
+    nodes_with_numbers.sort(key=lambda t: t[1])
+    return [t[0] for t in nodes_with_numbers]
 
 
 # todo: implement a proper pseudo random yet deterministic splitter class based on seed

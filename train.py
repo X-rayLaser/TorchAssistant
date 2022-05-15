@@ -25,6 +25,7 @@ if __name__ == '__main__':
     config = config["pipeline"]
 
     epochs = parse.parse_epochs(config)
+    checkpoints_dir = parse.parse_checkpoint_dir(config)
 
     train_loader, test_loader = parse.parse_data_pipeline(config)
 
@@ -34,7 +35,7 @@ if __name__ == '__main__':
 
     criterion = parse.parse_loss(config)
 
-    train(train_pipeline, train_loader, test_loader, criterion, metrics, epochs)
+    train(train_pipeline, train_loader, test_loader, criterion, metrics, epochs, checkpoints_dir)
 
 
 # todo: saving and loading

@@ -1,7 +1,9 @@
 import torch
+from .utils import save_session
 
 
-def train(train_pipeline, train_loader, test_loader, loss_fn, metrics, epochs=2, stat_ivl=50):
+def train(train_pipeline, train_loader, test_loader, loss_fn, metrics,
+          epochs=2, checkpoints_dir=None, stat_ivl=50):
     if 'loss' in metrics:
         metrics['loss'] = loss_fn
 
@@ -37,6 +39,8 @@ def train(train_pipeline, train_loader, test_loader, loss_fn, metrics, epochs=2,
             s += f'val {name}: {value}; '
 
         print(s)
+        save_session(train_pipeline, epoch, checkpoints_dir)
+        print(f'Saved model to {checkpoints_dir}')
 
 
 def train_on_batch(train_pipeline, batch, loss_fn):

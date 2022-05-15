@@ -153,12 +153,19 @@ def parse_submodel(config):
 
     optimizer_config = config["optimizer"]
     optimizer_class_name = optimizer_config["class"]
-    optimizer_params = optimizer_config["params"]
+    optimizer_args = optimizer_config.get("kwargs", [])
+
+    optimizer_kwargs = optimizer_config.get("params", {})
 
     optimizer_class = getattr(optim, optimizer_class_name)
-    optimizer = optimizer_class(sub_model.parameters(), **optimizer_params)
-    cls = namedtuple('SubModel', ['name', 'net', 'optimizer', 'inputs', 'outputs'])
-    return cls(config["name"], sub_model, optimizer, config["inputs"], config["outputs"])
+    optimizer = optimizer_class(sub_model.parameters(), **optimizer_kwargs)
+
+    serializable_model = SerializableModel(sub_model, path, model_args, total_kwargs)
+    serializable_optimizer = SerializableOptimizer(optimizer, optimizer_class_name,
+                                                   optimizer_args, optimizer_kwargs)
+    return Node(name=config["name"], serializable_model=serializable_model,
+                serializable_optimizer=serializable_optimizer,
+                inputs=config["inputs"], outputs=config["outputs"])
 
 
 def parse_loss(config_dict):
@@ -177,3 +184,75 @@ def parse_loss(config_dict):
 
 def parse_epochs(config_dict):
     return config_dict["training"]["num_epochs"]
+
+
+def parse_checkpoint_dir(config_dict):
+    return config_dict["training"]["checkpoints_dir"]
+
+
+class Node:
+    def __init__(self, name, serializable_model, serializable_optimizer, inputs, outputs):
+        self.name = name
+        self.net = serializable_model
+        self.optimizer = serializable_optimizer
+        self.inputs = inputs
+        self.outputs = outputs
+
+
+class SerializableInstance:
+    def __init__(self, instance, class_name, args, kwargs):
+        self.class_name = class_name
+        self.instance = instance
+        self.args = args
+        self.kwargs = kwargs
+
+    def __getattr__(self, attr):
+        return getattr(self.instance, attr)
+
+    def to_dict(self):
+        raise NotImplementedError
+
+
+class SerializableModel(SerializableInstance):
+    def __call__(self, *args, **kwargs):
+        return self.instance(*args, **kwargs)
+
+    def to_dict(self):
+        return {
+            'model_state_dict': self.instance.state_dict(),
+            'model_class': self.class_name,
+            'model_args': self.args,
+            'model_kwargs': self.kwargs,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        model_class_path = d['model_class']
+        args = d['model_args']
+        kwargs = d['model_kwargs']
+        model = instantiate_class(model_class_path, *args, **kwargs)
+        model.load_state_dict(d['model_state_dict'])
+
+        return cls(instance=model, class_name=model_class_path, args=args, kwargs=kwargs)
+
+
+class SerializableOptimizer(SerializableInstance):
+    def to_dict(self):
+        return {
+            'optimizer_state_dict': self.instance.state_dict(),
+            'optimizer_class': self.class_name,
+            'optimizer_args': self.args,
+            'optimizer_kwargs': self.kwargs,
+        }
+
+    @classmethod
+    def from_dict(cls, d, model):
+        optimizer_class_name = d['optimizer_class']
+        args = d['optimizer_args']
+        kwargs = d['optimizer_kwargs']
+
+        optimizer_class = getattr(optim, optimizer_class_name)
+        optimizer = optimizer_class(model.parameters(), *args, **kwargs)
+        optimizer.load_state_dict(d['optimizer_state_dict'])
+
+        return cls(instance=optimizer, class_name=optimizer_class_name, args=args, kwargs=kwargs)
