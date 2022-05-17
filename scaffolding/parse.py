@@ -1,5 +1,3 @@
-from collections import namedtuple
-
 import torch
 from torch import nn
 
@@ -31,33 +29,109 @@ def get_transform_pipeline(config_dict):
 
 
 def parse_data_pipeline(config_dict):
-    train_set, test_set = parse_datasets(config_dict)
+    splitter = SimpleSplitter()
+    train_set, test_set = parse_datasets(config_dict, splitter)
     preprocessors = fit_preprocessors(train_set, config_dict)
-    train_set = WrappedDataset(train_set, preprocessors)
-    test_set = WrappedDataset(test_set, preprocessors)
 
     collate_fn = parse_collator(config_dict)
     batch_adapter = parse_batch_adapter(config_dict)
-    final_collate_fn = AdaptedCollator(collate_fn, batch_adapter)
-
     batch_size = config_dict["data"]["batch_size"]
 
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                               shuffle=True, num_workers=2, collate_fn=final_collate_fn)
+    ds_name = config_dict["data"]["dataset_name"]
+    ds_kwargs = config_dict["data"].get('dataset_kwargs', {})
+    ds = SerializableDataset(class_name=ds_name, args=[], kwargs=ds_kwargs)
 
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
-                                              shuffle=False, num_workers=2, collate_fn=final_collate_fn)
-    return train_loader, test_loader
+    splitter = GenericSerializableInstance(
+        splitter, class_name='scaffolding.utils.SimpleSplitter', args=[], kwargs={}
+    )
+
+    preprocessors_config = config_dict["data"]["preprocessors"]
+    preprocessors = [GenericSerializableInstance(p, conf["class"], [], {})
+                     for conf, p in zip(preprocessors_config, preprocessors)]
+
+    return DataPipeline(dataset=ds, splitter=splitter,
+                        preprocessors=preprocessors, collator=collate_fn,
+                        batch_adapter=batch_adapter, batch_size=batch_size)
 
 
-def parse_datasets(config_dict):
+class DataPipeline:
+    def __init__(self, dataset, splitter, preprocessors, collator, batch_adapter, batch_size):
+        self.dataset = dataset
+        self.splitter = splitter
+        self.preprocessors = preprocessors
+        self.collator = collator
+        self.batch_adapter = batch_adapter
+        self.batch_size = batch_size
+
+    def get_data_loaders(self):
+        print("haha, yes")
+        # todo: this is a quick fix, refactor later
+        # todo: fix code to access instance attribute on serializable objects or add getattr to delegate
+        config_dict = {
+            'data': {
+                'dataset_name': self.dataset.class_name,
+                'dataset_kwargs': self.dataset.kwargs
+            }
+        }
+        train_set, test_set = parse_datasets(config_dict, self.splitter)
+
+        train_set = WrappedDataset(train_set, self.preprocessors)
+        test_set = WrappedDataset(test_set, self.preprocessors)
+
+        final_collate_fn = AdaptedCollator(self.collator, self.batch_adapter)
+
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=self.batch_size,
+                                                   shuffle=True, num_workers=2, collate_fn=final_collate_fn)
+
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=self.batch_size,
+                                                  shuffle=False, num_workers=2, collate_fn=final_collate_fn)
+        return train_loader, test_loader
+
+    def process_raw_input(self, raw_data, input_adapter):
+        class MyDataset:
+            def __getitem__(self, idx):
+                return input_adapter(raw_data)
+
+        ds = MyDataset()
+        ds = WrappedDataset(ds, self.preprocessors)
+        final_collate_fn = AdaptedCollator(self.collator, self.batch_adapter)
+
+        loader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
+                                             collate_fn=final_collate_fn)
+        return next(loader)
+
+    def to_dict(self):
+        return {
+            'dataset': self.dataset.to_dict(),
+            'splitter': self.splitter.to_dict(),
+            'preprocessors': [p.to_dict() for p in self.preprocessors],
+            'collator': self.collator.to_dict(),
+            'batch_adapter': self.batch_adapter.to_dict(),
+            'batch_size': self.batch_size
+        }
+
+    @classmethod
+    def from_dict(cls, state_dict):
+        # todo: use serializable splitter, prerprocessors, collator, batch adapter (implement those classes)
+        dataset = SerializableDataset.from_dict(state_dict['dataset'])
+        splitter = GenericSerializableInstance.from_dict(state_dict['splitter'])
+
+        preprocessors = [GenericSerializableInstance.from_dict(d) for d in state_dict['preprocessors']]
+
+        collator = GenericSerializableInstance.from_dict(state_dict['collator'])
+        batch_adapter = GenericSerializableInstance.from_dict(state_dict['batch_adapter'])
+        batch_size = state_dict['batch_size']
+        return cls(dataset, splitter, preprocessors, collator, batch_adapter, batch_size)
+
+
+def parse_datasets(config_dict, splitter):
     ds_class_name = config_dict["data"]["dataset_name"]
 
     if '.' in ds_class_name:
         # assume that we got a fully-qualified path to a custom class
         ds_kwargs = config_dict["data"].get("dataset_kwargs", {})
         dataset = instantiate_class(ds_class_name, **ds_kwargs)
-        splitter = SimpleSplitter(dataset)
+        splitter.prepare(dataset)
         train_set = splitter.train_ds
         test_set = splitter.val_ds
     else:
@@ -72,14 +146,20 @@ def fit_preprocessors(train_set, config_dict):
     preprocessors_config = config_dict["data"]["preprocessors"]
     preprocessors = []
     for d in preprocessors_config:
-        preprocessor = instantiate_class(d["class"])
+        class_name = d["class"]
+        args = d.get("args", [])
+        kwargs = d.get("kwargs", {})
+        preprocessor = instantiate_class(class_name, *args, **kwargs)
 
         preprocessor.fit(train_set)
-        preprocessors.append(preprocessor)
 
         for attr_name in d.get('expose_attributes', []):
             attr_value = getattr(preprocessor, attr_name)
             setattr(store, attr_name, attr_value)
+
+        wrapped_preprocessor = GenericSerializableInstance(preprocessor, class_name, args=args, kwargs=kwargs)
+        preprocessors.append(wrapped_preprocessor)
+
     return preprocessors
 
 
@@ -95,7 +175,8 @@ def parse_collator(config_dict):
         dynamic_kwargs[collator_arg_name] = getattr(store, store_arg_name)
 
     collator_kwargs.update(dynamic_kwargs)
-    return instantiate_class(collator_class_name, *collator_args, **collator_kwargs)
+    collator = instantiate_class(collator_class_name, *collator_args, **collator_kwargs)
+    return GenericSerializableInstance(collator, collator_class_name, collator_args, collator_kwargs)
 
 
 def parse_batch_adapter(config_dict):
@@ -109,7 +190,8 @@ def parse_batch_adapter(config_dict):
         dynamic_kwargs[adapter_arg_name] = getattr(store, store_arg_name)
 
     adapter_kwargs.update(dynamic_kwargs)
-    return instantiate_class(adapter_class_name, *adapter_args, **adapter_kwargs)
+    adapter = instantiate_class(adapter_class_name, *adapter_args, **adapter_kwargs)
+    return GenericSerializableInstance(adapter, adapter_class_name, adapter_args, adapter_kwargs)
 
 
 def parse_metrics(config_dict):
@@ -174,7 +256,7 @@ def parse_loss(config_dict):
     if "transform" in loss_config:
         transform_fn = import_function(loss_config["transform"])
     else:
-        transform_fn = lambda *args: args
+        transform_fn = lambda *fn_args: fn_args
 
     criterion_class = getattr(nn, loss_class_name)
     args = loss_config.get("args", [])
@@ -211,6 +293,33 @@ class SerializableInstance:
 
     def to_dict(self):
         raise NotImplementedError
+
+
+class GenericSerializableInstance(SerializableInstance):
+    def __call__(self, *args, **kwargs):
+        return self.instance(*args, **kwargs)
+
+    def to_dict(self):
+        try:
+            state_dict = self.instance.state_dict()
+        except (AttributeError, TypeError):
+            state_dict = self.instance.__dict__
+
+        return {
+            'state_dict': state_dict,
+            'class': self.class_name,
+            'args': self.args,
+            'kwargs': self.kwargs,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        class_path = d['class']
+        args = d['args']
+        kwargs = d['kwargs']
+        instance = instantiate_class(class_path, *args, **kwargs)
+        instance.__dict__ = d['state_dict']
+        return cls(instance=instance, class_name=class_path, args=args, kwargs=kwargs)
 
 
 class SerializableModel(SerializableInstance):
@@ -256,3 +365,19 @@ class SerializableOptimizer(SerializableInstance):
         optimizer.load_state_dict(d['optimizer_state_dict'])
 
         return cls(instance=optimizer, class_name=optimizer_class_name, args=args, kwargs=kwargs)
+
+
+class SerializableDataset(SerializableInstance):
+    def __init__(self, class_name, args, kwargs):
+        super().__init__(None, class_name, args, kwargs)
+
+    def to_dict(self):
+        return {
+            'dataset_class': self.class_name,
+            'dataset_args': self.args,
+            'dataset_kwargs': self.kwargs,
+        }
+
+    @classmethod
+    def from_dict(cls, state_dict):
+        return cls(state_dict["dataset_class"], state_dict["dataset_args"], state_dict["dataset_kwargs"])

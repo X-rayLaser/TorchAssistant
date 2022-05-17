@@ -40,7 +40,7 @@ class FrenchToEnglishDataset(Dataset):
         with open(path, encoding="utf-8") as f:
             s = f.read().strip()
 
-        self.lines = s.split('\n')[:500]
+        self.lines = s.split('\n')[:5]
 
     def __getitem__(self, idx):
         line = self.lines[idx]

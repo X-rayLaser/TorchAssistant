@@ -2,12 +2,13 @@ import torch
 from .utils import save_session
 
 
-def train(train_pipeline, train_loader, test_loader, loss_fn, metrics,
-          epochs=2, checkpoints_dir=None, stat_ivl=50):
+def train(data_pipeline, train_pipeline, loss_fn, metrics,
+          epochs=2, start_epoch=0, checkpoints_dir=None, stat_ivl=50):
     if 'loss' in metrics:
         metrics['loss'] = loss_fn
 
-    for epoch in range(epochs):
+    train_loader, test_loader = data_pipeline.get_data_loaders()
+    for epoch in range(start_epoch, start_epoch + epochs):
         running_loss = MovingAverage()
         running_metrics = {name: MovingAverage() for name in metrics}
 
@@ -39,8 +40,10 @@ def train(train_pipeline, train_loader, test_loader, loss_fn, metrics,
             s += f'val {name}: {value}; '
 
         print(s)
-        save_session(train_pipeline, epoch, checkpoints_dir)
-        print(f'Saved model to {checkpoints_dir}')
+
+        if checkpoints_dir:
+            save_session(train_pipeline, epoch, checkpoints_dir)
+            print(f'Saved model to {checkpoints_dir}')
 
 
 def train_on_batch(train_pipeline, batch, loss_fn):

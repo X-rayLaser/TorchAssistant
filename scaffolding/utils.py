@@ -10,11 +10,16 @@ from scaffolding.exceptions import ClassImportError, FunctionImportError
 
 
 class DataSplitter:
-    def __init__(self, dataset, train_fraction=0.8):
-        self.dataset = dataset
-        self.fraction = train_fraction
+    def __init__(self, train_fraction=0.8):
+        self.dataset = None
+        self.train_fraction = train_fraction
 
-        self.num_train = int(train_fraction * len(dataset))
+        self.num_train = None
+        self.num_val = None
+
+    def prepare(self, dataset):
+        self.dataset = dataset
+        self.num_train = int(self.train_fraction * len(dataset))
         self.num_val = len(dataset) - self.num_train
 
     @property
@@ -24,6 +29,9 @@ class DataSplitter:
     @property
     def val_ds(self):
         return []
+
+    def state_dict(self):
+        return dict(dataset=None, train_fraction=self.train_fraction, num_train=None, num_val=None)
 
 
 class SimpleSplitter(DataSplitter):
@@ -172,7 +180,7 @@ def load_session(checkpoints_dir, epoch):
 
         node = Node(name=checkpoint["name"], serializable_model=serializable_model,
                     serializable_optimizer=serializable_optimizer, inputs=checkpoint["inputs"],
-                    outputs=["outputs"])
+                    outputs=checkpoint["outputs"])
         nodes_with_numbers.append((node, checkpoint["number"]))
 
     nodes_with_numbers.sort(key=lambda t: t[1])

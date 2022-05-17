@@ -1,8 +1,12 @@
 import argparse
 import json
+import os
 
 from scaffolding.training import train
 from scaffolding import parse
+from scaffolding.parse import DataPipeline
+from scaffolding.store import store
+from scaffolding.utils import load_session
 
 
 def load_config(path):
@@ -27,15 +31,45 @@ if __name__ == '__main__':
     epochs = parse.parse_epochs(config)
     checkpoints_dir = parse.parse_checkpoint_dir(config)
 
-    train_loader, test_loader = parse.parse_data_pipeline(config)
+    data_pipeline_path = os.path.join(checkpoints_dir, 'data_pipeline.json')
+    store_path = os.path.join(checkpoints_dir, 'store.json')
+
+    epochs_dir = os.path.join(checkpoints_dir, 'epochs')
+
+    if checkpoints_dir and os.path.isfile(data_pipeline_path):
+        with open(data_pipeline_path, encoding='utf-8') as f:
+            s = f.read()
+            state_dict = json.loads(s)
+            data_pipeline = DataPipeline.from_dict(state_dict)
+
+        with open(store_path, encoding='utf-8') as f:
+            s = f.read()
+            store.__dict__ = json.loads(s)
+
+        last_epoch = sorted(os.listdir(epochs_dir), key=lambda dir_name: int(dir_name), reverse=True)[0]
+        start_epoch = int(last_epoch) + 1
+        train_pipeline = load_session(epochs_dir, last_epoch)
+    else:
+        os.makedirs(checkpoints_dir, exist_ok=True)
+        data_pipeline = parse.parse_data_pipeline(config)
+
+        with open(data_pipeline_path, 'w', encoding='utf-8') as f:
+            state_dict = data_pipeline.to_dict()
+            print(state_dict)
+            s = json.dumps(state_dict)
+            f.write(s)
+
+        with open(store_path, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(store.__dict__))
+
+        start_epoch = 0
+        train_pipeline = parse.parse_model(config)
 
     metrics = parse.parse_metrics(config)
 
-    train_pipeline = parse.parse_model(config)
-
     criterion = parse.parse_loss(config)
 
-    train(train_pipeline, train_loader, test_loader, criterion, metrics, epochs, checkpoints_dir)
+    train(data_pipeline, train_pipeline, criterion, metrics, epochs, start_epoch, epochs_dir)
 
 
 # todo: saving and loading

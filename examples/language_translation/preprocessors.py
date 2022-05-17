@@ -68,6 +68,15 @@ class SentenceEncoder(ValuePreprocessor):
     def __call__(self, value):
         return self.process(value)
 
+    def state_dict(self):
+        return self.__dict__.copy()
+
+    @classmethod
+    def from_dict(cls, state_dict):
+        encoder = cls()
+        encoder.__dict__ = state_dict.copy()
+        return encoder
+
 
 class FrenchEncoder(SentenceEncoder):
     def fit(self, dataset):
