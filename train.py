@@ -4,7 +4,6 @@ import os
 
 from scaffolding.training import train
 from scaffolding import parse
-from scaffolding.parse import DataPipeline
 from scaffolding.utils import load_session, save_data_pipeline, load_data_pipeline
 
 

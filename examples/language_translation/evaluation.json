@@ -1,0 +1,25 @@
+{
+  "pipeline": {
+    "training": {
+      "checkpoints_dir": "checkpoints",
+      "loss": {
+        "class": "CrossEntropyLoss",
+        "kwargs": {
+          "reduction": "sum"
+        },
+        "inputs": ["y_hat", "y"],
+        "transform": "examples.language_translation.transforms.transform"
+      },
+      "metrics": {
+        "loss": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.language_translation.transforms.transform"
+        },
+        "token_counter": {
+          "inputs": ["y_hat"],
+          "transform": "examples.language_translation.transforms.reverse_onehot"
+        }
+      }
+    }
+  }
+}

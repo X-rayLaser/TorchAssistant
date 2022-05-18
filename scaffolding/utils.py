@@ -186,7 +186,17 @@ def save_session(train_pipeline, epoch, checkpoints_dir):
         torch.save(d, save_path)
 
 
-def load_session(checkpoints_dir, epoch):
+def switch_to_train_mode(prediction_pipeline):
+    for node in prediction_pipeline:
+        node.net.instance.train()
+
+
+def switch_to_evaluation_mode(prediction_pipeline):
+    for node in prediction_pipeline:
+        node.net.instance.eval()
+
+
+def load_session(checkpoints_dir, epoch, inference_mode=False):
     from scaffolding.parse import Node, SerializableModel, SerializableOptimizer
 
     epoch_dir = os.path.join(checkpoints_dir, str(epoch))
@@ -201,7 +211,11 @@ def load_session(checkpoints_dir, epoch):
             checkpoint, serializable_model.instance
         )
 
-        serializable_model.instance.eval()
+        # todo: consider doing this outside the function call
+        if inference_mode:
+            serializable_model.instance.eval()
+        else:
+            serializable_model.instance.train()
 
         node = Node(name=checkpoint["name"], serializable_model=serializable_model,
                     serializable_optimizer=serializable_optimizer, inputs=checkpoint["inputs"],
@@ -212,9 +226,9 @@ def load_session(checkpoints_dir, epoch):
     return [t[0] for t in nodes_with_numbers]
 
 
-def load_session_from_last_epoch(epochs_dir):
+def load_session_from_last_epoch(epochs_dir, inference_mode=False):
     last_epoch = sorted(os.listdir(epochs_dir), key=lambda d: int(d), reverse=True)[0]
-    return load_session(epochs_dir, int(last_epoch))
+    return load_session(epochs_dir, int(last_epoch), inference_mode)
 
 
 def save_data_pipeline(data_pipeline, path):

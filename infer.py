@@ -17,6 +17,7 @@ def parse_input_adapter(config_dict):
 
 def parse_post_processor(config_dict):
     post_processor_dict = config_dict["post_processor"]
+    # todo: consider to pass dynamic_kwargs instead of data pipeline instance
     post_processor_args = [data_pipeline] + post_processor_dict.get("args", [])
     return instantiate_class(post_processor_dict["class"],
                              *post_processor_args,
@@ -50,7 +51,7 @@ if __name__ == '__main__':
     data_pipeline = load_data_pipeline(data_pipeline_dir)
     data_pipeline.batch_adapter = parse_batch_adapter(config)
 
-    model_pipeline = load_session_from_last_epoch(epochs_dir)
+    model_pipeline = load_session_from_last_epoch(epochs_dir, inference_mode=True)
     for i, node in enumerate(model_pipeline):
         node.inputs = config["model"][i]["inputs"]
         node.outputs = config["model"][i]["outputs"]

@@ -1,5 +1,5 @@
 import torch
-from .utils import save_session
+from .utils import save_session, switch_to_train_mode, switch_to_evaluation_mode
 
 
 def train(data_pipeline, train_pipeline, loss_fn, metrics,
@@ -9,6 +9,7 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
 
     train_loader, test_loader = data_pipeline.get_data_loaders()
     for epoch in range(start_epoch, start_epoch + epochs):
+        switch_to_train_mode(train_pipeline)
         running_loss = MovingAverage()
         running_metrics = {name: MovingAverage() for name in metrics}
 
@@ -33,6 +34,8 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
 
             if i // stat_ivl > 5:
                 break
+
+        switch_to_evaluation_mode(train_pipeline)
 
         s = f'\rEpoch {epoch + 1}, '
         computed_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)

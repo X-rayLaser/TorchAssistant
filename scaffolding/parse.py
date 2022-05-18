@@ -203,8 +203,7 @@ def parse_metrics(config_dict):
     try:
         error = False
         exc_args = None
-        metrics = {metric_name: (metric_functions[metric_name], metrics_config[metric_name]["inputs"])
-                   for metric_name in metrics_config}
+        metrics = {name: parse_single_metric(name, metrics_config[name]) for name in metrics_config}
     except KeyError as exc:
         error = True
         exc_args = exc.args
@@ -214,6 +213,17 @@ def parse_metrics(config_dict):
         error_message = f'Unknown metric "{exc_args[0]}". Must be one of {allowed_metrics}'
         raise InvalidParameterError(error_message)
     return metrics
+
+
+def parse_single_metric(metric_name, metric_dict):
+    if "transform" in metric_dict:
+        transform_fn = import_function(metric_dict["transform"])
+    else:
+        def transform_fn(*fn_args):
+            return fn_args
+        #transform_fn = lambda *fn_args: fn_args
+
+    return metric_functions[metric_name], metric_dict["inputs"], transform_fn
 
 
 def parse_model(config_dict):
