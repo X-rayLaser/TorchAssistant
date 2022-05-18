@@ -1,15 +1,73 @@
 import importlib
 import os
-from collections import namedtuple
+import json
 
 import torch
-from torch import optim
 from torch.utils.data import Dataset
 
 from scaffolding.exceptions import ClassImportError, FunctionImportError
 
 
-class DataSplitter:
+class Serializable:
+    def state_dict(self):
+        return {}
+
+    def load(self, state_dict):
+        pass
+
+
+class DecoratedInstance:
+    def __init__(self, instance, class_name, args, kwargs):
+        self.class_name = class_name
+        self.instance = instance
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, *args, **kwargs):
+        return self.instance(*args, **kwargs)
+
+    def __getattr__(self, attr):
+        return getattr(self.instance, attr)
+
+    def to_dict(self):
+        raise NotImplementedError
+
+    @classmethod
+    def from_dict(cls, *args, **kwargs):
+        raise NotImplementedError
+
+
+class GenericSerializableInstance(DecoratedInstance):
+    def to_dict(self):
+        try:
+            state_dict = self.instance.state_dict()
+        except (AttributeError, TypeError):
+            state_dict = self.instance.__dict__
+
+        return {
+            'state_dict': state_dict,
+            'class': self.class_name,
+            'args': self.args,
+            'kwargs': self.kwargs,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        class_path = d['class']
+        args = d['args']
+        kwargs = d['kwargs']
+        state_dict = d['state_dict']
+        instance = instantiate_class(class_path, *args, **kwargs)
+
+        if hasattr(instance, 'load'):
+            instance.load(state_dict)
+        else:
+            instance.__dict__ = state_dict
+
+        return cls(instance=instance, class_name=class_path, args=args, kwargs=kwargs)
+
+
+class DataSplitter(Serializable):
     def __init__(self, train_fraction=0.8):
         self.dataset = None
         self.train_fraction = train_fraction
@@ -31,7 +89,10 @@ class DataSplitter:
         return []
 
     def state_dict(self):
-        return dict(dataset=None, train_fraction=self.train_fraction, num_train=None, num_val=None)
+        return {}
+
+    def load(self, state):
+        pass
 
 
 class SimpleSplitter(DataSplitter):
@@ -105,44 +166,6 @@ def import_function(dotted_path):
         raise FunctionImportError(error_msg)
 
 
-def load_pipeline(pipeline_dict, inference_mode=False):
-    data_pipeline = pipeline_dict["data"]
-
-    def parse_submodel(config):
-        """Returns a tuple of (nn.Module instance, optimizer, inputs, outputs)"""
-        path = config["arch"]
-        weights_path = config["weights"]
-        checkpoint_path = config["checkpoint"]
-        model_args = config.get("args", [])
-        model_kwargs = config.get("kwargs", {})
-
-        sub_model = instantiate_class(path, *model_args, **model_kwargs)
-
-        optimizer_config = config["optimizer"]
-        optimizer_class_name = optimizer_config["class"]
-        optimizer_params = optimizer_config["params"]
-
-        optimizer_class = getattr(optim, optimizer_class_name)
-        optimizer = optimizer_class(sub_model.parameters(), **optimizer_params)
-
-        if inference_mode:
-            sub_model.load_state_dict(torch.load(weights_path))
-            sub_model.eval()
-        else:
-            checkpoint = torch.load(checkpoint_path)
-            sub_model.train()
-            sub_model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            epoch = checkpoint['epoch']
-            loss = checkpoint['loss']
-
-        cls = namedtuple('SubModel', ['name', 'net', 'optimizer', 'inputs', 'outputs'])
-        return cls(config["name"], sub_model, optimizer, config["inputs"], config["outputs"])
-
-    model_pipeline = [parse_submodel(config) for config in pipeline_dict["inference"]]
-    return data_pipeline, model_pipeline
-
-
 def save_session(train_pipeline, epoch, checkpoints_dir):
     epoch_dir = os.path.join(checkpoints_dir, str(epoch))
 
@@ -178,6 +201,8 @@ def load_session(checkpoints_dir, epoch):
             checkpoint, serializable_model.instance
         )
 
+        serializable_model.instance.eval()
+
         node = Node(name=checkpoint["name"], serializable_model=serializable_model,
                     serializable_optimizer=serializable_optimizer, inputs=checkpoint["inputs"],
                     outputs=checkpoint["outputs"])
@@ -185,6 +210,26 @@ def load_session(checkpoints_dir, epoch):
 
     nodes_with_numbers.sort(key=lambda t: t[1])
     return [t[0] for t in nodes_with_numbers]
+
+
+def load_session_from_last_epoch(epochs_dir):
+    last_epoch = sorted(os.listdir(epochs_dir), key=lambda d: int(d), reverse=True)[0]
+    return load_session(epochs_dir, int(last_epoch))
+
+
+def save_data_pipeline(data_pipeline, path):
+    with open(path, 'w', encoding='utf-8') as f:
+        state_dict = data_pipeline.to_dict()
+        s = json.dumps(state_dict)
+        f.write(s)
+
+
+def load_data_pipeline(path):
+    from scaffolding.parse import DataPipeline
+    with open(path, encoding='utf-8') as f:
+        s = f.read()
+        state_dict = json.loads(s)
+        return DataPipeline.from_dict(state_dict)
 
 
 # todo: implement a proper pseudo random yet deterministic splitter class based on seed

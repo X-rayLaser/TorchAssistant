@@ -14,6 +14,9 @@ class Encoder(nn.Module):
         output, hidden = self.gru(embedded, hidden)
         return output, hidden
 
+    def run_inference(self, x, hidden):
+        return self.forward(x, hidden)
+
 
 class Decoder(nn.Module):
     def __init__(self, hidden_size, output_size):
@@ -33,3 +36,15 @@ class Decoder(nn.Module):
         output, hidden = self.gru(output, hidden)
         output = self.out(output)
         return output, hidden
+
+    def run_inference(self, x, hidden):
+        # here is will mean SOS character
+        import torch
+        outputs = []
+        for i in range(10):
+            x, hidden = self.forward(x, hidden)
+            top = torch.argmax(x, dim=2).squeeze()
+            x = torch.LongTensor([[top]])
+            outputs.append(top.item())
+
+        return [outputs]

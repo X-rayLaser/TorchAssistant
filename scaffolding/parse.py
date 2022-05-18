@@ -6,7 +6,8 @@ import torchvision.transforms as transforms
 import torch.optim as optim
 
 from scaffolding.metrics import metric_functions
-from scaffolding.utils import SimpleSplitter, instantiate_class, import_function, AdaptedCollator, WrappedDataset
+from scaffolding.utils import SimpleSplitter, instantiate_class, import_function, \
+    AdaptedCollator, WrappedDataset, DecoratedInstance, GenericSerializableInstance
 from scaffolding.store import store
 from scaffolding.exceptions import InvalidParameterError
 
@@ -64,7 +65,6 @@ class DataPipeline:
         self.batch_size = batch_size
 
     def get_data_loaders(self):
-        print("haha, yes")
         # todo: this is a quick fix, refactor later
         # todo: fix code to access instance attribute on serializable objects or add getattr to delegate
         config_dict = {
@@ -92,13 +92,16 @@ class DataPipeline:
             def __getitem__(self, idx):
                 return input_adapter(raw_data)
 
+            def __len__(self):
+                return 1
+
         ds = MyDataset()
         ds = WrappedDataset(ds, self.preprocessors)
         final_collate_fn = AdaptedCollator(self.collator, self.batch_adapter)
 
         loader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
                                              collate_fn=final_collate_fn)
-        return next(loader)
+        return next(iter(loader))
 
     def to_dict(self):
         return {
@@ -112,7 +115,6 @@ class DataPipeline:
 
     @classmethod
     def from_dict(cls, state_dict):
-        # todo: use serializable splitter, prerprocessors, collator, batch adapter (implement those classes)
         dataset = SerializableDataset.from_dict(state_dict['dataset'])
         splitter = GenericSerializableInstance.from_dict(state_dict['splitter'])
 
@@ -281,51 +283,7 @@ class Node:
         self.outputs = outputs
 
 
-class SerializableInstance:
-    def __init__(self, instance, class_name, args, kwargs):
-        self.class_name = class_name
-        self.instance = instance
-        self.args = args
-        self.kwargs = kwargs
-
-    def __getattr__(self, attr):
-        return getattr(self.instance, attr)
-
-    def to_dict(self):
-        raise NotImplementedError
-
-
-class GenericSerializableInstance(SerializableInstance):
-    def __call__(self, *args, **kwargs):
-        return self.instance(*args, **kwargs)
-
-    def to_dict(self):
-        try:
-            state_dict = self.instance.state_dict()
-        except (AttributeError, TypeError):
-            state_dict = self.instance.__dict__
-
-        return {
-            'state_dict': state_dict,
-            'class': self.class_name,
-            'args': self.args,
-            'kwargs': self.kwargs,
-        }
-
-    @classmethod
-    def from_dict(cls, d):
-        class_path = d['class']
-        args = d['args']
-        kwargs = d['kwargs']
-        instance = instantiate_class(class_path, *args, **kwargs)
-        instance.__dict__ = d['state_dict']
-        return cls(instance=instance, class_name=class_path, args=args, kwargs=kwargs)
-
-
-class SerializableModel(SerializableInstance):
-    def __call__(self, *args, **kwargs):
-        return self.instance(*args, **kwargs)
-
+class SerializableModel(DecoratedInstance):
     def to_dict(self):
         return {
             'model_state_dict': self.instance.state_dict(),
@@ -345,7 +303,7 @@ class SerializableModel(SerializableInstance):
         return cls(instance=model, class_name=model_class_path, args=args, kwargs=kwargs)
 
 
-class SerializableOptimizer(SerializableInstance):
+class SerializableOptimizer(DecoratedInstance):
     def to_dict(self):
         return {
             'optimizer_state_dict': self.instance.state_dict(),
@@ -367,7 +325,7 @@ class SerializableOptimizer(SerializableInstance):
         return cls(instance=optimizer, class_name=optimizer_class_name, args=args, kwargs=kwargs)
 
 
-class SerializableDataset(SerializableInstance):
+class SerializableDataset(DecoratedInstance):
     def __init__(self, class_name, args, kwargs):
         super().__init__(None, class_name, args, kwargs)
 

@@ -1,4 +1,10 @@
 import torch
+from examples.language_translation.datasets import normalize_string
+
+
+class InputAdapter:
+    def __call__(self, x):
+        return normalize_string(x), normalize_string(x)
 
 
 class BatchAdapter:
@@ -24,5 +30,27 @@ class BatchAdapter:
             },
             "targets": {
                 "y": english_target
+            }
+        }
+
+
+class InferenceAdapter:
+    def __init__(self, hidden_size):
+        self.hidden_size = hidden_size
+
+    def adapt(self, french_batch, english_batch):
+        english_target = english_batch[:, 1:]
+
+        hidden = torch.zeros(1, 1, self.hidden_size, device="cpu")
+
+        return {
+            "inputs": {
+                "encoder": {
+                    "x": french_batch,
+                    "h": hidden
+                },
+                "decoder": {
+                    "sos": torch.LongTensor([[1]])
+                }
             }
         }

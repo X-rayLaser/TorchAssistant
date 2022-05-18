@@ -5,8 +5,7 @@ import os
 from scaffolding.training import train
 from scaffolding import parse
 from scaffolding.parse import DataPipeline
-from scaffolding.store import store
-from scaffolding.utils import load_session
+from scaffolding.utils import load_session, save_data_pipeline, load_data_pipeline
 
 
 def load_config(path):
@@ -37,30 +36,15 @@ if __name__ == '__main__':
     epochs_dir = os.path.join(checkpoints_dir, 'epochs')
 
     if checkpoints_dir and os.path.isfile(data_pipeline_path):
-        with open(data_pipeline_path, encoding='utf-8') as f:
-            s = f.read()
-            state_dict = json.loads(s)
-            data_pipeline = DataPipeline.from_dict(state_dict)
-
-        with open(store_path, encoding='utf-8') as f:
-            s = f.read()
-            store.__dict__ = json.loads(s)
-
+        data_pipeline = load_data_pipeline(data_pipeline_path)
         last_epoch = sorted(os.listdir(epochs_dir), key=lambda dir_name: int(dir_name), reverse=True)[0]
-        start_epoch = int(last_epoch) + 1
+        start_epoch = int(last_epoch)
         train_pipeline = load_session(epochs_dir, last_epoch)
     else:
         os.makedirs(checkpoints_dir, exist_ok=True)
         data_pipeline = parse.parse_data_pipeline(config)
 
-        with open(data_pipeline_path, 'w', encoding='utf-8') as f:
-            state_dict = data_pipeline.to_dict()
-            print(state_dict)
-            s = json.dumps(state_dict)
-            f.write(s)
-
-        with open(store_path, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(store.__dict__))
+        save_data_pipeline(data_pipeline, data_pipeline_path)
 
         start_epoch = 0
         train_pipeline = parse.parse_model(config)
@@ -72,7 +56,6 @@ if __name__ == '__main__':
     train(data_pipeline, train_pipeline, criterion, metrics, epochs, start_epoch, epochs_dir)
 
 
-# todo: saving and loading
 # todo: support inference mode (as opposed to training mode) and use it for validation metrics calculations;
 # greedy search vs beam search decoding for seq2seq inference
 # todo: extra scripts to evaluate model (possibly on some benchmarks), run inference, fine tune and export

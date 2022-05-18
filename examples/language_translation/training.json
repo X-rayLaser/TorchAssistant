@@ -90,10 +90,7 @@
           "transform": "examples.language_translation.transforms.transform"
         }
       },
-      "num_epochs": 20
-    },
-    "inference": {
-
+      "num_epochs": 2
     }
   }
 }

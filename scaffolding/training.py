@@ -34,8 +34,12 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
             if i // stat_ivl > 5:
                 break
 
-        computed_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
         s = f'\rEpoch {epoch + 1}, '
+        computed_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)
+        for name, value in computed_metrics.items():
+            s += f'{name}: {value}; '
+
+        computed_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
         for name, value in computed_metrics.items():
             s += f'val {name}: {value}; '
 
@@ -69,13 +73,16 @@ def train_on_batch(train_pipeline, batch, loss_fn):
     return loss, outputs
 
 
-def do_forward_pass(train_pipeline, batch):
+def do_forward_pass(train_pipeline, batch, inference_mode=False):
     inputs = batch["inputs"]
 
     all_outputs = {}
     for pipe in train_pipeline:
         args = get_dependencies(pipe, inputs, all_outputs)
-        outputs = pipe.net(*args)
+        if inference_mode:
+            outputs = pipe.net.run_inference(*args)
+        else:
+            outputs = pipe.net(*args)
         all_outputs.update(
             dict(zip(pipe.outputs, outputs))
         )

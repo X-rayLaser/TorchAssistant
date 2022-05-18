@@ -31,9 +31,10 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 from scaffolding.preprocessors import ValuePreprocessor
+from scaffolding.utils import Serializable
 
 
-class SentenceEncoder(ValuePreprocessor):
+class SentenceEncoder(ValuePreprocessor, Serializable):
     """Based on Lang class from
      https://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html
      """
@@ -71,11 +72,8 @@ class SentenceEncoder(ValuePreprocessor):
     def state_dict(self):
         return self.__dict__.copy()
 
-    @classmethod
-    def from_dict(cls, state_dict):
-        encoder = cls()
-        encoder.__dict__ = state_dict.copy()
-        return encoder
+    def load(self, state_dict):
+        self.__dict__ = state_dict.copy()
 
 
 class FrenchEncoder(SentenceEncoder):
