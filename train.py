@@ -55,13 +55,16 @@ if __name__ == '__main__':
     train(data_pipeline, train_pipeline, criterion, metrics, epochs, start_epoch, epochs_dir)
 
 
-# todo: support inference mode (as opposed to training mode) and use it for validation metrics calculations;
-# greedy search vs beam search decoding for seq2seq inference
-# todo: extra scripts to evaluate model (possibly on some benchmarks), run inference, fine tune and export
-# todo: debug tool (show predictions for input as well as all inputs, outputs and transformations)
-# todo: ensure other examples work
+# todo: OCR on synthetic data with seq2seq with attention
+# todo: implement edit distance, CER, WER metrics
+# todo: choose device (CPU vs GPU, optionally TPU)
 # todo: refactor code
+# todo: ensure other examples work
+# todo: consider making a batch adapter a part of prediction pipeline (rather than data pipeline)
+# todo: greedy search vs beam search decoding for seq2seq inference
+# todo: extra scripts to fine tune and export
+# todo: debug tool (show predictions for input as well as all inputs, outputs and transformations)
 # todo: support batch sizes > 1 (this will involve some extra transformations like padding, etc.)
 # todo: think of a better way to implement dynamic arguments and the way that one component (data pipeline) may
 # affect other components (models)
-# todo: support training seq2seq model with attention
+# todo: test suite

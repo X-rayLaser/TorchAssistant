@@ -13,4 +13,4 @@ class PostProcessor:
             eos_index = len(output)
         output = output[:eos_index]
 
-        return ''.join([self.decoder.index2word.get(str(idx), 'OOV') for idx in output])
+        return ''.join([self.decoder.decode_char(code_point) for code_point in output])

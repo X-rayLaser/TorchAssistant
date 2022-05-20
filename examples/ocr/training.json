@@ -1,0 +1,81 @@
+{
+  "pipeline": {
+    "data": {
+      "data_generator": {
+        "class": "examples.ocr.datasets.DatasetGenerator",
+        "kwargs": {
+          "font_size": 10,
+          "num_examples": 10,
+          "dictionary_path": "examples/ocr/data/words.txt"
+        },
+        "output_dir": "examples/ocr/data/generated",
+        "save_example_fn": "examples.ocr.datasets.save_example"
+      },
+      "dataset_name": "examples.ocr.datasets.SyntheticDataset",
+      "dataset_kwargs": {
+        "path": "examples/ocr/data/generated"
+      },
+      "batch_size": 1,
+      "preprocessors": [
+        {
+          "class": "examples.ocr.preprocessors.ImagePreProcessor"
+        },
+        {
+          "class": "examples.ocr.preprocessors.TextPreProcessor"
+        }
+      ],
+      "collator": {
+        "class": "scaffolding.collators.BatchDivide"
+      },
+      "batch_adapter": {
+        "class": "examples.ocr.adapters.BatchAdapter",
+        "kwargs": {"alphabet_size": 128, "decoder_hidden_size": 128}
+      },
+      "inputs": ["x", "h_d", "y_shifted"],
+      "targets": ["y"]
+    },
+    "training": {
+      "checkpoints_dir": "checkpoints",
+      "model": [
+        {
+          "name": "encoder",
+          "arch": "examples.ocr.models.ImageEncoder",
+          "kwargs": {
+            "input_channels": 1
+          },
+          "inputs": ["x"],
+          "outputs": ["e"],
+          "optimizer": { "class": "Adadelta" }
+        },
+        {
+          "name": "decoder",
+          "arch": "examples.ocr.models.AttendingDecoder",
+          "kwargs": {
+            "context_size": 256,
+            "y_size": 128,
+            "hidden_size": 128,
+            "inner_dim": 128
+          },
+          "inputs": ["e", "h_d", "y_shifted"],
+          "outputs": ["y_hat"],
+          "optimizer": { "class": "Adadelta" }
+        }
+      ],
+      "loss": {
+        "class": "CrossEntropyLoss",
+        "kwargs": {
+          "reduction": "mean"
+        },
+        "inputs": ["y_hat", "y"],
+        "transform": "examples.language_translation.transforms.transform"
+      },
+      "metrics": {
+        "loss": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.language_translation.transforms.transform"
+        }
+      },
+      "num_epochs": 100
+    }
+  }
+}

@@ -1,3 +1,6 @@
+import os.path
+import os
+
 import torch
 from torch import nn
 
@@ -30,6 +33,7 @@ def get_transform_pipeline(config_dict):
 
 
 def parse_data_pipeline(config_dict):
+    generate_data(config_dict)
     splitter = SimpleSplitter()
     train_set, test_set = parse_datasets(config_dict, splitter)
     preprocessors = fit_preprocessors(train_set, config_dict)
@@ -53,6 +57,39 @@ def parse_data_pipeline(config_dict):
     return DataPipeline(dataset=ds, splitter=splitter,
                         preprocessors=preprocessors, collator=collate_fn,
                         batch_adapter=batch_adapter, batch_size=batch_size)
+
+
+def generate_data(config_dict):
+    if "data_generator" not in config_dict["data"]:
+        return
+
+    generator_config = config_dict["data"]["data_generator"]
+
+    class_name = generator_config["class"]
+    output_dir = generator_config["output_dir"]
+
+    if os.path.isdir(output_dir):
+        return
+
+    os.makedirs(output_dir)
+
+    args = generator_config.get('args', [])
+    kwargs = generator_config.get('kwargs', {})
+    save_example_name = generator_config.get('save_example_fn')
+
+    save_example = import_function(save_example_name) if save_example_name else default_save_example
+
+    generator = instantiate_class(class_name, *args, **kwargs)
+
+    for i, inputs in enumerate(generator):
+        save_example(inputs, output_dir, i)
+
+
+def default_save_example(example, output_dir, index):
+    for j, elem in enumerate(example):
+        path = os.path.join(output_dir, str(j))
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(f'{elem}\n')
 
 
 class DataPipeline:
@@ -177,6 +214,7 @@ def parse_collator(config_dict):
         dynamic_kwargs[collator_arg_name] = getattr(store, store_arg_name)
 
     collator_kwargs.update(dynamic_kwargs)
+
     collator = instantiate_class(collator_class_name, *collator_args, **collator_kwargs)
     return GenericSerializableInstance(collator, collator_class_name, collator_args, collator_kwargs)
 
@@ -247,8 +285,9 @@ def parse_submodel(config):
 
     optimizer_config = config["optimizer"]
     optimizer_class_name = optimizer_config["class"]
-    optimizer_args = optimizer_config.get("kwargs", [])
 
+    # todo: this is obviously an error, it should read args and kwargs, not params
+    optimizer_args = optimizer_config.get("kwargs", [])
     optimizer_kwargs = optimizer_config.get("params", {})
 
     optimizer_class = getattr(optim, optimizer_class_name)

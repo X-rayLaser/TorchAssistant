@@ -1,0 +1,34 @@
+{
+  "pipeline": {
+    "checkpoints_dir": "checkpoints",
+    "data": {
+      "input_adapter": {
+        "class": "examples.ocr.adapters.InputAdapter"
+      },
+      "batch_adapter": {
+          "class": "examples.ocr.adapters.InferenceAdapter",
+          "kwargs": {
+            "alphabet_size": 128,
+            "decoder_hidden_size": 128
+          }
+      }
+    },
+    "model": [
+      {
+        "name": "encoder",
+        "inputs": ["x"],
+        "outputs": ["e"]
+      }, {
+        "name": "decoder",
+        "inputs": ["e", "h_d", "sos"],
+        "outputs": ["y_hat"]
+      }],
+    "results": ["y_hat"],
+    "post_processor": {
+      "class": "examples.ocr.postprocessors.PostProcessor"
+    },
+    "output_device": {
+      "class": "scaffolding.output_devices.Printer"
+    }
+  }
+}

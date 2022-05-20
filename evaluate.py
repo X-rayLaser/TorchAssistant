@@ -2,8 +2,6 @@ import argparse
 import json
 import os
 
-import torch
-
 from scaffolding.utils import load_data_pipeline, load_session_from_last_epoch
 from scaffolding.training import evaluate
 from scaffolding import parse
