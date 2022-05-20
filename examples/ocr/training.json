@@ -67,15 +67,15 @@
           "reduction": "mean"
         },
         "inputs": ["y_hat", "y"],
-        "transform": "examples.language_translation.transforms.transform"
+        "transform": "examples.ocr.transforms.transform"
       },
       "metrics": {
         "loss": {
           "inputs": ["y_hat", "y"],
-          "transform": "examples.language_translation.transforms.transform"
+          "transform": "examples.ocr.transforms.transform"
         }
       },
-      "num_epochs": 100
+      "num_epochs": 10
     }
   }
 }

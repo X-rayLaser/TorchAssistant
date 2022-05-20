@@ -106,7 +106,6 @@ class AttentionNetwork(nn.Module):
 
         x = torch.cat([encoder_outputs, h], dim=2)
 
-        #print(encoder_outputs.shape, decoder_hidden.shape, h.shape, x.shape)
         scores = self.net(x)
 
         weights = F.softmax(scores.squeeze(2), dim=1)

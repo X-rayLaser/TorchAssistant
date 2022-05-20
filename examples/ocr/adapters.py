@@ -4,6 +4,7 @@ from PIL import Image
 
 class InputAdapter:
     def __call__(self, image_path):
+        # todo: this is ugly and should be unnecessary to specify dummy target for inference pipeline
         return Image.open(image_path), "placeholder"
 
 
