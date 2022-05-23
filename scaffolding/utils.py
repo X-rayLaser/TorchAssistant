@@ -5,7 +5,7 @@ import json
 import torch
 from torch.utils.data import Dataset
 
-from scaffolding.exceptions import ClassImportError, FunctionImportError
+from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
 
 
 class Serializable:
@@ -164,6 +164,24 @@ def import_function(dotted_path):
         return getattr(module, fn_name)
     except AttributeError:
         raise FunctionImportError(error_msg)
+
+
+def import_entity(dotted_path):
+    parts = dotted_path.split('.')
+    module_path = '.'.join(parts[:-1])
+    name = parts[-1]
+
+    error_msg = f'Failed to import an entity "{name}" from "{module_path}"'
+
+    try:
+        module = importlib.import_module(module_path)
+    except ModuleNotFoundError:
+        raise EntityImportError(error_msg)
+
+    try:
+        return getattr(module, name)
+    except AttributeError:
+        raise EntityImportError(error_msg)
 
 
 def save_session(train_pipeline, epoch, checkpoints_dir):

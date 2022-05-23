@@ -12,3 +12,7 @@ class ClassImportError(TrainingError):
 
 class FunctionImportError(TrainingError):
     pass
+
+
+class EntityImportError(TrainingError):
+    pass

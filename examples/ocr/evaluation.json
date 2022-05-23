@@ -14,6 +14,10 @@
         "loss": {
           "inputs": ["y_hat", "y"],
           "transform": "examples.ocr.transforms.transform"
+        },
+        "CharErrorRate": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.ocr.transforms.DecodeClassesTransform"
         }
       }
     }

@@ -1,5 +1,6 @@
 import os.path
 import os
+import inspect
 
 import torch
 from torch import nn
@@ -8,8 +9,10 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.optim as optim
 
+import torchmetrics
+
 from scaffolding.metrics import metric_functions
-from scaffolding.utils import SimpleSplitter, instantiate_class, import_function, \
+from scaffolding.utils import SimpleSplitter, instantiate_class, import_function, import_entity, \
     AdaptedCollator, WrappedDataset, DecoratedInstance, GenericSerializableInstance
 from scaffolding.store import store
 from scaffolding.exceptions import InvalidParameterError
@@ -234,34 +237,41 @@ def parse_batch_adapter(config_dict):
     return GenericSerializableInstance(adapter, adapter_class_name, adapter_args, adapter_kwargs)
 
 
-def parse_metrics(config_dict):
+def parse_metrics(config_dict, data_pipeline):
     metrics_config = config_dict["training"]["metrics"]
     metrics = {}
 
     try:
         error = False
         exc_args = None
-        metrics = {name: parse_single_metric(name, metrics_config[name]) for name in metrics_config}
+        metrics = {name: parse_single_metric(name, metrics_config[name], data_pipeline)
+                   for name in metrics_config}
     except KeyError as exc:
         error = True
         exc_args = exc.args
 
     if error:
         allowed_metrics = list(metric_functions.keys())
-        error_message = f'Unknown metric "{exc_args[0]}". Must be one of {allowed_metrics}'
+        error_message = f'Unknown metric "{exc_args[0]}". ' \
+                        f'Must be either a metric from TorchMetrics or one of {allowed_metrics}'
         raise InvalidParameterError(error_message)
     return metrics
 
 
-def parse_single_metric(metric_name, metric_dict):
+def parse_single_metric(metric_name, metric_dict, data_pipeline):
     if "transform" in metric_dict:
-        transform_fn = import_function(metric_dict["transform"])
+        transform_fn = import_entity(metric_dict["transform"])
+        if inspect.isclass(transform_fn):
+            transform_fn = transform_fn(data_pipeline)
     else:
         def transform_fn(*fn_args):
             return fn_args
-        #transform_fn = lambda *fn_args: fn_args
 
-    return metric_functions[metric_name], metric_dict["inputs"], transform_fn
+    if hasattr(torchmetrics, metric_name):
+        metric = instantiate_class(f'torchmetrics.{metric_name}')
+    else:
+        metric = metric_functions[metric_name]
+    return metric, metric_dict["inputs"], transform_fn
 
 
 def parse_model(config_dict):

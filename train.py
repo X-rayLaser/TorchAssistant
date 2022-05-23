@@ -48,15 +48,13 @@ if __name__ == '__main__':
         start_epoch = 0
         train_pipeline = parse.parse_model(config)
 
-    metrics = parse.parse_metrics(config)
+    metrics = parse.parse_metrics(config, data_pipeline)
 
     criterion = parse.parse_loss(config)
 
     train(data_pipeline, train_pipeline, criterion, metrics, epochs, start_epoch, epochs_dir)
 
 
-# todo: OCR on synthetic data with seq2seq with attention
-# todo: implement edit distance, CER, WER metrics
 # todo: choose device (CPU vs GPU, optionally TPU)
 # todo: refactor code
 # todo: ensure other examples work

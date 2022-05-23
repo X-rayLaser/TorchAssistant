@@ -88,6 +88,10 @@
         "loss": {
           "inputs": ["y_hat", "y"],
           "transform": "examples.language_translation.transforms.transform"
+        },
+        "CharErrorRate": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.language_translation.transforms.DecodeClassesTransform"
         }
       },
       "num_epochs": 2

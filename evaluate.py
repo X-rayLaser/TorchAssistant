@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     loss_fn = parse.parse_loss(config)
 
-    metrics = parse.parse_metrics(config)
+    metrics = parse.parse_metrics(config, data_pipeline)
 
     if 'loss' in metrics:
         metrics['loss'] = loss_fn

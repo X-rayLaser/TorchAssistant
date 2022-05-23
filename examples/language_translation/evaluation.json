@@ -18,6 +18,14 @@
         "token_counter": {
           "inputs": ["y_hat"],
           "transform": "examples.language_translation.transforms.reverse_onehot"
+        },
+        "CharErrorRate": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.language_translation.transforms.DecodeClassesTransform"
+        },
+        "WordErrorRate": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.language_translation.transforms.DecodeClassesTransform"
         }
       }
     }
