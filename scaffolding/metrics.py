@@ -38,3 +38,22 @@ class Metric:
         arg_values = [lookup_table[arg] for arg in self.metric_args]
         arg_values = self.transform_fn(*arg_values)
         return self.metric_fn(*arg_values)
+
+
+# todo: support exponentially weighted averages too
+class MovingAverage:
+    def __init__(self):
+        self.x = 0
+        self.num_updates = 0
+
+    def reset(self):
+        self.x = 0
+        self.num_updates = 0
+
+    def update(self, x):
+        self.x += x
+        self.num_updates += 1
+
+    @property
+    def value(self):
+        return self.x / self.num_updates

@@ -1,5 +1,6 @@
 import torch
 from .utils import save_session, switch_to_train_mode, switch_to_evaluation_mode
+from .metrics import MovingAverage
 
 
 def train(data_pipeline, train_pipeline, loss_fn, metrics,
@@ -8,6 +9,7 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
         metrics['loss'] = loss_fn
 
     train_loader, test_loader = data_pipeline.get_data_loaders()
+
     for epoch in range(start_epoch, start_epoch + epochs):
         switch_to_train_mode(train_pipeline)
         running_loss = MovingAverage()
@@ -20,37 +22,50 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
             update_running_metrics(running_metrics, metrics, outputs, batch["targets"])
 
             if i % stat_ivl == stat_ivl - 1:
-                stat_info = f'\rEpoch {epoch + 1}, iteration {i + 1:5d},'
-                if 'loss' in metrics:
-                    stat_info += f' loss: {running_loss.value:.3f}'
+                print_train_metrics(epoch, i, metrics, running_loss, running_metrics)
 
-                for metric_name, metric_avg in running_metrics.items():
-                    stat_info += f'; {metric_name}: {metric_avg.value:.3f}'
+                for metric_avg in running_metrics.values():
                     metric_avg.reset()
-
-                print(stat_info, end='')
 
                 running_loss.reset()
 
-            if i // stat_ivl > 5:
-                break
-
         switch_to_evaluation_mode(train_pipeline)
 
-        s = f'\rEpoch {epoch + 1}, '
-        computed_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)
-        for name, value in computed_metrics.items():
-            s += f'{name}: {value}; '
+        train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
 
-        computed_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
-        for name, value in computed_metrics.items():
-            s += f'val {name}: {value}; '
-
-        print(s)
+        print_epoch_metrics(train_metrics, val_metrics, epoch)
 
         if checkpoints_dir:
             save_session(train_pipeline, epoch, checkpoints_dir)
             print(f'Saved model to {checkpoints_dir}')
+
+
+def print_train_metrics(epoch, i, metrics, running_loss, running_metrics):
+    stat_info = f'\rEpoch {epoch + 1}, iteration {i + 1:5d},'
+    if 'loss' in metrics:
+        stat_info += f' loss: {running_loss.value:.3f}'
+
+    for metric_name, metric_avg in running_metrics.items():
+        stat_info += f'; {metric_name}: {metric_avg.value:.3f}'
+
+    print(stat_info, end='')
+
+
+def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
+    train_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)
+    val_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
+    return train_metrics, val_metrics
+
+
+def print_epoch_metrics(train_metrics, val_metrics, epoch):
+    s = f'\rEpoch {epoch + 1}, '
+    for name, value in train_metrics.items():
+        s += f'{name}: {value}; '
+
+    for name, value in val_metrics.items():
+        s += f'val {name}: {value}; '
+
+    print(s)
 
 
 def train_on_batch(train_pipeline, batch, loss_fn):
@@ -107,22 +122,3 @@ def evaluate(val_pipeline, dataloader, metrics, num_batches):
 def update_running_metrics(moving_averages, metrics, outputs, targets):
     for metric_name, metric in metrics.items():
         moving_averages[metric_name].update(metric(outputs, targets))
-
-
-# todo: support exponentially weighted averages too
-class MovingAverage:
-    def __init__(self):
-        self.x = 0
-        self.num_updates = 0
-
-    def reset(self):
-        self.x = 0
-        self.num_updates = 0
-
-    def update(self, x):
-        self.x += x
-        self.num_updates += 1
-
-    @property
-    def value(self):
-        return self.x / self.num_updates
