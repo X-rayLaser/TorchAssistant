@@ -69,7 +69,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         outputs = do_forward_pass(model_pipeline, batch, inference_mode=True)
 
-    predictions = {k: outputs["y_hat"] for k in outputs_keys}
+    predictions = {k: outputs[k] for k in outputs_keys}
 
     output_data = post_processor(predictions)
 

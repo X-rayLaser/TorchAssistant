@@ -59,15 +59,7 @@ def train_on_batch(train_pipeline, batch, loss_fn):
 
     outputs = do_forward_pass(train_pipeline, batch)
 
-    criterion, loss_args, transform = loss_fn
-
-    lookup_table = batch["targets"].copy()
-    lookup_table.update(outputs)
-    args = [lookup_table[arg_name] for arg_name in loss_args]
-
-    args = transform(*args)
-    loss = criterion(*args)
-
+    loss = loss_fn(outputs, batch["targets"])
     loss.backward()
 
     for pipe in train_pipeline:
@@ -113,14 +105,8 @@ def evaluate(val_pipeline, dataloader, metrics, num_batches):
 
 
 def update_running_metrics(moving_averages, metrics, outputs, targets):
-    lookup_table = targets.copy()
-    lookup_table.update(outputs)
-
-    for metric_name, (metric_fn, metric_args, transform_fn) in metrics.items():
-        arg_values = [lookup_table[arg] for arg in metric_args]
-        arg_values = transform_fn(*arg_values)
-        metric = metric_fn(*arg_values)
-        moving_averages[metric_name].update(metric)
+    for metric_name, metric in metrics.items():
+        moving_averages[metric_name].update(metric(outputs, targets))
 
 
 # todo: support exponentially weighted averages too

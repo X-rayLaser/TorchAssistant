@@ -11,7 +11,7 @@ import torch.optim as optim
 
 import torchmetrics
 
-from scaffolding.metrics import metric_functions
+from scaffolding.metrics import metric_functions, Metric
 from scaffolding.utils import SimpleSplitter, instantiate_class, import_function, import_entity, \
     AdaptedCollator, WrappedDataset, DecoratedInstance, GenericSerializableInstance
 from scaffolding.store import store
@@ -271,7 +271,8 @@ def parse_single_metric(metric_name, metric_dict, data_pipeline):
         metric = instantiate_class(f'torchmetrics.{metric_name}')
     else:
         metric = metric_functions[metric_name]
-    return metric, metric_dict["inputs"], transform_fn
+
+    return Metric(metric_name, metric, metric_dict["inputs"], transform_fn)
 
 
 def parse_model(config_dict):
@@ -322,7 +323,8 @@ def parse_loss(config_dict):
     criterion_class = getattr(nn, loss_class_name)
     args = loss_config.get("args", [])
     kwargs = loss_config.get("kwargs", {})
-    return criterion_class(*args, **kwargs), loss_config["inputs"], transform_fn
+
+    return Metric('loss', criterion_class(*args, **kwargs), loss_config["inputs"], transform_fn)
 
 
 def parse_epochs(config_dict):
