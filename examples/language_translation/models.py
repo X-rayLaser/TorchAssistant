@@ -38,13 +38,13 @@ class Decoder(nn.Module):
         return output, hidden
 
     def run_inference(self, x, hidden):
-        # here is will mean SOS character
+        # here x will mean SOS character
         import torch
         outputs = []
         for i in range(10):
             x, hidden = self.forward(x, hidden)
             top = torch.argmax(x, dim=2).squeeze()
-            x = torch.LongTensor([[top]])
+            x = torch.LongTensor([[top]]).to(x.device)
             outputs.append(top.item())
 
         return [outputs]

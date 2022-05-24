@@ -13,7 +13,7 @@ import torchmetrics
 
 from scaffolding.metrics import metric_functions, Metric
 from scaffolding.utils import SimpleSplitter, instantiate_class, import_function, import_entity, \
-    AdaptedCollator, WrappedDataset, DecoratedInstance, GenericSerializableInstance
+    AdaptedCollator, WrappedDataset, DecoratedInstance, GenericSerializableInstance, change_batch_device
 from scaffolding.store import store
 from scaffolding.exceptions import InvalidParameterError
 
@@ -44,6 +44,7 @@ def parse_data_pipeline(config_dict):
     collate_fn = parse_collator(config_dict)
     batch_adapter = parse_batch_adapter(config_dict)
     batch_size = config_dict["data"]["batch_size"]
+    device_str = config_dict["training"].get("device", "cpu")
 
     ds_name = config_dict["data"]["dataset_name"]
     ds_kwargs = config_dict["data"].get('dataset_kwargs', {})
@@ -59,7 +60,8 @@ def parse_data_pipeline(config_dict):
 
     return DataPipeline(dataset=ds, splitter=splitter,
                         preprocessors=preprocessors, collator=collate_fn,
-                        batch_adapter=batch_adapter, batch_size=batch_size)
+                        batch_adapter=batch_adapter, batch_size=batch_size,
+                        device_str=device_str)
 
 
 def generate_data(config_dict):
@@ -96,13 +98,14 @@ def default_save_example(example, output_dir, index):
 
 
 class DataPipeline:
-    def __init__(self, dataset, splitter, preprocessors, collator, batch_adapter, batch_size):
+    def __init__(self, dataset, splitter, preprocessors, collator, batch_adapter, batch_size, device_str):
         self.dataset = dataset
         self.splitter = splitter
         self.preprocessors = preprocessors
         self.collator = collator
         self.batch_adapter = batch_adapter
         self.batch_size = batch_size
+        self.device_str = device_str
 
     def get_data_loaders(self):
         # todo: this is a quick fix, refactor later
@@ -125,7 +128,7 @@ class DataPipeline:
 
         test_loader = torch.utils.data.DataLoader(test_set, batch_size=self.batch_size,
                                                   shuffle=False, num_workers=2, collate_fn=final_collate_fn)
-        return train_loader, test_loader
+        return LoaderWithDevice(train_loader, self.device_str), LoaderWithDevice(test_loader, self.device_str)
 
     def process_raw_input(self, raw_data, input_adapter):
         class MyDataset:
@@ -141,7 +144,10 @@ class DataPipeline:
 
         loader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
                                              collate_fn=final_collate_fn)
-        return next(iter(loader))
+
+        batch = next(iter(loader))
+        change_batch_device(batch, torch.device(self.device_str))
+        return batch
 
     def to_dict(self):
         return {
@@ -150,7 +156,8 @@ class DataPipeline:
             'preprocessors': [p.to_dict() for p in self.preprocessors],
             'collator': self.collator.to_dict(),
             'batch_adapter': self.batch_adapter.to_dict(),
-            'batch_size': self.batch_size
+            'batch_size': self.batch_size,
+            'device_str': self.device_str
         }
 
     @classmethod
@@ -163,7 +170,19 @@ class DataPipeline:
         collator = GenericSerializableInstance.from_dict(state_dict['collator'])
         batch_adapter = GenericSerializableInstance.from_dict(state_dict['batch_adapter'])
         batch_size = state_dict['batch_size']
-        return cls(dataset, splitter, preprocessors, collator, batch_adapter, batch_size)
+        device_str = state_dict['device_str']
+        return cls(dataset, splitter, preprocessors, collator, batch_adapter, batch_size, device_str)
+
+
+class LoaderWithDevice:
+    def __init__(self, loader, device_str):
+        self.loader = loader
+        self.device_str = device_str
+
+    def __iter__(self):
+        for batch in self.loader:
+            change_batch_device(batch, torch.device(self.device_str))
+            yield batch
 
 
 def parse_datasets(config_dict, splitter):

@@ -2,6 +2,8 @@ import argparse
 import json
 import os
 
+import torch
+
 from scaffolding.utils import load_data_pipeline, load_session_from_last_epoch
 from scaffolding.training import evaluate
 from scaffolding import parse
@@ -35,7 +37,9 @@ if __name__ == '__main__':
 
     data_pipeline = load_data_pipeline(data_pipeline_path)
 
-    prediction_pipeline = load_session_from_last_epoch(epochs_dir, inference_mode=True)
+    prediction_pipeline = load_session_from_last_epoch(
+        epochs_dir, device=torch.device(data_pipeline.device_str), inference_mode=True
+    )
 
     train_loader, test_loader = data_pipeline.get_data_loaders()
 

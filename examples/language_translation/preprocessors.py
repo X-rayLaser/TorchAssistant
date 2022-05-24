@@ -74,6 +74,7 @@ class SentenceEncoder(ValuePreprocessor, Serializable):
 
     def load(self, state_dict):
         self.__dict__ = state_dict.copy()
+        self.index2word = {int(k): v for k, v in self.index2word.items()}
 
 
 class FrenchEncoder(SentenceEncoder):

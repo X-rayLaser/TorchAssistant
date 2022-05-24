@@ -2,9 +2,11 @@ import argparse
 import json
 import os
 
+import torch
+
 from scaffolding.training import train
 from scaffolding import parse
-from scaffolding.utils import load_session, save_data_pipeline, load_data_pipeline
+from scaffolding.utils import load_session, save_data_pipeline, load_data_pipeline, change_model_device
 
 
 def load_config(path):
@@ -38,7 +40,7 @@ if __name__ == '__main__':
         data_pipeline = load_data_pipeline(data_pipeline_path)
         last_epoch = sorted(os.listdir(epochs_dir), key=lambda dir_name: int(dir_name), reverse=True)[0]
         start_epoch = int(last_epoch)
-        train_pipeline = load_session(epochs_dir, last_epoch)
+        train_pipeline = load_session(epochs_dir, last_epoch, torch.device(data_pipeline.device_str))
     else:
         os.makedirs(checkpoints_dir, exist_ok=True)
         data_pipeline = parse.parse_data_pipeline(config)
@@ -47,6 +49,7 @@ if __name__ == '__main__':
 
         start_epoch = 0
         train_pipeline = parse.parse_model(config)
+        change_model_device(train_pipeline, data_pipeline.device_str)
 
     metrics = parse.parse_metrics(config, data_pipeline)
 

@@ -16,7 +16,7 @@ class DecodeClassesTransform:
         y_hat = y_hat.argmax(dim=2)[0].tolist()
         ground_true = ground_true[0].tolist()
 
-        predicted_text = ''.join([english_decoder.index2word.get(str(idx), 'OOV') for idx in y_hat])
-        actual_text = ''.join([english_decoder.index2word.get(str(idx), 'OOV') for idx in ground_true])
+        predicted_text = ''.join([english_decoder.index2word.get(idx, 'OOV') for idx in y_hat])
+        actual_text = ''.join([english_decoder.index2word.get(idx, 'OOV') for idx in ground_true])
 
         return [predicted_text], [actual_text]

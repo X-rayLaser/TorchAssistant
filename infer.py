@@ -51,7 +51,9 @@ if __name__ == '__main__':
     data_pipeline = load_data_pipeline(data_pipeline_dir)
     data_pipeline.batch_adapter = parse_batch_adapter(config)
 
-    model_pipeline = load_session_from_last_epoch(epochs_dir, inference_mode=True)
+    # todo: should be able to override device
+    device = torch.device(data_pipeline.device_str)
+    model_pipeline = load_session_from_last_epoch(epochs_dir, device=device, inference_mode=True)
     for i, node in enumerate(model_pipeline):
         node.inputs = config["model"][i]["inputs"]
         node.outputs = config["model"][i]["outputs"]

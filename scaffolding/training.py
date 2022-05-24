@@ -12,6 +12,7 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
 
     for epoch in range(start_epoch, start_epoch + epochs):
         switch_to_train_mode(train_pipeline)
+
         running_loss = MovingAverage()
         running_metrics = {name: MovingAverage() for name in metrics}
 
@@ -37,7 +38,6 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
 
         if checkpoints_dir:
             save_session(train_pipeline, epoch, checkpoints_dir)
-            print(f'Saved model to {checkpoints_dir}')
 
 
 def print_train_metrics(epoch, i, metrics, running_loss, running_metrics):

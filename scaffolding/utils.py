@@ -214,7 +214,7 @@ def switch_to_evaluation_mode(prediction_pipeline):
         node.net.instance.eval()
 
 
-def load_session(checkpoints_dir, epoch, inference_mode=False):
+def load_session(checkpoints_dir, epoch, device, inference_mode=False):
     from scaffolding.parse import Node, SerializableModel, SerializableOptimizer
 
     epoch_dir = os.path.join(checkpoints_dir, str(epoch))
@@ -225,6 +225,7 @@ def load_session(checkpoints_dir, epoch, inference_mode=False):
         checkpoint = torch.load(path)
 
         serializable_model = SerializableModel.from_dict(checkpoint)
+        serializable_model.instance.to(device)
         serializable_optimizer = SerializableOptimizer.from_dict(
             checkpoint, serializable_model.instance
         )
@@ -244,9 +245,9 @@ def load_session(checkpoints_dir, epoch, inference_mode=False):
     return [t[0] for t in nodes_with_numbers]
 
 
-def load_session_from_last_epoch(epochs_dir, inference_mode=False):
+def load_session_from_last_epoch(epochs_dir, device, inference_mode=False):
     last_epoch = sorted(os.listdir(epochs_dir), key=lambda d: int(d), reverse=True)[0]
-    return load_session(epochs_dir, int(last_epoch), inference_mode)
+    return load_session(epochs_dir, int(last_epoch), device, inference_mode)
 
 
 def save_data_pipeline(data_pipeline, path):
@@ -262,6 +263,24 @@ def load_data_pipeline(path):
         s = f.read()
         state_dict = json.loads(s)
         return DataPipeline.from_dict(state_dict)
+
+
+def change_model_device(train_pipeline, device):
+    for model in train_pipeline:
+        model.net.instance.to(device)
+
+
+def change_batch_device(batch, device):
+    inputs_dict = batch["inputs"]
+
+    for k, mapping in inputs_dict.items():
+        for tensor_name, value in mapping.items():
+            mapping[tensor_name] = value.to(device)
+
+    targets_dict = batch.get("targets")
+    if targets_dict:
+        for tensor_name, value in targets_dict.items():
+            targets_dict[tensor_name] = value.to(device)
 
 
 # todo: implement a proper pseudo random yet deterministic splitter class based on seed

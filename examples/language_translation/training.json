@@ -94,7 +94,7 @@
           "transform": "examples.language_translation.transforms.DecodeClassesTransform"
         }
       },
-      "num_epochs": 2,
+      "num_epochs": 20,
       "device": "cpu"
     }
   }
