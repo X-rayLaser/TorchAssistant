@@ -34,13 +34,15 @@
       "model": [
         {
           "name": "encoder",
-          "arch": "examples.language_translation.models.Encoder",
-          "args": [],
-          "kwargs": {
-            "hidden_size": 32
-          },
-          "dynamic_kwargs": {
-            "input_size": "num_french_words"
+          "arch": {
+            "class": "examples.language_translation.models.Encoder",
+            "args": [],
+            "kwargs": {
+              "hidden_size": 32
+            },
+            "dynamic_kwargs": {
+              "input_size": "num_french_words"
+            }
           },
           "inputs": ["x", "h"],
           "outputs": [
@@ -48,7 +50,7 @@
           ],
           "optimizer": {
             "class": "SGD",
-            "params": {
+            "kwargs": {
               "lr": 0.001,
               "momentum": 0.9
             }
@@ -56,13 +58,15 @@
         },
         {
           "name": "decoder",
-          "arch": "examples.language_translation.models.Decoder",
-          "args": [],
-          "kwargs": {
-            "hidden_size": 32
-          },
-          "dynamic_kwargs": {
-            "output_size": "num_english_words"
+          "arch": {
+            "class": "examples.language_translation.models.Decoder",
+            "args": [],
+            "kwargs": {
+              "hidden_size": 32
+            },
+            "dynamic_kwargs": {
+              "output_size": "num_english_words"
+            }
           },
           "inputs": ["y_shifted", "h_e"],
           "outputs": [
@@ -70,7 +74,7 @@
           ],
           "optimizer": {
             "class": "SGD",
-            "params": {
+            "kwargs": {
               "lr": 0.001,
               "momentum": 0.9
             }

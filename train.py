@@ -43,7 +43,7 @@ if __name__ == '__main__':
         train_pipeline = load_session(epochs_dir, last_epoch, torch.device(data_pipeline.device_str))
     else:
         os.makedirs(checkpoints_dir, exist_ok=True)
-        data_pipeline = parse.parse_data_pipeline(config)
+        data_pipeline = parse.DataPipeline.create(config)
 
         save_data_pipeline(data_pipeline, data_pipeline_path)
 
@@ -59,7 +59,9 @@ if __name__ == '__main__':
 
 
 # todo: refactor code
-# todo: choose device (CPU vs GPU, optionally TPU)
+# todo: allow to change inference device
+# todo; support training GANs (e.g. DCGAN)
+# todo: support training GANs with growing neural nets
 # todo: consider making a batch adapter a part of prediction pipeline (rather than data pipeline)
 # todo: support batch sizes > 1 (this will involve some extra transformations like padding, etc.)
 # todo: ensure other examples work

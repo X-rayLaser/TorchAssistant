@@ -28,47 +28,17 @@ def parse_transform(transform_dict):
         return transforms.Normalize(tuple(args_list[0]), tuple(args_list[1]))
 
 
-def get_transform_pipeline(config_dict):
-    transform_config = config_dict["data"].get("transform")
+def get_transform_pipeline(transform_config):
     if transform_config:
         return transforms.Compose([parse_transform(t) for t in transform_config])
     return transforms.Compose([])
 
 
-def parse_data_pipeline(config_dict):
-    generate_data(config_dict)
-    splitter = SimpleSplitter()
-    train_set, test_set = parse_datasets(config_dict, splitter)
-    preprocessors = fit_preprocessors(train_set, config_dict)
-
-    collate_fn = parse_collator(config_dict)
-    batch_adapter = parse_batch_adapter(config_dict)
-    batch_size = config_dict["data"]["batch_size"]
-    device_str = config_dict["training"].get("device", "cpu")
-
-    ds_name = config_dict["data"]["dataset_name"]
-    ds_kwargs = config_dict["data"].get('dataset_kwargs', {})
-    ds = SerializableDataset(class_name=ds_name, args=[], kwargs=ds_kwargs)
-
-    splitter = GenericSerializableInstance(
-        splitter, class_name='scaffolding.utils.SimpleSplitter', args=[], kwargs={}
-    )
-
-    preprocessors_config = config_dict["data"]["preprocessors"]
-    preprocessors = [GenericSerializableInstance(p, conf["class"], [], {})
-                     for conf, p in zip(preprocessors_config, preprocessors)]
-
-    return DataPipeline(dataset=ds, splitter=splitter,
-                        preprocessors=preprocessors, collator=collate_fn,
-                        batch_adapter=batch_adapter, batch_size=batch_size,
-                        device_str=device_str)
-
-
-def generate_data(config_dict):
-    if "data_generator" not in config_dict["data"]:
+def generate_data(data_dict):
+    if "data_generator" not in data_dict:
         return
 
-    generator_config = config_dict["data"]["data_generator"]
+    generator_config = data_dict["data_generator"]
 
     class_name = generator_config["class"]
     output_dir = generator_config["output_dir"]
@@ -109,14 +79,12 @@ class DataPipeline:
 
     def get_data_loaders(self):
         # todo: this is a quick fix, refactor later
-        # todo: fix code to access instance attribute on serializable objects or add getattr to delegate
-        config_dict = {
-            'data': {
-                'dataset_name': self.dataset.class_name,
-                'dataset_kwargs': self.dataset.kwargs
-            }
+        data_dict = {
+            'dataset_name': self.dataset.class_name,
+            'dataset_kwargs': self.dataset.kwargs
         }
-        train_set, test_set = parse_datasets(config_dict, self.splitter)
+
+        train_set, test_set = build_data_split(data_dict, self.splitter)
 
         train_set = WrappedDataset(train_set, self.preprocessors)
         test_set = WrappedDataset(test_set, self.preprocessors)
@@ -161,6 +129,41 @@ class DataPipeline:
         }
 
     @classmethod
+    def create(cls, config_dict):
+        generate_data(config_dict["data"])
+        splitter = SimpleSplitter()
+        train_set, test_set = build_data_split(config_dict["data"], splitter)
+
+        preprocessors = build_preprocessors(config_dict)
+        fit_preprocessors(preprocessors, train_set)
+
+        preprocessors_config = config_dict["data"].get("preprocessors", [])
+        exports = [d.get('expose_attributes', []) for d in preprocessors_config]
+        for preprocessor, attr_list in zip(preprocessors, exports):
+            export_attributes(preprocessor.instance, attr_list)
+
+        collate_fn = parse_collator(config_dict)
+        batch_adapter = parse_batch_adapter(config_dict)
+        batch_size = config_dict["data"]["batch_size"]
+        device_str = config_dict["training"].get("device", "cpu")
+
+        ds_name = config_dict["data"]["dataset_name"]
+
+        ds_args = config_dict["data"].get('dataset_args', [])
+
+        ds_kwargs = config_dict["data"].get('dataset_kwargs', {})
+        ds = SerializableDataset(class_name=ds_name, args=ds_args, kwargs=ds_kwargs)
+
+        splitter = GenericSerializableInstance(
+            splitter, class_name='scaffolding.utils.SimpleSplitter', args=[], kwargs={}
+        )
+
+        return DataPipeline(dataset=ds, splitter=splitter,
+                            preprocessors=preprocessors, collator=collate_fn,
+                            batch_adapter=batch_adapter, batch_size=batch_size,
+                            device_str=device_str)
+
+    @classmethod
     def from_dict(cls, state_dict):
         dataset = SerializableDataset.from_dict(state_dict['dataset'])
         splitter = GenericSerializableInstance.from_dict(state_dict['splitter'])
@@ -185,75 +188,81 @@ class LoaderWithDevice:
             yield batch
 
 
-def parse_datasets(config_dict, splitter):
-    ds_class_name = config_dict["data"]["dataset_name"]
+def build_data_split(data_dict, splitter):
+    ds_class_name = data_dict["dataset_name"]
 
     if '.' in ds_class_name:
         # assume that we got a fully-qualified path to a custom class
-        ds_kwargs = config_dict["data"].get("dataset_kwargs", {})
+        ds_kwargs = data_dict.get("dataset_kwargs", {})
         dataset = instantiate_class(ds_class_name, **ds_kwargs)
         splitter.prepare(dataset)
         train_set = splitter.train_ds
         test_set = splitter.val_ds
     else:
         dataset_class = getattr(torchvision.datasets, ds_class_name)
-        transform = get_transform_pipeline(config_dict)
+        transform_list = data_dict.get("transform", [])
+        transform = get_transform_pipeline(transform_list)
         train_set = dataset_class(root='./data', train=True, download=True, transform=transform)
         test_set = dataset_class(root='./data', train=False, download=True, transform=transform)
     return train_set, test_set
 
 
-def fit_preprocessors(train_set, config_dict):
-    preprocessors_config = config_dict["data"]["preprocessors"]
+def build_preprocessors(config_dict):
+    preprocessors_config = config_dict["data"].get("preprocessors", [])
     preprocessors = []
     for d in preprocessors_config:
-        class_name = d["class"]
-        args = d.get("args", [])
-        kwargs = d.get("kwargs", {})
-        preprocessor = instantiate_class(class_name, *args, **kwargs)
-
-        preprocessor.fit(train_set)
-
-        for attr_name in d.get('expose_attributes', []):
-            attr_value = getattr(preprocessor, attr_name)
-            setattr(store, attr_name, attr_value)
-
-        wrapped_preprocessor = GenericSerializableInstance(preprocessor, class_name, args=args, kwargs=kwargs)
+        wrapped_preprocessor = build_generic_serializable_instance(d)
         preprocessors.append(wrapped_preprocessor)
 
     return preprocessors
 
 
+def fit_preprocessors(preprocessors, train_set):
+    for p in preprocessors:
+        p.instance.fit(train_set)
+
+
+def export_attributes(obj, exported_attrs):
+    for attr_name in exported_attrs:
+        attr_value = getattr(obj, attr_name)
+        setattr(store, attr_name, attr_value)
+
+
 def parse_collator(config_dict):
-    collator_config = config_dict["data"]["collator"]
-    collator_class_name = collator_config["class"]
-
-    collator_args = collator_config.get("args", [])
-    collator_kwargs = collator_config.get("kwargs", {})
-
-    dynamic_kwargs = {}
-    for collator_arg_name, store_arg_name in collator_config.get("dynamic_kwargs", {}).items():
-        dynamic_kwargs[collator_arg_name] = getattr(store, store_arg_name)
-
-    collator_kwargs.update(dynamic_kwargs)
-
-    collator = instantiate_class(collator_class_name, *collator_args, **collator_kwargs)
-    return GenericSerializableInstance(collator, collator_class_name, collator_args, collator_kwargs)
+    collator_config = config_dict["data"].get("collator")
+    if collator_config:
+        return build_generic_serializable_instance(collator_config)
+    else:
+        from .collators import BatchDivide
+        batch_divide = BatchDivide()
+        return GenericSerializableInstance(batch_divide, 'scaffolding.StackTensors', [], {})
 
 
 def parse_batch_adapter(config_dict):
-    adapter_config = config_dict["data"]["batch_adapter"]
-    adapter_class_name = adapter_config["class"]
-    adapter_args = adapter_config.get("args", [])
-    adapter_kwargs = adapter_config.get("kwargs", {})
+    adapter_config = config_dict["data"].get("batch_adapter")
+    if adapter_config:
+        return build_generic_serializable_instance(adapter_config)
+    else:
+        # todo: return default adapter
+        pass
+
+
+def build_generic_serializable_instance(object_dict, instantiate_fn=None, wrapper_class=None):
+    instantiate_fn = instantiate_fn or instantiate_class
+    wrapper_class = wrapper_class or GenericSerializableInstance
+
+    class_name = object_dict["class"]
+    args = object_dict.get("args", [])
+    kwargs = object_dict.get("kwargs", {})
 
     dynamic_kwargs = {}
-    for adapter_arg_name, store_arg_name in adapter_config.get("dynamic_kwargs", {}).items():
-        dynamic_kwargs[adapter_arg_name] = getattr(store, store_arg_name)
+    for arg_name, store_arg_name in object_dict.get("dynamic_kwargs", {}).items():
+        dynamic_kwargs[arg_name] = getattr(store, store_arg_name)
 
-    adapter_kwargs.update(dynamic_kwargs)
-    adapter = instantiate_class(adapter_class_name, *adapter_args, **adapter_kwargs)
-    return GenericSerializableInstance(adapter, adapter_class_name, adapter_args, adapter_kwargs)
+    kwargs.update(dynamic_kwargs)
+
+    instance = instantiate_fn(class_name, *args, **kwargs)
+    return wrapper_class(instance, class_name, args, kwargs)
 
 
 def parse_metrics(config_dict, data_pipeline):
@@ -301,31 +310,19 @@ def parse_model(config_dict):
 
 def parse_submodel(config):
     """Returns a tuple of (nn.Module instance, optimizer, inputs, outputs)"""
-    path = config["arch"]
-    model_args = config.get("args", [])
-    model_kwargs = config.get("kwargs", {})
-
-    dynamic_kwargs = config.get("dynamic_kwargs", {})
-    total_kwargs = model_kwargs.copy()
-
-    for k, v in dynamic_kwargs.items():
-        total_kwargs[k] = getattr(store, v)
-
-    sub_model = instantiate_class(path, *model_args, **total_kwargs)
+    arch_config = config["arch"]
+    serializable_model = build_generic_serializable_instance(arch_config, wrapper_class=SerializableModel)
 
     optimizer_config = config["optimizer"]
-    optimizer_class_name = optimizer_config["class"]
 
-    # todo: this is obviously an error, it should read args and kwargs, not params
-    optimizer_args = optimizer_config.get("kwargs", [])
-    optimizer_kwargs = optimizer_config.get("params", {})
+    def instantiate_fn(class_name, *args, **kwargs):
+        optimizer_class = getattr(optim, class_name)
+        return optimizer_class(serializable_model.instance.parameters(), *args, **kwargs)
 
-    optimizer_class = getattr(optim, optimizer_class_name)
-    optimizer = optimizer_class(sub_model.parameters(), **optimizer_kwargs)
+    serializable_optimizer = build_generic_serializable_instance(
+        optimizer_config, instantiate_fn, wrapper_class=SerializableOptimizer
+    )
 
-    serializable_model = SerializableModel(sub_model, path, model_args, total_kwargs)
-    serializable_optimizer = SerializableOptimizer(optimizer, optimizer_class_name,
-                                                   optimizer_args, optimizer_kwargs)
     return Node(name=config["name"], serializable_model=serializable_model,
                 serializable_optimizer=serializable_optimizer,
                 inputs=config["inputs"], outputs=config["outputs"])

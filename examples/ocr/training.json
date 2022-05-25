@@ -39,9 +39,11 @@
       "model": [
         {
           "name": "encoder",
-          "arch": "examples.ocr.models.ImageEncoder",
-          "kwargs": {
-            "input_channels": 1
+          "arch": {
+            "class": "examples.ocr.models.ImageEncoder",
+            "kwargs": {
+              "input_channels": 1
+            }
           },
           "inputs": ["x"],
           "outputs": ["e"],
@@ -49,12 +51,14 @@
         },
         {
           "name": "decoder",
-          "arch": "examples.ocr.models.AttendingDecoder",
-          "kwargs": {
-            "context_size": 256,
-            "y_size": 128,
-            "hidden_size": 128,
-            "inner_dim": 128
+          "arch": {
+            "class": "examples.ocr.models.AttendingDecoder",
+            "kwargs": {
+              "context_size": 256,
+              "y_size": 128,
+              "hidden_size": 128,
+              "inner_dim": 128
+            }
           },
           "inputs": ["e", "h_d", "y_shifted"],
           "outputs": ["y_hat"],
@@ -79,7 +83,7 @@
           "transform": "examples.ocr.transforms.DecodeClassesTransform"
         }
       },
-      "num_epochs": 10
+      "num_epochs": 2
     }
   }
 }
