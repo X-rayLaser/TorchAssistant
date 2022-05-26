@@ -68,12 +68,12 @@ def default_save_example(example, output_dir, index):
 
 
 class DataPipeline:
-    def __init__(self, dataset, splitter, preprocessors, collator, batch_adapter, batch_size, device_str):
+    def __init__(self, dataset, transform, splitter, preprocessors, collator, batch_size, device_str):
         self.dataset = dataset
+        self.transform = transform
         self.splitter = splitter
         self.preprocessors = preprocessors
         self.collator = collator
-        self.batch_adapter = batch_adapter
         self.batch_size = batch_size
         self.device_str = device_str
 
@@ -81,22 +81,23 @@ class DataPipeline:
         # todo: this is a quick fix, refactor later
         data_dict = {
             'dataset_name': self.dataset.class_name,
-            'dataset_kwargs': self.dataset.kwargs
+            'dataset_kwargs': self.dataset.kwargs,
+            'transform': self.transform
         }
 
         train_set, test_set = build_data_split(data_dict, self.splitter)
 
-        train_set = WrappedDataset(train_set, self.preprocessors)
-        test_set = WrappedDataset(test_set, self.preprocessors)
-
-        final_collate_fn = AdaptedCollator(self.collator, self.batch_adapter)
+        if self.preprocessors:
+            train_set = WrappedDataset(train_set, self.preprocessors)
+            test_set = WrappedDataset(test_set, self.preprocessors)
 
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=self.batch_size,
-                                                   shuffle=True, num_workers=2, collate_fn=final_collate_fn)
+                                                   shuffle=True, num_workers=2, collate_fn=self.collator)
 
         test_loader = torch.utils.data.DataLoader(test_set, batch_size=self.batch_size,
-                                                  shuffle=False, num_workers=2, collate_fn=final_collate_fn)
-        return LoaderWithDevice(train_loader, self.device_str), LoaderWithDevice(test_loader, self.device_str)
+                                                  shuffle=False, num_workers=2, collate_fn=self.collator)
+
+        return train_loader, test_loader
 
     def process_raw_input(self, raw_data, input_adapter):
         class MyDataset:
@@ -107,23 +108,22 @@ class DataPipeline:
                 return 1
 
         ds = MyDataset()
-        ds = WrappedDataset(ds, self.preprocessors)
-        final_collate_fn = AdaptedCollator(self.collator, self.batch_adapter)
+        if self.preprocessors:
+            ds = WrappedDataset(ds, self.preprocessors)
 
         loader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
-                                             collate_fn=final_collate_fn)
+                                             collate_fn=self.collator)
 
         batch = next(iter(loader))
-        change_batch_device(batch, torch.device(self.device_str))
         return batch
 
     def to_dict(self):
         return {
             'dataset': self.dataset.to_dict(),
+            'transform': self.transform,
             'splitter': self.splitter.to_dict(),
             'preprocessors': [p.to_dict() for p in self.preprocessors],
             'collator': self.collator.to_dict(),
-            'batch_adapter': self.batch_adapter.to_dict(),
             'batch_size': self.batch_size,
             'device_str': self.device_str
         }
@@ -143,7 +143,7 @@ class DataPipeline:
             export_attributes(preprocessor.instance, attr_list)
 
         collate_fn = parse_collator(config_dict)
-        batch_adapter = parse_batch_adapter(config_dict)
+
         batch_size = config_dict["data"]["batch_size"]
         device_str = config_dict["training"].get("device", "cpu")
 
@@ -154,27 +154,27 @@ class DataPipeline:
         ds_kwargs = config_dict["data"].get('dataset_kwargs', {})
         ds = SerializableDataset(class_name=ds_name, args=ds_args, kwargs=ds_kwargs)
 
+        transform = config_dict["data"].get("transform", [])
         splitter = GenericSerializableInstance(
             splitter, class_name='scaffolding.utils.SimpleSplitter', args=[], kwargs={}
         )
 
-        return DataPipeline(dataset=ds, splitter=splitter,
+        return DataPipeline(dataset=ds, transform=transform, splitter=splitter,
                             preprocessors=preprocessors, collator=collate_fn,
-                            batch_adapter=batch_adapter, batch_size=batch_size,
-                            device_str=device_str)
+                            batch_size=batch_size, device_str=device_str)
 
     @classmethod
     def from_dict(cls, state_dict):
         dataset = SerializableDataset.from_dict(state_dict['dataset'])
+        transform = state_dict['transform']
         splitter = GenericSerializableInstance.from_dict(state_dict['splitter'])
 
         preprocessors = [GenericSerializableInstance.from_dict(d) for d in state_dict['preprocessors']]
 
         collator = GenericSerializableInstance.from_dict(state_dict['collator'])
-        batch_adapter = GenericSerializableInstance.from_dict(state_dict['batch_adapter'])
         batch_size = state_dict['batch_size']
         device_str = state_dict['device_str']
-        return cls(dataset, splitter, preprocessors, collator, batch_adapter, batch_size, device_str)
+        return cls(dataset, transform, splitter, preprocessors, collator, batch_size, device_str)
 
 
 class LoaderWithDevice:
@@ -202,8 +202,10 @@ def build_data_split(data_dict, splitter):
         dataset_class = getattr(torchvision.datasets, ds_class_name)
         transform_list = data_dict.get("transform", [])
         transform = get_transform_pipeline(transform_list)
+
         train_set = dataset_class(root='./data', train=True, download=True, transform=transform)
         test_set = dataset_class(root='./data', train=False, download=True, transform=transform)
+
     return train_set, test_set
 
 
@@ -233,9 +235,9 @@ def parse_collator(config_dict):
     if collator_config:
         return build_generic_serializable_instance(collator_config)
     else:
-        from .collators import BatchDivide
-        batch_divide = BatchDivide()
-        return GenericSerializableInstance(batch_divide, 'scaffolding.StackTensors', [], {})
+        from .collators import StackTensors
+        batch_divide = StackTensors()
+        return GenericSerializableInstance(batch_divide, 'scaffolding.collators.StackTensors', [], {})
 
 
 def parse_batch_adapter(config_dict):
@@ -267,18 +269,21 @@ def build_generic_serializable_instance(object_dict, instantiate_fn=None, wrappe
 
 def parse_metrics(config_dict, data_pipeline):
     metrics_config = config_dict["training"]["metrics"]
+
     metrics = {}
 
+    device = parse_device(config_dict)
     try:
         error = False
         exc_args = None
-        metrics = {name: parse_single_metric(name, metrics_config[name], data_pipeline)
+        metrics = {name: parse_single_metric(name, metrics_config[name], data_pipeline, device)
                    for name in metrics_config}
     except KeyError as exc:
         error = True
         exc_args = exc.args
 
     if error:
+        print(exc_args)
         allowed_metrics = list(metric_functions.keys())
         error_message = f'Unknown metric "{exc_args[0]}". ' \
                         f'Must be either a metric from TorchMetrics or one of {allowed_metrics}'
@@ -286,7 +291,7 @@ def parse_metrics(config_dict, data_pipeline):
     return metrics
 
 
-def parse_single_metric(metric_name, metric_dict, data_pipeline):
+def parse_single_metric(metric_name, metric_dict, data_pipeline, device):
     if "transform" in metric_dict:
         transform_fn = import_entity(metric_dict["transform"])
         if inspect.isclass(transform_fn):
@@ -300,7 +305,7 @@ def parse_single_metric(metric_name, metric_dict, data_pipeline):
     else:
         metric = metric_functions[metric_name]
 
-    return Metric(metric_name, metric, metric_dict["inputs"], transform_fn)
+    return Metric(metric_name, metric, metric_dict["inputs"], transform_fn, device)
 
 
 def parse_model(config_dict):
@@ -331,6 +336,9 @@ def parse_submodel(config):
 def parse_loss(config_dict):
     loss_config = config_dict["training"]["loss"]
     loss_class_name = loss_config["class"]
+
+    device = parse_device(config_dict)
+
     if "transform" in loss_config:
         transform_fn = import_function(loss_config["transform"])
     else:
@@ -340,7 +348,12 @@ def parse_loss(config_dict):
     args = loss_config.get("args", [])
     kwargs = loss_config.get("kwargs", {})
 
-    return Metric('loss', criterion_class(*args, **kwargs), loss_config["inputs"], transform_fn)
+    return Metric('loss', criterion_class(*args, **kwargs), loss_config["inputs"], transform_fn, device)
+
+
+def parse_device(config_dict):
+    device_str = config_dict["training"].get("device", "cpu")
+    return torch.device(device_str)
 
 
 def parse_epochs(config_dict):

@@ -2,6 +2,10 @@
   "pipeline": {
     "training": {
       "checkpoints_dir": "checkpoints",
+      "batch_adapter": {
+        "class": "examples.language_translation.adapters.BatchAdapter",
+        "kwargs": {"hidden_size": 32}
+      },
       "loss": {
         "class": "CrossEntropyLoss",
         "kwargs": {

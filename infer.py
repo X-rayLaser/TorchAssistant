@@ -1,10 +1,10 @@
 import argparse
 import os
 from scaffolding.utils import load_data_pipeline, load_session_from_last_epoch, instantiate_class
-from scaffolding.parse import parse_batch_adapter
-from scaffolding.training import do_forward_pass
+from scaffolding.parse import parse_batch_adapter, build_generic_serializable_instance
 import torch
 from train import load_config
+from scaffolding.training import PredictionPipeline
 
 
 def parse_input_adapter(config_dict):
@@ -49,12 +49,13 @@ if __name__ == '__main__':
     epochs_dir = os.path.join(checkpoints_dir, 'epochs')
 
     data_pipeline = load_data_pipeline(data_pipeline_dir)
-    data_pipeline.batch_adapter = parse_batch_adapter(config)
+    batch_adapter_config = config.get("batch_adapter")
+    batch_adapter = build_generic_serializable_instance(batch_adapter_config)
 
     # todo: should be able to override device
     device = torch.device(data_pipeline.device_str)
-    model_pipeline = load_session_from_last_epoch(epochs_dir, device=device, inference_mode=True)
-    for i, node in enumerate(model_pipeline):
+    model = load_session_from_last_epoch(epochs_dir, device=device, inference_mode=True)
+    for i, node in enumerate(model):
         node.inputs = config["model"][i]["inputs"]
         node.outputs = config["model"][i]["outputs"]
 
@@ -68,8 +69,11 @@ if __name__ == '__main__':
 
     batch = data_pipeline.process_raw_input(input_string, input_adapter)
 
+    prediction_pipeline = PredictionPipeline(model, device, batch_adapter)
+
     with torch.no_grad():
-        outputs = do_forward_pass(model_pipeline, batch, inference_mode=True)
+        inputs, _ = prediction_pipeline.adapt_batch(batch)
+        outputs = prediction_pipeline(inputs, inference_mode=True)
 
     predictions = {k: outputs[k] for k in outputs_keys}
 

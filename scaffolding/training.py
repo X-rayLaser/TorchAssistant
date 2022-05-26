@@ -20,7 +20,8 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
             loss, outputs = train_on_batch(train_pipeline, batch, loss_fn)
 
             running_loss.update(loss.item())
-            update_running_metrics(running_metrics, metrics, outputs, batch["targets"])
+            _, targets = train_pipeline.adapt_batch(batch)
+            update_running_metrics(running_metrics, metrics, outputs, targets)
 
             if i % stat_ivl == stat_ivl - 1:
                 print_train_metrics(epoch, i, metrics, running_loss, running_metrics)
@@ -72,31 +73,16 @@ def train_on_batch(train_pipeline, batch, loss_fn):
     for pipe in train_pipeline:
         pipe.optimizer.zero_grad()
 
-    outputs = do_forward_pass(train_pipeline, batch)
+    inputs, targets = train_pipeline.adapt_batch(batch)
+    outputs = train_pipeline(inputs, inference_mode=False)
 
-    loss = loss_fn(outputs, batch["targets"])
+    loss = loss_fn(outputs, targets)
     loss.backward()
 
     for pipe in train_pipeline:
         pipe.optimizer.step()
 
     return loss, outputs
-
-
-def do_forward_pass(train_pipeline, batch, inference_mode=False):
-    inputs = batch["inputs"]
-
-    all_outputs = {}
-    for pipe in train_pipeline:
-        args = get_dependencies(pipe, inputs, all_outputs)
-        if inference_mode:
-            outputs = pipe.net.run_inference(*args)
-        else:
-            outputs = pipe.net(*args)
-        all_outputs.update(
-            dict(zip(pipe.outputs, outputs))
-        )
-    return all_outputs
 
 
 def get_dependencies(pipe, batch_inputs, prev_outputs):
@@ -113,8 +99,9 @@ def evaluate(val_pipeline, dataloader, metrics, num_batches):
             if i >= num_batches:
                 break
 
-            all_outputs = do_forward_pass(val_pipeline, batch)
-            update_running_metrics(moving_averages, metrics, all_outputs, batch["targets"])
+            inputs, targets = val_pipeline.adapt_batch(batch)
+            all_outputs = val_pipeline(inputs, inference_mode=False)
+            update_running_metrics(moving_averages, metrics, all_outputs, targets)
 
     return {metric_name: avg.value for metric_name, avg in moving_averages.items()}
 
@@ -122,3 +109,41 @@ def evaluate(val_pipeline, dataloader, metrics, num_batches):
 def update_running_metrics(moving_averages, metrics, outputs, targets):
     for metric_name, metric in metrics.items():
         moving_averages[metric_name].update(metric(outputs, targets))
+
+
+class PredictionPipeline:
+    def __init__(self, model, device, batch_adapter):
+        self.model = model
+        self.device = device
+        self.batch_adapter = batch_adapter
+
+    def adapt_batch(self, batch):
+        batch = self.batch_adapter.adapt(*batch)
+        return batch["inputs"], batch.get("targets")
+
+    def __iter__(self):
+        return iter(self.model)
+
+    def __call__(self, inputs, inference_mode=False):
+        self.inputs_to(inputs)
+
+        all_outputs = {}
+        for pipe in self.model:
+            args = get_dependencies(pipe, inputs, all_outputs)
+
+            if inference_mode:
+                outputs = pipe.net.run_inference(*args)
+            else:
+                outputs = pipe.net(*args)
+
+            all_outputs.update(
+                dict(zip(pipe.outputs, outputs))
+            )
+
+        return all_outputs
+
+    def inputs_to(self, inputs):
+        for k, mapping in inputs.items():
+            for tensor_name, value in mapping.items():
+                if hasattr(value, 'device') and value.device != self.device:
+                    mapping[tensor_name] = value.to(self.device)

@@ -5,8 +5,9 @@ import os
 import torch
 
 from scaffolding.utils import load_data_pipeline, load_session_from_last_epoch
-from scaffolding.training import evaluate
+from scaffolding.training import evaluate, PredictionPipeline
 from scaffolding import parse
+from scaffolding.adapters import DefaultAdapter
 
 
 def load_config(path):
@@ -37,7 +38,7 @@ if __name__ == '__main__':
 
     data_pipeline = load_data_pipeline(data_pipeline_path)
 
-    prediction_pipeline = load_session_from_last_epoch(
+    model = load_session_from_last_epoch(
         epochs_dir, device=torch.device(data_pipeline.device_str), inference_mode=True
     )
 
@@ -49,6 +50,16 @@ if __name__ == '__main__':
 
     if 'loss' in metrics:
         metrics['loss'] = loss_fn
+
+    device = parse.parse_device(config)
+
+    batch_adapter_config = config["training"]["batch_adapter"]
+    if batch_adapter_config:
+        batch_adapter = parse.build_generic_serializable_instance(batch_adapter_config)
+    else:
+        batch_adapter = DefaultAdapter(model, config["data"]["targets"])
+
+    prediction_pipeline = PredictionPipeline(model, device, batch_adapter)
 
     s = ''
     computed_metrics = evaluate(prediction_pipeline, train_loader, metrics, num_batches=64)

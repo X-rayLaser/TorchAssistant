@@ -2,6 +2,7 @@ import torch
 
 
 def accuracy(outputs, labels):
+    print(outputs.data)
     _, predicted = torch.max(outputs.data, 1)
     total = labels.size(0)
     correct = (predicted == labels).sum().item()
@@ -25,19 +26,44 @@ metric_functions = {
 
 
 class Metric:
-    def __init__(self, name, metric_fn, metric_args, transform_fn):
+    def __init__(self, name, metric_fn, metric_args, transform_fn, device):
         self.name = name
         self.metric_fn = metric_fn
         self.metric_args = metric_args
         self.transform_fn = transform_fn
+        self.device = device
 
     def __call__(self, outputs, targets):
+        """
+
+        :param outputs: a dictionary of all outputs from prediction pipeline
+        :type outputs: Dict[str -> torch.tensor]
+        :param targets: a dictionary of all targets
+        :type targets: Dict[str -> torch.tensor]
+        :return: a metric scalar
+        :rtype: degenerate tensor of shape ()
+        """
         lookup_table = targets.copy()
         lookup_table.update(outputs)
 
-        arg_values = [lookup_table[arg] for arg in self.metric_args]
-        arg_values = self.transform_fn(*arg_values)
-        return self.metric_fn(*arg_values)
+        tensors = [lookup_table[arg] for arg in self.metric_args]
+
+        tensors = self.change_device(tensors)
+        tensors = self.transform_fn(*tensors)
+        # the above operation could change devices
+        tensors = self.change_device(tensors)
+        return self.metric_fn(*tensors)
+
+    def change_device(self, tensors):
+        """Moves all tensors that participate in metric calculation to a given device
+
+        :param tensors: a list of tensors
+        :return: a list of tensors
+        """
+
+        # some tensor may already be on the right device, if so they kept unchanged
+        return [arg if not hasattr(arg, 'device') or arg.device == self.device else arg.to(self.device)
+                for arg in tensors]
 
 
 # todo: support exponentially weighted averages too

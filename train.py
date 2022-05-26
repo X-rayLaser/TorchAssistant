@@ -4,9 +4,10 @@ import os
 
 import torch
 
-from scaffolding.training import train
+from scaffolding.training import train, PredictionPipeline
 from scaffolding import parse
-from scaffolding.utils import load_session, save_data_pipeline, load_data_pipeline, change_model_device
+from scaffolding.utils import load_session, save_data_pipeline, load_data_pipeline, change_model_device, instantiate_class
+from scaffolding.adapters import DefaultAdapter
 
 
 def load_config(path):
@@ -40,7 +41,7 @@ if __name__ == '__main__':
         data_pipeline = load_data_pipeline(data_pipeline_path)
         last_epoch = sorted(os.listdir(epochs_dir), key=lambda dir_name: int(dir_name), reverse=True)[0]
         start_epoch = int(last_epoch)
-        train_pipeline = load_session(epochs_dir, last_epoch, torch.device(data_pipeline.device_str))
+        model = load_session(epochs_dir, last_epoch, torch.device(data_pipeline.device_str))
     else:
         os.makedirs(checkpoints_dir, exist_ok=True)
         data_pipeline = parse.DataPipeline.create(config)
@@ -48,9 +49,25 @@ if __name__ == '__main__':
         save_data_pipeline(data_pipeline, data_pipeline_path)
 
         start_epoch = 0
-        train_pipeline = parse.parse_model(config)
-        change_model_device(train_pipeline, data_pipeline.device_str)
+        model = parse.parse_model(config)
+        change_model_device(model, data_pipeline.device_str)
 
+    batch_adapter_config = config["training"].get("batch_adapter")
+
+    def instantiate_fn(class_name, *args, **kwargs):
+        args = (model,) + args
+        return instantiate_class(class_name, *args, *kwargs)
+
+    if batch_adapter_config:
+        batch_adapter = parse.build_generic_serializable_instance(batch_adapter_config)
+    else:
+        batch_adapter = DefaultAdapter(model, config["data"]["targets"])
+
+    device = parse.parse_device(config)
+
+    train_pipeline = PredictionPipeline(model, device, batch_adapter)
+
+    # todo: this should also be saved
     metrics = parse.parse_metrics(config, data_pipeline)
 
     criterion = parse.parse_loss(config)

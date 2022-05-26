@@ -1,10 +1,5 @@
 {
   "pipeline": {
-    "tensor_graph": [{
-        "name": "LeNet5",
-        "inputs": ["x"],
-        "outputs": ["y_hat"]
-    }],
     "data": {
       "dataset_name": "MNIST",
       "transform": [{"name": "totensor"}],
@@ -29,13 +24,15 @@
       "num_epochs": 10,
       "loss": {
         "class": "CrossEntropyLoss",
-        "args": ["y_hat", "y"]
+        "inputs": ["y_hat", "y"]
       },
       "metrics": {
-        "loss": {},
-        "accuracy": {
-          "args": ["y_hat", "y"],
-          "transform": "AccuracyTransform"
+        "loss": {
+          "inputs": ["y_hat", "y"]
+        },
+        "Accuracy": {
+          "inputs": ["y_hat", "y"],
+          "transform": "examples.mnist.transforms.reverse_onehot"
         }
       }
     }

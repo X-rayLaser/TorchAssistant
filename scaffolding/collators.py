@@ -18,4 +18,5 @@ class BatchDivide(Serializable):
 class StackTensors(BatchDivide):
     def __call__(self, batch):
         tensor_lists = super().__call__(batch)
-        return [torch.stack(lst) for lst in tensor_lists]
+        # todo: this is too naive implementation; handle other cases; raise errors for wrong data types/shapes
+        return [torch.stack(lst) if isinstance(lst[0], torch.Tensor) else torch.tensor(lst) for lst in tensor_lists]

@@ -79,7 +79,11 @@
               "momentum": 0.9
             }
           }
-        }],
+      }],
+      "batch_adapter": {
+        "class": "examples.language_translation.adapters.BatchAdapter",
+        "kwargs": {"hidden_size": 32}
+      },
       "loss": {
         "class": "CrossEntropyLoss",
         "kwargs": {

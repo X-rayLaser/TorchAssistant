@@ -4,10 +4,6 @@
     "data": {
       "input_adapter": {
         "class": "examples.language_translation.adapters.InputAdapter"
-      },
-      "batch_adapter": {
-          "class": "examples.language_translation.adapters.InferenceAdapter",
-          "kwargs": {"hidden_size": 32}
       }
     },
     "model": [
@@ -22,6 +18,10 @@
         "inputs": ["sos", "h_e"],
         "outputs": ["y_hat"]
       }],
+      "batch_adapter": {
+        "class": "examples.language_translation.adapters.InferenceAdapter",
+        "kwargs": {"hidden_size": 32}
+      },
     "results": ["y_hat"],
     "post_processor": {
       "class": "examples.language_translation.postprocessors.PostProcessor"
