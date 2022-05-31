@@ -371,6 +371,16 @@ class Node:
         lookup_table.update(prev_outputs)
         return [lookup_table[var_name] for var_name in self.inputs]
 
+    def predict(self, *args, inference_mode=False):
+        if inference_mode:
+            return self.net.run_inference(*args)
+        else:
+            return self.net(*args)
+
+    def __call__(self, batch_inputs, prev_outputs, inference_mode=False):
+        args = self.get_dependencies(batch_inputs, prev_outputs)
+        return self.predict(*args, inference_mode=inference_mode)
+
 
 class SerializableModel(DecoratedInstance):
     def to_dict(self):

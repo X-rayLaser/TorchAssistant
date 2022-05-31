@@ -158,13 +158,7 @@ class PredictionPipeline:
 
         all_outputs = {}
         for node in self.model:
-            args = node.get_dependencies(inputs, all_outputs)
-
-            if inference_mode:
-                outputs = node.net.run_inference(*args)
-            else:
-                outputs = node.net(*args)
-
+            outputs = node(inputs, all_outputs, inference_mode)
             all_outputs.update(
                 dict(zip(node.outputs, outputs))
             )
