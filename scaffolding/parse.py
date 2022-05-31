@@ -366,6 +366,11 @@ class Node:
         self.inputs = inputs
         self.outputs = outputs
 
+    def get_dependencies(self, batch_inputs, prev_outputs):
+        lookup_table = batch_inputs[self.name].copy()
+        lookup_table.update(prev_outputs)
+        return [lookup_table[var_name] for var_name in self.inputs]
+
 
 class SerializableModel(DecoratedInstance):
     def to_dict(self):
