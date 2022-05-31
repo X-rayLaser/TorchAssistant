@@ -35,7 +35,7 @@
       "targets": ["y"]
     },
     "training": {
-      "checkpoints_dir": "checkpoints",
+      "checkpoints_dir": "pretrained",
       "model": [
         {
           "name": "encoder",

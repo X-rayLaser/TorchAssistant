@@ -1,6 +1,6 @@
 {
   "pipeline": {
-    "checkpoints_dir": "checkpoints",
+    "checkpoints_dir": "pretrained",
     "data": {
       "input_adapter": {
         "class": "examples.language_translation.adapters.InputAdapter"

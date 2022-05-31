@@ -4,4 +4,4 @@ venv/
 data/
 examples/language_translation/dataset
 examples/language_translation/data
-checkpoints/
+pretrained/

@@ -1,7 +1,7 @@
 {
   "pipeline": {
     "training": {
-      "checkpoints_dir": "checkpoints",
+      "checkpoints_dir": "pretrained",
       "batch_adapter": {
         "class": "examples.language_translation.adapters.BatchAdapter",
         "kwargs": {"hidden_size": 32}

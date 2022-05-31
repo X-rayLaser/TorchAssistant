@@ -5,6 +5,7 @@ from scaffolding.parse import parse_batch_adapter, build_generic_serializable_in
 import torch
 from train import load_config
 from scaffolding.training import PredictionPipeline
+from init import TrainingSession
 
 
 def parse_input_adapter(config_dict):
@@ -31,6 +32,18 @@ def parse_output_device(config_dict):
     )
 
 
+def override_from_config(prediction_pipeline, config):
+    # todo: should be able to override device
+
+    for i, node in enumerate(prediction_pipeline.model):
+        node.inputs = config["model"][i]["inputs"]
+        node.outputs = config["model"][i]["outputs"]
+
+    batch_adapter_config = config.get("batch_adapter")
+    if batch_adapter_config:
+        prediction_pipeline.batch_adapter = build_generic_serializable_instance(batch_adapter_config)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Run inference using pretrained ML pipeline according to a specified configuration file'
@@ -44,20 +57,16 @@ if __name__ == '__main__':
 
     config = load_config(path)
     config = config["pipeline"]
-    checkpoints_dir = config["checkpoints_dir"]
-    data_pipeline_dir = os.path.join(checkpoints_dir, 'data_pipeline.json')
-    epochs_dir = os.path.join(checkpoints_dir, 'epochs')
+    pretrained_dir = config["checkpoints_dir"]
 
-    data_pipeline = load_data_pipeline(data_pipeline_dir)
-    batch_adapter_config = config.get("batch_adapter")
-    batch_adapter = build_generic_serializable_instance(batch_adapter_config)
+    session = TrainingSession(pretrained_dir)
 
-    # todo: should be able to override device
-    device = torch.device(data_pipeline.device_str)
-    model = load_session_from_last_epoch(epochs_dir, device=device, inference_mode=True)
-    for i, node in enumerate(model):
-        node.inputs = config["model"][i]["inputs"]
-        node.outputs = config["model"][i]["outputs"]
+    data_pipeline = session.data_pipeline
+
+    batch_adapter = session.batch_adapter
+
+    prediction_pipeline = session.restore_from_last_checkpoint(inference_mode=True)
+    override_from_config(prediction_pipeline, config)
 
     input_adapter = parse_input_adapter(config)
     post_processor = parse_post_processor(config)
@@ -68,8 +77,6 @@ if __name__ == '__main__':
     print('Running inference on: ', input_string)
 
     batch = data_pipeline.process_raw_input(input_string, input_adapter)
-
-    prediction_pipeline = PredictionPipeline(model, device, batch_adapter)
 
     with torch.no_grad():
         inputs, _ = prediction_pipeline.adapt_batch(batch)

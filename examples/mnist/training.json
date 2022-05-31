@@ -8,7 +8,7 @@
       "targets": ["y"]
     },
     "training": {
-      "checkpoints_dir": "checkpoints",
+      "checkpoints_dir": "pretrained",
       "model": [{
         "name": "LeNet5",
         "arch": { "class": "examples.mnist.models.LeNet5" },

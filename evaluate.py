@@ -1,13 +1,9 @@
 import argparse
 import json
-import os
 
-import torch
-
-from scaffolding.utils import load_data_pipeline, load_session_from_last_epoch
-from scaffolding.training import evaluate, PredictionPipeline
+from scaffolding.training import evaluate
 from scaffolding import parse
-from scaffolding.adapters import DefaultAdapter
+from init import TrainingSession
 
 
 def load_config(path):
@@ -30,36 +26,26 @@ if __name__ == '__main__':
     config = load_config(path)
     config = config["pipeline"]
 
-    checkpoints_dir = parse.parse_checkpoint_dir(config)
+    pretrained_dir = parse.parse_checkpoint_dir(config)
 
-    data_pipeline_path = os.path.join(checkpoints_dir, 'data_pipeline.json')
+    session = TrainingSession(pretrained_dir)
 
-    epochs_dir = os.path.join(checkpoints_dir, 'epochs')
+    data_pipeline = session.data_pipeline
+    prediction_pipeline = session.restore_from_last_checkpoint()
+    loss_fn = session.criterion
+    metrics = session.metrics
 
-    data_pipeline = load_data_pipeline(data_pipeline_path)
+    # overrides from config
+    if "loss" in config["training"]:
+        loss_fn = parse.parse_loss(config["training"]["loss"], session.device)
 
-    model = load_session_from_last_epoch(
-        epochs_dir, device=torch.device(data_pipeline.device_str), inference_mode=True
-    )
+    if "metrics" in config["training"]:
+        metrics = parse.parse_metrics(config["training"]["metrics"], data_pipeline, session.device)
 
     train_loader, test_loader = data_pipeline.get_data_loaders()
 
-    loss_fn = parse.parse_loss(config)
-
-    metrics = parse.parse_metrics(config, data_pipeline)
-
     if 'loss' in metrics:
-        metrics['loss'] = loss_fn
-
-    device = parse.parse_device(config)
-
-    batch_adapter_config = config["training"]["batch_adapter"]
-    if batch_adapter_config:
-        batch_adapter = parse.build_generic_serializable_instance(batch_adapter_config)
-    else:
-        batch_adapter = DefaultAdapter(model, config["data"]["targets"])
-
-    prediction_pipeline = PredictionPipeline(model, device, batch_adapter)
+        metrics['loss'] = session.criterion
 
     s = ''
     computed_metrics = evaluate(prediction_pipeline, train_loader, metrics, num_batches=64)

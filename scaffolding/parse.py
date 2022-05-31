@@ -267,12 +267,9 @@ def build_generic_serializable_instance(object_dict, instantiate_fn=None, wrappe
     return wrapper_class(instance, class_name, args, kwargs)
 
 
-def parse_metrics(config_dict, data_pipeline):
-    metrics_config = config_dict["training"]["metrics"]
-
+def parse_metrics(metrics_config, data_pipeline, device):
     metrics = {}
 
-    device = parse_device(config_dict)
     try:
         error = False
         exc_args = None
@@ -333,11 +330,8 @@ def parse_submodel(config):
                 inputs=config["inputs"], outputs=config["outputs"])
 
 
-def parse_loss(config_dict):
-    loss_config = config_dict["training"]["loss"]
+def parse_loss(loss_config, device):
     loss_class_name = loss_config["class"]
-
-    device = parse_device(config_dict)
 
     if "transform" in loss_config:
         transform_fn = import_function(loss_config["transform"])

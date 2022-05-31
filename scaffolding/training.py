@@ -3,8 +3,17 @@ from .utils import save_session, switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
 
 
-def train(data_pipeline, train_pipeline, loss_fn, metrics,
-          epochs=2, start_epoch=0, checkpoints_dir=None, stat_ivl=50):
+def train(session, stat_ivl=50):
+    data_pipeline = session.data_pipeline
+    train_pipeline = session.restore_from_last_checkpoint()
+    loss_fn = session.criterion
+    metrics = session.metrics
+    epochs = session.num_epochs
+    start_epoch = session.epochs_trained + 1
+    checkpoints_dir = session.checkpoints_dir
+
+    print(start_epoch, epochs)
+
     if 'loss' in metrics:
         metrics['loss'] = loss_fn
 
@@ -42,7 +51,7 @@ def train(data_pipeline, train_pipeline, loss_fn, metrics,
 
 
 def print_train_metrics(epoch, i, metrics, running_loss, running_metrics):
-    stat_info = f'\rEpoch {epoch + 1}, iteration {i + 1:5d},'
+    stat_info = f'\rEpoch {epoch}, iteration {i + 1:5d},'
     if 'loss' in metrics:
         stat_info += f' loss: {running_loss.value:.3f}'
 
@@ -59,7 +68,7 @@ def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
 
 
 def print_epoch_metrics(train_metrics, val_metrics, epoch):
-    s = f'\rEpoch {epoch + 1}, '
+    s = f'\rEpoch {epoch}, '
     for name, value in train_metrics.items():
         s += f'{name}: {value}; '
 
