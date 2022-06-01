@@ -3,7 +3,7 @@ from .utils import save_session, switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
 
 
-def train(session, stat_ivl=50):
+def train(session, stat_ivl=10):
     data_pipeline = session.data_pipeline
     train_pipeline = session.restore_from_last_checkpoint()
     loss_fn = session.criterion
@@ -16,10 +16,10 @@ def train(session, stat_ivl=50):
         metrics['loss'] = loss_fn
 
     train_loader, test_loader = data_pipeline.get_data_loaders()
-
+    formatter = Formatter()
     for epoch in range(start_epoch, start_epoch + epochs):
         trainer = Trainer(train_loader, train_pipeline, loss_fn)
-        print_metrics = PrintMetrics(metrics, stat_ivl, epoch)
+        print_metrics = PrintMetrics(metrics, stat_ivl, epoch, formatter)
         trainer.add_callback(print_metrics)
         trainer.run_epoch()
 
@@ -27,27 +27,34 @@ def train(session, stat_ivl=50):
 
         train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
 
-        print_epoch_metrics(train_metrics, val_metrics, epoch)
+        epoch_str = formatter.format_epoch(epoch)
+        train_metrics_str = formatter.format_metrics(train_metrics, validation=False)
+        val_metrics_str = formatter.format_metrics(val_metrics, validation=True)
+
+        print(f'\r{epoch_str} {train_metrics_str}; {val_metrics_str}')
 
         if checkpoints_dir:
             save_session(train_pipeline, epoch, checkpoints_dir)
 
 
 class PrintMetrics:
-    def __init__(self, metrics, ivl, epoch):
+    def __init__(self, metrics, ivl, epoch, format_fn):
         self.metrics = metrics
         self.interval = ivl
         self.epoch = epoch
+        self.format_fn = format_fn
 
         self.running_loss = MovingAverage()
         self.running_metrics = {name: MovingAverage() for name in metrics}
 
-    def __call__(self, iteration, inputs, outputs, targets, loss):
+    def __call__(self, iteration, num_iterations, inputs, outputs, targets, loss):
         self.running_loss.update(loss.item())
         update_running_metrics(self.running_metrics, self.metrics, outputs, targets)
 
         if iteration % self.interval == self.interval - 1:
-            print_train_metrics(self.epoch, iteration, self.metrics, self.running_loss, self.running_metrics)
+            s = self.format_fn(self.epoch, iteration + 1, num_iterations,
+                               self.metrics, self.running_loss, self.running_metrics)
+            print(s, end='')
 
             for metric_avg in self.running_metrics.values():
                 metric_avg.reset()
@@ -55,32 +62,46 @@ class PrintMetrics:
             self.running_loss.reset()
 
 
-def print_train_metrics(epoch, i, metrics, running_loss, running_metrics):
-    stat_info = f'\rEpoch {epoch}, iteration {i + 1:5d},'
-    if 'loss' in metrics:
-        stat_info += f' loss: {running_loss.value:.3f}'
+class Formatter:
+    def __init__(self):
+        self.progress_bar = ProgressBar()
 
-    for metric_name, metric_avg in running_metrics.items():
-        stat_info += f'; {metric_name}: {metric_avg.value:.3f}'
+    def format_epoch(self, epoch):
+        return f'Epoch {epoch:5}'
 
-    print(stat_info, end='')
+    def format_metrics(self, metrics, validation=False):
+        if validation:
+            metrics = {f'val {k}': v for k, v in metrics.items()}
+
+        metric_strings = [f'{name:8} {value:6.4f}' for name, value in metrics.items()]
+        s = ', '.join(metric_strings)
+        return f'[{s}]'
+
+    def __call__(self, epoch, iteration, num_iterations, metrics, running_loss, running_metrics):
+        if 'loss' in metrics:
+            running_metrics = running_metrics.copy()
+            running_metrics['loss'] = running_loss
+
+        computed_metrics = {name: avg.value for name, avg in running_metrics.items()}
+
+        metrics_str = self.format_metrics(computed_metrics)
+
+        progress = self.progress_bar.updated(iteration, num_iterations)
+        epoch_str = self.format_epoch(epoch)
+        return f'\r{epoch_str} {metrics_str} {progress} {iteration} / {num_iterations}'
+
+
+class ProgressBar:
+    def updated(self, step, num_steps, fill='=', empty='.', cols=20):
+        filled_chars = int(step / num_steps * cols)
+        remaining_chars = cols - filled_chars
+        return fill * filled_chars + '>' + empty * remaining_chars
 
 
 def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
     train_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)
     val_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
     return train_metrics, val_metrics
-
-
-def print_epoch_metrics(train_metrics, val_metrics, epoch):
-    s = f'\rEpoch {epoch}, '
-    for name, value in train_metrics.items():
-        s += f'{name}: {value}; '
-
-    for name, value in val_metrics.items():
-        s += f'val {name}: {value}; '
-
-    print(s)
 
 
 def evaluate(val_pipeline, dataloader, metrics, num_batches):
@@ -116,14 +137,15 @@ class Trainer:
     def run_epoch(self):
         switch_to_train_mode(self.prediction_pipeline)
 
+        num_iterations = len(self.data_loader)
         for i, batch in enumerate(self.data_loader):
             inputs, targets = self.prediction_pipeline.adapt_batch(batch)
             loss, outputs = self.train_on_batch(inputs, targets)
-            self.invoke_callbacks(i, inputs, outputs, targets, loss)
+            self.invoke_callbacks(i, num_iterations, inputs, outputs, targets, loss)
 
-    def invoke_callbacks(self, iteration, inputs, outputs, targets, loss):
+    def invoke_callbacks(self, iteration, num_iterations, inputs, outputs, targets, loss):
         for cb in self.callbacks:
-            cb(iteration, inputs, outputs, targets, loss)
+            cb(iteration, num_iterations, inputs, outputs, targets, loss)
 
     def train_on_batch(self, inputs, targets):
         for node in self.prediction_pipeline:

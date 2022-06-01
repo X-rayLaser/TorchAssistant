@@ -372,6 +372,7 @@ class Node:
         return [lookup_table[var_name] for var_name in self.inputs]
 
     def predict(self, *args, inference_mode=False):
+        # todo: consider to change args device here (need to store device as attribute)
         if inference_mode:
             return self.net.run_inference(*args)
         else:
