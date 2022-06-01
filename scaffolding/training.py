@@ -1,6 +1,7 @@
 import torch
 from .utils import save_session, switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
+from .formatters import Formatter
 
 
 def train(session, stat_ivl=10):
@@ -17,6 +18,7 @@ def train(session, stat_ivl=10):
 
     train_loader, test_loader = data_pipeline.get_data_loaders()
     formatter = Formatter()
+
     for epoch in range(start_epoch, start_epoch + epochs):
         trainer = Trainer(train_loader, train_pipeline, loss_fn)
         print_metrics = PrintMetrics(metrics, stat_ivl, epoch, formatter)
@@ -26,7 +28,7 @@ def train(session, stat_ivl=10):
         switch_to_evaluation_mode(train_pipeline)
 
         train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
-
+        session.log_metrics(epoch, train_metrics, val_metrics)
         epoch_str = formatter.format_epoch(epoch)
         train_metrics_str = formatter.format_metrics(train_metrics, validation=False)
         val_metrics_str = formatter.format_metrics(val_metrics, validation=True)
@@ -34,7 +36,7 @@ def train(session, stat_ivl=10):
         print(f'\r{epoch_str} {train_metrics_str}; {val_metrics_str}')
 
         if checkpoints_dir:
-            save_session(train_pipeline, epoch, checkpoints_dir)
+            session.make_checkpoint(train_pipeline, epoch)
 
 
 class PrintMetrics:
@@ -47,12 +49,15 @@ class PrintMetrics:
         self.running_loss = MovingAverage()
         self.running_metrics = {name: MovingAverage() for name in metrics}
 
-    def __call__(self, iteration, num_iterations, inputs, outputs, targets, loss):
-        self.running_loss.update(loss.item())
-        update_running_metrics(self.running_metrics, self.metrics, outputs, targets)
+    def __call__(self, iteration_log):
+        iteration = iteration_log.iteration
+
+        self.running_loss.update(iteration_log.loss.item())
+        update_running_metrics(self.running_metrics, self.metrics,
+                               iteration_log.outputs, iteration_log.targets)
 
         if iteration % self.interval == self.interval - 1:
-            s = self.format_fn(self.epoch, iteration + 1, num_iterations,
+            s = self.format_fn(self.epoch, iteration + 1, iteration_log.num_iterations,
                                self.metrics, self.running_loss, self.running_metrics)
             print(s, end='')
 
@@ -60,42 +65,6 @@ class PrintMetrics:
                 metric_avg.reset()
 
             self.running_loss.reset()
-
-
-class Formatter:
-    def __init__(self):
-        self.progress_bar = ProgressBar()
-
-    def format_epoch(self, epoch):
-        return f'Epoch {epoch:5}'
-
-    def format_metrics(self, metrics, validation=False):
-        if validation:
-            metrics = {f'val {k}': v for k, v in metrics.items()}
-
-        metric_strings = [f'{name:8} {value:6.4f}' for name, value in metrics.items()]
-        s = ', '.join(metric_strings)
-        return f'[{s}]'
-
-    def __call__(self, epoch, iteration, num_iterations, metrics, running_loss, running_metrics):
-        if 'loss' in metrics:
-            running_metrics = running_metrics.copy()
-            running_metrics['loss'] = running_loss
-
-        computed_metrics = {name: avg.value for name, avg in running_metrics.items()}
-
-        metrics_str = self.format_metrics(computed_metrics)
-
-        progress = self.progress_bar.updated(iteration, num_iterations)
-        epoch_str = self.format_epoch(epoch)
-        return f'\r{epoch_str} {metrics_str} {progress} {iteration} / {num_iterations}'
-
-
-class ProgressBar:
-    def updated(self, step, num_steps, fill='=', empty='.', cols=20):
-        filled_chars = int(step / num_steps * cols)
-        remaining_chars = cols - filled_chars
-        return fill * filled_chars + '>' + empty * remaining_chars
 
 
 def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
@@ -141,11 +110,13 @@ class Trainer:
         for i, batch in enumerate(self.data_loader):
             inputs, targets = self.prediction_pipeline.adapt_batch(batch)
             loss, outputs = self.train_on_batch(inputs, targets)
-            self.invoke_callbacks(i, num_iterations, inputs, outputs, targets, loss)
+            self.invoke_callbacks(
+                IterationLogEntry(i, num_iterations, inputs, outputs, targets, loss)
+            )
 
-    def invoke_callbacks(self, iteration, num_iterations, inputs, outputs, targets, loss):
+    def invoke_callbacks(self, log_entry):
         for cb in self.callbacks:
-            cb(iteration, num_iterations, inputs, outputs, targets, loss)
+            cb(log_entry)
 
     def train_on_batch(self, inputs, targets):
         for node in self.prediction_pipeline:
@@ -160,6 +131,16 @@ class Trainer:
             node.optimizer.step()
 
         return loss, outputs
+
+
+class IterationLogEntry:
+    def __init__(self, iteration, num_iterations, inputs, outputs, targets, loss):
+        self.iteration = iteration
+        self.num_iterations = num_iterations
+        self.inputs = inputs
+        self.outputs = outputs
+        self.targets = targets
+        self.loss = loss
 
 
 class PredictionPipeline:

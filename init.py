@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import csv
 
 import torch
 
@@ -35,6 +36,8 @@ class TrainingSession:
         self.path = path
 
         self.checkpoints_dir = os.path.join(path, 'checkpoints')
+        self.history_path = os.path.join(path, 'history.csv')
+
         self.data_pipeline_path = os.path.join(path, 'data_pipeline.json')
         self.batch_adapter_path = os.path.join(path, 'batch_adapter.json')
         self.extra_params_path = os.path.join(path, 'extra_params.json')
@@ -68,9 +71,18 @@ class TrainingSession:
 
         return train_pipeline
 
+    def make_checkpoint(self, train_pipeline, epoch):
+        save_session(train_pipeline, epoch, self.checkpoints_dir)
+
+    def log_metrics(self, epoch, train_metrics, val_metrics):
+        # todo: log metrics to csv file
+        history = TrainingHistory(self.history_path)
+        history.add_entry(epoch, train_metrics, val_metrics)
+
     @classmethod
     def create_session(cls, config, save_path):
         checkpoints_dir = os.path.join(save_path, 'checkpoints')
+        history_path = os.path.join(save_path, 'history.csv')
         data_pipeline_path = os.path.join(save_path, 'data_pipeline.json')
         batch_adapter_path = os.path.join(save_path, 'batch_adapter.json')
         extra_params_path = os.path.join(save_path, 'extra_params.json')
@@ -102,6 +114,46 @@ class TrainingSession:
 
         extra_params["num_epochs"] = epochs
         save_as_json(extra_params, extra_params_path)
+
+        metrics_dict = extra_params.get("metrics", [])
+        metrics_dict.keys()
+
+        field_names = list(metrics_dict.keys()) + [f'val {name}' for name in metrics_dict.keys()]
+
+        history = TrainingHistory.create(history_path, field_names)
+        # todo: calculate metrics for 0-th epoch (before any training)
+
+
+class TrainingHistory:
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def add_entry(self, epoch, train_metrics, val_metrics):
+        # todo: make sure the ordering is right
+        val_metrics = {f'val {k}': v for k, v in val_metrics.items()}
+
+        all_metrics = {}
+        all_metrics.update(train_metrics)
+        all_metrics.update(val_metrics)
+
+        row_dict = {'epoch': epoch}
+        row_dict.update({k: self.scalar(v) for k, v in all_metrics.items()})
+
+        with open(self.file_path, 'a', encoding='utf-8', newline='') as csvfile:
+            fieldnames = list(row_dict.keys())
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writerow(row_dict)
+
+    def scalar(self, t):
+        return t.item() if hasattr(t, 'item') else t
+
+    @classmethod
+    def create(cls, path, field_names):
+        with open(path, 'w', encoding='utf-8', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            row = ['Epoch #'] + field_names
+            writer.writerow(row)
+        return cls(path)
 
 
 def load_json(path):
