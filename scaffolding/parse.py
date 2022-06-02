@@ -100,20 +100,14 @@ class DataPipeline:
         return train_loader, test_loader
 
     def process_raw_input(self, raw_data, input_adapter):
-        class MyDataset:
-            def __getitem__(self, idx):
-                return input_adapter(raw_data)
-
-            def __len__(self):
-                return 1
-
-        ds = MyDataset()
+        ds = [input_adapter(raw_data)]
         if self.preprocessors:
             ds = WrappedDataset(ds, self.preprocessors)
 
         if hasattr(self.collator, 'collate_inputs'):
             return self.collator.collate_inputs(ds[0])
         else:
+            # todo: this is deprecated
             loader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
                                                  collate_fn=self.collator)
 
