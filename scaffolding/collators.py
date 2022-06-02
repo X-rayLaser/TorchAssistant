@@ -2,7 +2,15 @@ import torch
 from scaffolding.utils import Serializable
 
 
-class BatchDivide(Serializable):
+class BaseCollator(Serializable):
+    def __call__(self, batch):
+        raise NotImplementedError
+
+    def collate_inputs(self, *inputs):
+        return self(inputs)
+
+
+class BatchDivide(BaseCollator):
     """Divide batch into a tuple of lists"""
     def __call__(self, batch):
         num_vars = len(batch[0])

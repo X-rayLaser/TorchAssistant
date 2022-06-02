@@ -4,8 +4,7 @@ from PIL import Image
 
 class InputAdapter:
     def __call__(self, image_path):
-        # todo: this is ugly and should be unnecessary to specify dummy target for inference pipeline
-        return Image.open(image_path), "placeholder"
+        return Image.open(image_path)
 
 
 class InferenceAdapter:
@@ -14,13 +13,11 @@ class InferenceAdapter:
         self.hidden_size = decoder_hidden_size
         self.eye = torch.eye(self.alphabet_size)
 
-    def adapt(self, images_batch, transcriptions_batch):
+    def adapt(self, images_batch):
         if not hasattr(self, 'eye'):
             self.eye = torch.eye(self.alphabet_size)
 
         images_batch = torch.stack(images_batch)
-
-        transcriptions_target = torch.LongTensor(transcriptions_batch)[:, 1:]
 
         hidden = torch.zeros(1, 1, self.hidden_size, device="cpu")
 
@@ -36,9 +33,6 @@ class InferenceAdapter:
                     "h_d": hidden,
                     "sos": sos
                 }
-            },
-            "targets": {
-                "y": transcriptions_target
             }
         }
 

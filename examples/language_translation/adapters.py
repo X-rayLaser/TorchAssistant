@@ -12,7 +12,6 @@ class BatchAdapter:
         self.hidden_size = hidden_size
 
     def adapt(self, french_batch, english_batch):
-        # todo: support gpu or other devices
         english_input = english_batch[:, :-1]
         english_target = english_batch[:, 1:]
 

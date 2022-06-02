@@ -1,8 +1,8 @@
 import torch
-from scaffolding.utils import Serializable
+from scaffolding.collators import BaseCollator
 
 
-class MyCollator(Serializable):
+class MyCollator(BaseCollator):
     """Simple collator that only works with batch size = 1"""
     def __init__(self, num_french_words, num_english_words):
         self.num_french_words = num_french_words
