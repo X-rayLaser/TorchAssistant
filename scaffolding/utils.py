@@ -301,19 +301,19 @@ class WrappedDataset:
 
     def __getitem__(self, idx):
         example = self.dataset[idx]
+        if not (isinstance(example, list) or isinstance(example, tuple)):
+            example = [example]
+
         if isinstance(example, list) or isinstance(example, tuple):
-            if len(example) == len(self.preprocessors):
-                return [preprocessor(v) for v, preprocessor in zip(example, self.preprocessors)]
-            elif len(self.preprocessors) == 1:
-                preprocessor = self.preprocessors[0]
-                return [preprocessor(v) for v in example]
+            from itertools import zip_longest
+
+            if len(example) > len(self.preprocessors):
+                # when number of inputs > number of preprocessors, leave redundant ones as is
+                pairs = zip_longest(example, self.preprocessors)
+                return [p(v) if p else v for v, p in pairs]
             else:
-                raise Exception(f'# of preprocessors must be 1 or equal to the size of example list/tuple')
-        else:
-            if len(self.preprocessors) == 1:
-                preprocessor = self.preprocessors[0]
-                return preprocessor(example)
-            raise Exception(f'# of preprocessors must be equal to 1')
+                # when number of inputs <= number of preprocessors, ignore redundant preprocessors
+                return [preprocessor(v) for v, preprocessor in zip(example, self.preprocessors)]
 
     def __len__(self):
         return len(self.dataset)

@@ -27,6 +27,7 @@ metric_functions = {
 
 class Metric:
     def __init__(self, name, metric_fn, metric_args, transform_fn, device):
+        # todo: pass here a shorthand name used in place of full metric name when printing/saving history
         self.name = name
         self.metric_fn = metric_fn
         self.metric_args = metric_args

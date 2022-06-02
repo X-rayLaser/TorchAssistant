@@ -111,11 +111,14 @@ class DataPipeline:
         if self.preprocessors:
             ds = WrappedDataset(ds, self.preprocessors)
 
-        loader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
-                                             collate_fn=self.collator)
+        if hasattr(self.collator, 'collate_inputs'):
+            return self.collator.collate_inputs(ds[0])
+        else:
+            loader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False, num_workers=2,
+                                                 collate_fn=self.collator)
 
-        batch = next(iter(loader))
-        return batch
+            batch = next(iter(loader))
+            return batch
 
     def to_dict(self):
         return {

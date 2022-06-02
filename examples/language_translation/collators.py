@@ -13,3 +13,6 @@ class MyCollator(Serializable):
         targets = [y for x, y in batch]
 
         return torch.LongTensor(inputs), torch.LongTensor(targets)
+
+    def collate_inputs(self, *inputs):
+        return torch.LongTensor(inputs)
