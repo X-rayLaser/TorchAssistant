@@ -1,5 +1,4 @@
 import importlib
-import json
 
 from torch.utils.data import Dataset
 
@@ -190,21 +189,6 @@ def switch_to_train_mode(prediction_pipeline):
 def switch_to_evaluation_mode(prediction_pipeline):
     for node in prediction_pipeline:
         node.net.instance.eval()
-
-
-def save_data_pipeline(data_pipeline, path):
-    with open(path, 'w', encoding='utf-8') as f:
-        state_dict = data_pipeline.to_dict()
-        s = json.dumps(state_dict)
-        f.write(s)
-
-
-def load_data_pipeline(path):
-    from scaffolding.parse import DataPipeline
-    with open(path, encoding='utf-8') as f:
-        s = f.read()
-        state_dict = json.loads(s)
-        return DataPipeline.from_dict(state_dict)
 
 
 def change_model_device(train_pipeline, device):

@@ -5,9 +5,9 @@ import os
 import torch
 
 from scaffolding import parse
+from scaffolding.parse import Node, SerializableModel, SerializableOptimizer
 from scaffolding.training import PredictionPipeline
-from scaffolding.utils import instantiate_class, load_data_pipeline, change_model_device, \
-    save_data_pipeline
+from scaffolding.utils import instantiate_class, change_model_device
 
 
 def parse_adapter(batch_adapter_config):
@@ -215,8 +215,6 @@ def save_as_json(d, save_path):
 
 
 def load_checkpoint(checkpoints_dir, epoch, device, inference_mode=False):
-    from scaffolding.parse import Node, SerializableModel, SerializableOptimizer
-
     epoch_dir = os.path.join(checkpoints_dir, str(epoch))
 
     nodes_with_numbers = []
@@ -268,3 +266,17 @@ def save_model_pipeline(train_pipeline, epoch, checkpoints_dir):
         d.update(pipe.optimizer.to_dict())
 
         torch.save(d, save_path)
+
+
+def save_data_pipeline(data_pipeline, path):
+    with open(path, 'w', encoding='utf-8') as f:
+        state_dict = data_pipeline.to_dict()
+        s = json.dumps(state_dict)
+        f.write(s)
+
+
+def load_data_pipeline(path):
+    with open(path, encoding='utf-8') as f:
+        s = f.read()
+        state_dict = json.loads(s)
+        return parse.DataPipeline.from_dict(state_dict)
