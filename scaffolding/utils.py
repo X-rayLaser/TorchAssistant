@@ -1,8 +1,6 @@
 import importlib
-import os
 import json
 
-import torch
 from torch.utils.data import Dataset
 
 from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
@@ -182,26 +180,6 @@ def import_entity(dotted_path):
         return getattr(module, name)
     except AttributeError:
         raise EntityImportError(error_msg)
-
-
-def save_session(train_pipeline, epoch, checkpoints_dir):
-    epoch_dir = os.path.join(checkpoints_dir, str(epoch))
-
-    os.makedirs(epoch_dir, exist_ok=True)
-
-    for number, pipe in enumerate(train_pipeline, start=1):
-        save_path = os.path.join(epoch_dir, pipe.name)
-        d = {
-            'name': pipe.name,
-            'number': number,
-            'inputs': pipe.inputs,
-            'outputs': pipe.outputs,
-            'epoch': epoch
-        }
-        d.update(pipe.net.to_dict())
-        d.update(pipe.optimizer.to_dict())
-
-        torch.save(d, save_path)
 
 
 def switch_to_train_mode(prediction_pipeline):

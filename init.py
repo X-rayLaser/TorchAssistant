@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 
-from scaffolding.session import TrainingSession
+from scaffolding.session import TrainingSession, ConfigParser
 from scaffolding import parse
 
 
@@ -22,12 +22,15 @@ if __name__ == '__main__':
     cmd_args = parser.parse_args()
     path = cmd_args.config
 
-    config = load_config(path)
-    config = config["pipeline"]
+    config_dict = load_config(path)
+    config_dict = config_dict["pipeline"]
+    session_config = ConfigParser(config_dict).get_config()
 
-    session_dir = parse.parse_checkpoint_dir(config)
+    # todo: take this from session_config
+    session_dir = session_config.session_dir
 
+    # todo: consider to move this code inside session object
     if os.path.exists(session_dir):
         print(f"Session already exists under {session_dir}")
     else:
-        TrainingSession.create_session(config, session_dir)
+        TrainingSession.create_session(session_config, session_dir)

@@ -7,7 +7,7 @@ import torch
 from scaffolding import parse
 from scaffolding.training import PredictionPipeline
 from scaffolding.utils import instantiate_class, load_data_pipeline, change_model_device, \
-    save_session, save_data_pipeline
+    save_data_pipeline
 
 
 def parse_adapter(batch_adapter_config):
@@ -55,7 +55,7 @@ class TrainingSession:
         return len(dir_names) - 1
 
     def restore_from_last_checkpoint(self, inference_mode=False):
-        model = load_session_from_last_epoch(self.checkpoints_dir, self.device, inference_mode)
+        model = load_last_checkpoint(self.checkpoints_dir, self.device, inference_mode)
         change_model_device(model, self.data_pipeline.device_str)
 
         train_pipeline = PredictionPipeline(model, self.device, self.batch_adapter)
@@ -63,7 +63,7 @@ class TrainingSession:
         return train_pipeline
 
     def make_checkpoint(self, train_pipeline, epoch):
-        save_session(train_pipeline, epoch, self.checkpoints_dir)
+        save_model_pipeline(train_pipeline, epoch, self.checkpoints_dir)
 
     def log_metrics(self, epoch, train_metrics, val_metrics):
         # todo: log metrics to csv file
@@ -80,39 +80,94 @@ class TrainingSession:
 
         os.makedirs(checkpoints_dir, exist_ok=True)
 
-        epochs = parse.parse_epochs(config)
+        epochs = config.num_epochs
 
-        data_pipeline = parse.DataPipeline.create(config)
+        data_pipeline = config.data_pipeline
         save_data_pipeline(data_pipeline, data_pipeline_path)
 
-        model = parse.parse_model(config)
+        model = config.model
         change_model_device(model, data_pipeline.device_str)
-        save_session(model, 0, checkpoints_dir)
+        save_model_pipeline(model, 0, checkpoints_dir)
 
-        batch_adapter = parse_adapter(config["training"].get("batch_adapter"))
+        batch_adapter = config.batch_adapter
         save_as_json(batch_adapter.to_dict(), batch_adapter_path)
 
         extra_params = {}
 
-        training_config = config["training"]
+        extra_params["device"] = config.device_str
 
-        extra_params["device"] = training_config.get("device", "cpu")
+        if config.loss:
+            extra_params["loss"] = config.loss
 
-        if "loss" in training_config:
-            extra_params["loss"] = training_config["loss"]
-        if "metrics" in training_config:
-            extra_params["metrics"] = training_config["metrics"]
+        if config.metrics:
+            extra_params["metrics"] = config.metrics
 
         extra_params["num_epochs"] = epochs
         save_as_json(extra_params, extra_params_path)
 
         metrics_dict = extra_params.get("metrics", [])
-        metrics_dict.keys()
 
         field_names = list(metrics_dict.keys()) + [f'val {name}' for name in metrics_dict.keys()]
 
         history = TrainingHistory.create(history_path, field_names)
         # todo: calculate metrics for 0-th epoch (before any training)
+
+
+class ConfigParser:
+    def __init__(self, settings):
+        self.settings = settings
+        self.training_config = settings["training"]
+
+    def get_config(self):
+        config = Configuration(
+            session_dir=self.parse_checkpoint_dir(),
+            num_epochs=self.parse_epochs(),
+            data_pipeline=self.parse_data_pipeline(),
+            model=self.parse_model_pipeline(),
+            batch_adapter=self.parse_batch_adapter(),
+            device_str=self.parse_device(),
+            loss=self.parse_loss_fn(),
+            metrics=self.parse_metrics()
+        )
+
+        return config
+
+    def parse_checkpoint_dir(self):
+        return parse.parse_checkpoint_dir(self.settings)
+
+    def parse_epochs(self):
+        return parse.parse_epochs(self.settings)
+
+    def parse_data_pipeline(self):
+        return parse.DataPipeline.create(self.settings)
+
+    def parse_model_pipeline(self):
+        return parse.parse_model(self.settings)
+
+    def parse_batch_adapter(self):
+        return parse_adapter(self.settings["training"].get("batch_adapter"))
+
+    def parse_device(self):
+        return self.training_config.get("device", "cpu")
+
+    def parse_loss_fn(self):
+        return self.training_config.get("loss")
+
+    def parse_metrics(self):
+        return self.training_config.get("metrics")
+
+
+class Configuration:
+    def __init__(self, *, session_dir, num_epochs, data_pipeline, model, batch_adapter,
+                 device_str, loss, metrics):
+        self.session_dir = session_dir
+        self.num_epochs = num_epochs
+        self.data_pipeline = data_pipeline
+        self.model = model
+        self.batch_adapter = batch_adapter
+        self.device_str = device_str
+        self.loss = loss
+        self.metrics = metrics
 
 
 class TrainingHistory:
@@ -159,7 +214,7 @@ def save_as_json(d, save_path):
         f.write(json.dumps(d))
 
 
-def load_session(checkpoints_dir, epoch, device, inference_mode=False):
+def load_checkpoint(checkpoints_dir, epoch, device, inference_mode=False):
     from scaffolding.parse import Node, SerializableModel, SerializableOptimizer
 
     epoch_dir = os.path.join(checkpoints_dir, str(epoch))
@@ -190,6 +245,26 @@ def load_session(checkpoints_dir, epoch, device, inference_mode=False):
     return [t[0] for t in nodes_with_numbers]
 
 
-def load_session_from_last_epoch(epochs_dir, device, inference_mode=False):
+def load_last_checkpoint(epochs_dir, device, inference_mode=False):
     last_epoch = sorted(os.listdir(epochs_dir), key=lambda d: int(d), reverse=True)[0]
-    return load_session(epochs_dir, int(last_epoch), device, inference_mode)
+    return load_checkpoint(epochs_dir, int(last_epoch), device, inference_mode)
+
+
+def save_model_pipeline(train_pipeline, epoch, checkpoints_dir):
+    epoch_dir = os.path.join(checkpoints_dir, str(epoch))
+
+    os.makedirs(epoch_dir, exist_ok=True)
+
+    for number, pipe in enumerate(train_pipeline, start=1):
+        save_path = os.path.join(epoch_dir, pipe.name)
+        d = {
+            'name': pipe.name,
+            'number': number,
+            'inputs': pipe.inputs,
+            'outputs': pipe.outputs,
+            'epoch': epoch
+        }
+        d.update(pipe.net.to_dict())
+        d.update(pipe.optimizer.to_dict())
+
+        torch.save(d, save_path)

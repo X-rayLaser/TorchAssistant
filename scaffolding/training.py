@@ -1,5 +1,5 @@
 import torch
-from .utils import save_session, switch_to_train_mode, switch_to_evaluation_mode
+from .utils import switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
 from .formatters import Formatter
 
