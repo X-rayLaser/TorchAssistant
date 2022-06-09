@@ -1,11 +1,9 @@
 import argparse
-import os
-from scaffolding.utils import load_data_pipeline, load_session_from_last_epoch, instantiate_class
-from scaffolding.parse import parse_batch_adapter, build_generic_serializable_instance
+from scaffolding.utils import instantiate_class
+from scaffolding.parse import build_generic_serializable_instance
 import torch
 from train import load_config
-from scaffolding.training import PredictionPipeline
-from init import TrainingSession
+from scaffolding.session import TrainingSession
 
 
 def parse_input_adapter(config_dict):

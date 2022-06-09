@@ -3,7 +3,7 @@ import json
 
 from scaffolding.training import evaluate
 from scaffolding import parse
-from init import TrainingSession
+from scaffolding.session import TrainingSession
 
 
 def load_config(path):
