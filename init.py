@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 
-from scaffolding.session import TrainingSession, ConfigParser
+from scaffolding.session import TrainingSession, ConfigParser, SessionBuilder, CheckpointKeeper
 from scaffolding import parse
 
 
@@ -33,4 +33,7 @@ if __name__ == '__main__':
     if os.path.exists(session_dir):
         print(f"Session already exists under {session_dir}")
     else:
-        TrainingSession.create_session(session_config, session_dir)
+        #TrainingSession.create_session(session_config, session_dir)
+        session = SessionBuilder(session_config).create2()
+        keeper = CheckpointKeeper(session_dir)
+        keeper.save_checkpoint(session, '0')
