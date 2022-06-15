@@ -1,9 +1,12 @@
-from scaffolding.utils import instantiate_class, import_function
+from collections import namedtuple
 import inspect
+
+import torch
+import torchmetrics
+
+from scaffolding.utils import instantiate_class, import_function
 from scaffolding.utils import import_entity
 from scaffolding.metrics import metric_functions, Metric
-import torchmetrics
-import torch
 
 
 class Learner:
@@ -83,20 +86,11 @@ class Loader:
         return factory.get_instance(session)
 
 
-class DatasetLoader(Loader):
-    pass
-
-
-class PreprocessorLoader(Loader):
-    pass
-
-
 class LearnerLoader(Loader):
     def __init__(self, fit_preprocessors):
         self.fit_preprocessors = fit_preprocessors
 
     def load(self, session, spec, object_name=None):
-        print(spec)
         proc_name = spec["preprocessor_name"]
         ds_name = spec["dataset_name"]
 
@@ -106,10 +100,6 @@ class LearnerLoader(Loader):
             preprocessor.fit(dataset)
 
         return Learner(proc_name, ds_name)
-
-
-class ModelLoader(Loader):
-    pass
 
 
 class OptimizerLoader(Loader):
@@ -197,7 +187,6 @@ class PipelineLoader(Loader):
             outputs = node_dict['outputs']
             optimizer_name = node_dict['optimizer_name']
 
-            from collections import namedtuple
             NodeSpec = namedtuple('NodeSpec', ['model_name', 'inputs', 'outputs', 'optimizer_name'])
             node_spec = NodeSpec(model_name, inputs, outputs, optimizer_name)
             node = self.node_from_spec(session, node_spec)
@@ -230,77 +219,6 @@ class Pipeline:
         self.neural_graph = neural_graph
         self.loss_fn = loss_fn
         self.metric_fns = metric_fns
-
-
-def load_init_section(session, spec, section_name, loader):
-    #loader = loader_cls()
-    init_dict = spec["initialize"]
-
-    section_spec = init_dict[section_name]
-
-    if isinstance(section_spec, dict):
-        return {name: loader.load(session, spec, name)
-                for name, spec in section_spec.items()}
-
-    if isinstance(section_spec, list):
-        return [loader.load(session, d) for d in section_spec]
-
-
-class SessionInitializer:
-    def __init__(self):
-        self.fit_preprocessors = True
-
-    def __call__(self, session, spec):
-        # todo: per component build and load_state_dict
-        sections_with_loaders = [
-            ('datasets', DatasetLoader()),
-            ('preprocessors', PreprocessorLoader()),
-            ('learners', LearnerLoader(self.fit_preprocessors)),
-            ('collators', Loader()),
-            ('models', Loader()),
-            ('optimizers', OptimizerLoader()),
-            ('batch_adapters', Loader()),
-            ('losses', LossLoader()),
-            ('metrics', MetricLoader())
-        ]
-
-        for section_name, loader in sections_with_loaders:
-            self.load_section(session, spec, section_name, loader)
-
-    def load_section(self, session, spec, section_name, loader):
-        section = load_init_section(session, spec, section_name, loader)
-        setattr(session, section_name, section)
-
-
-class SessionRestorer(SessionInitializer):
-    def __init__(self, static_dir):
-        super().__init__()
-        self.static_dir = static_dir
-        self.fit_preprocessors = False
-
-    def load_section(self, session, spec, section_name, loader):
-        import os
-        from scaffolding.session_v2 import load_json
-
-        super().load_section(session, spec, section_name, loader)
-
-        objects_dict = getattr(session, section_name)
-
-        path = os.path.join(self.static_dir, f'{section_name}.json')
-        if not os.path.exists(path):
-            return
-
-        serialized_dict = load_json(path)
-
-        for name, object_state in serialized_dict.items():
-            an_object = objects_dict[name]
-            if hasattr(an_object, 'load_state_dict'):
-                an_object.load_state_dict(object_state)
-
-
-def load_all_train_sections(session, spec):
-    # todo:
-    pass
 
 
 class Node:

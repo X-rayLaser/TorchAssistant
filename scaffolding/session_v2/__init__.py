@@ -2,9 +2,7 @@ import os
 import json
 import torch
 
-from scaffolding.session_v2.persistence import CheckpointKeeper
-from scaffolding.session_v2.parse import SessionInitializer
-from .parse import SessionRestorer
+from . import parse
 
 
 def create_session(spec):
@@ -17,7 +15,7 @@ def create_session(spec):
 def create_and_save_session(spec, session_dir):
     session = create_session(spec)
     saver = SessionSaver(session_dir)
-    saver.save(session, spec)
+    saver.initial_save(session, spec)
 
 
 def load_json(path):
@@ -30,16 +28,6 @@ def load_json(path):
 def save_as_json(d, save_path):
     with open(save_path, 'w', encoding='utf-8') as f:
         f.write(json.dumps(d))
-
-
-def restore_session(session_dir):
-    saver = SessionSaver(session_dir)
-    saver.load()
-
-
-def save_session(state, checkpoints_dir, name):
-    keeper = CheckpointKeeper(checkpoints_dir)
-    keeper.save(state, name)
 
 
 class State:
@@ -64,16 +52,10 @@ class Session:
         self.device = None
 
         # tracks progress
-        self.epoch = 0
+        self.epochs_done = 0
 
     def initialize_state(self):
-        return State(models=self.models, optimizers=self.optimizers)
-        optimizers = {}
-        for pipeline_name, pipeline in self.pipelines.items():
-            for model_node in pipeline.neural_graph.models:
-                optimizers[pipeline_name][model_node.name] = model_node.optimizer
-
-        return State(models=self.models, optimizers=optimizers)
+        return State(models=self.models, optimizers=self.optimizers, epochs_done=self.epochs_done)
 
 
 class SessionSaver:
@@ -87,13 +69,13 @@ class SessionSaver:
         self.checkpoints_dir = os.path.join(session_dir, 'checkpoints')
         self.extra_path = os.path.join(self.static_dir, 'extra_params.json')
 
-    def save(self, session, spec):
+    def initial_save(self, session, spec):
         os.makedirs(self.session_dir)
         os.makedirs(self.static_dir)
         os.makedirs(self.checkpoints_dir)
 
-        self.save_spec(spec)
-        self.save_static(session)
+        self._save_spec(spec)
+        self._save_static(session)
         self.save_checkpoint(session)
 
     def load_from_latest_checkpoint(self):
@@ -113,23 +95,13 @@ class SessionSaver:
         self.load_checkpoint(session, name=str(latest_epoch))
         return session
 
-    def save_spec(self, spec):
+    def _save_spec(self, spec):
         save_as_json(spec, self.spec_path)
 
-    def save_static(self, session):
-        static_dir = self.static_dir
-
+    def _save_static(self, session):
+        section_persistence = SectionPersistence(self.static_dir)
         for attr in self.save_attrs:
-            objects_dict = getattr(session, attr)
-
-            path = os.path.join(static_dir, f'{attr}.json')
-            serialized_dict = {}
-            for name, obj in objects_dict.items():
-                if hasattr(obj, 'state_dict'):
-                    serialized_dict[name] = obj.state_dict()
-                else:
-                    serialized_dict[name] = {}
-            save_as_json(serialized_dict, path)
+            section_persistence.save(session, attr)
 
         extra_params = {}
         if hasattr(session.stop_condition, 'state_dict'):
@@ -173,3 +145,89 @@ class SessionSaver:
             state.optimizers[name].load_state_dict(optimizer_state)
 
         state.epochs_done = checkpoint["progress"]["epochs_done"]
+
+
+class SessionInitializer:
+    def __init__(self):
+        self.fit_preprocessors = True
+
+    def __call__(self, session, spec):
+        sections_with_loaders = [
+            ('datasets', parse.Loader()),
+            ('preprocessors', parse.Loader()),
+            ('learners', parse.LearnerLoader(self.fit_preprocessors)),
+            ('collators', parse.Loader()),
+            ('models', parse.Loader()),
+            ('optimizers', parse.OptimizerLoader()),
+            ('batch_adapters', parse.Loader()),
+            ('losses', parse.LossLoader()),
+            ('metrics', parse.MetricLoader())
+        ]
+
+        for section_name, loader in sections_with_loaders:
+            self.load_section(session, spec, section_name, loader)
+
+        session.stop_condition = parse.Loader().load(session, spec["train"]["stop_condition"])
+        session.device = torch.device(spec["train"].get("device", "cpu"))
+
+    def load_section(self, session, spec, section_name, loader):
+        section = self.load_init_section(session, spec, section_name, loader)
+        setattr(session, section_name, section)
+
+    def load_init_section(self, session, spec, section_name, loader):
+        init_dict = spec["initialize"]
+
+        section_spec = init_dict[section_name]
+
+        if isinstance(section_spec, dict):
+            return {name: loader.load(session, spec, name)
+                    for name, spec in section_spec.items()}
+
+        if isinstance(section_spec, list):
+            return [loader.load(session, d) for d in section_spec]
+
+
+class SessionRestorer(SessionInitializer):
+    def __init__(self, static_dir):
+        super().__init__()
+        self.static_dir = static_dir
+        self.fit_preprocessors = False
+
+    def load_section(self, session, spec, section_name, loader):
+        super().load_section(session, spec, section_name, loader)
+        persistence = SectionPersistence(self.static_dir)
+        persistence.load(session, section_name)
+
+
+class SectionPersistence:
+    def __init__(self, static_dir):
+        self.static_dir = static_dir
+
+    def save(self, session, section_name):
+        objects_dict = getattr(session, section_name)
+
+        path = self._build_save_path(section_name)
+        serialized_dict = {}
+        for name, obj in objects_dict.items():
+            if hasattr(obj, 'state_dict'):
+                serialized_dict[name] = obj.state_dict()
+            else:
+                serialized_dict[name] = {}
+        save_as_json(serialized_dict, path)
+
+    def load(self, session, section_name):
+        objects_dict = getattr(session, section_name)
+
+        path = self._build_save_path(section_name)
+        if not os.path.exists(path):
+            return
+
+        serialized_dict = load_json(path)
+
+        for name, object_state in serialized_dict.items():
+            an_object = objects_dict[name]
+            if hasattr(an_object, 'load_state_dict'):
+                an_object.load_state_dict(object_state)
+
+    def _build_save_path(self, section_name):
+        return os.path.join(self.static_dir, f'{section_name}.json')
