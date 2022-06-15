@@ -1,0 +1,116 @@
+{
+  "session_dir": "pretrained",
+  "initialize": {
+    "datasets": {
+      "translation_ds": {
+        "class": "examples.language_translation.datasets.FrenchToEnglishDataset",
+        "kwargs": {
+          "path": "examples/language_translation/dataset/eng-fra.txt"
+        }
+      }
+    },
+    "preprocessors": {
+      "french_encoder": {
+        "class": "examples.language_translation.preprocessors.FrenchEncoder"
+      },
+      "english_encoder": {
+        "class": "examples.language_translation.preprocessors.EnglishEncoder"
+      }
+    },
+    "learners": [{
+      "preprocessor_name": "french_encoder",
+      "dataset_name": "translation_ds"
+    }, {
+      "preprocessor_name": "english_encoder",
+      "dataset_name": "translation_ds"
+    }],
+    "collators": {
+      "my_collator": {
+        "factory_fn": "examples.language_translation.collators.build_collator"
+      }
+    },
+    "models": {
+      "encoder": {
+        "factory_fn": "examples.language_translation.models.build_encoder",
+        "args": [],
+        "kwargs": {
+          "hidden_size": 32
+        }
+      },
+      "decoder": {
+        "factory_fn": "examples.language_translation.models.build_decoder",
+        "args": [],
+        "kwargs": {
+          "hidden_size": 32
+        }
+      }
+    },
+    "batch_adapters": {
+      "adapter": {
+        "class": "examples.language_translation.adapters.BatchAdapter",
+        "kwargs": {"hidden_size": 32}
+      }
+    },
+    "optimizers": {
+      "encoder": {
+        "class": "SGD",
+        "kwargs": {
+          "lr": 0.001,
+          "momentum": 0.9
+        }
+      },
+      "decoder": {
+        "class": "SGD",
+        "kwargs": {
+          "lr": 0.001,
+          "momentum": 0.9
+        }
+      }
+    },
+    "losses": {
+      "cross_entropy": {
+        "class": "CrossEntropyLoss",
+        "kwargs": {
+          "reduction": "sum"
+        },
+        "inputs": ["y_hat", "y"],
+        "transform": "examples.language_translation.transforms.transform"
+      }
+    },
+    "metrics": {
+      "CER": {
+        "class": "CharErrorRate",
+        "inputs": ["y_hat", "y"],
+        "transform": "examples.language_translation.transforms.DecodeClassesTransform"
+      }
+    }
+  },
+  "train": {
+    "pipelines": {
+      "encoder_decoder": {
+        "dataset_name": "translation_ds",
+        "preprocessor_names": ["french_encoder", "english_encoder"],
+        "collator_name": "my_collator",
+        "batch_size": 1,
+        "batch_adapter_name": "adapter",
+        "neural_graph": [{
+          "model_name": "encoder",
+          "inputs": ["x", "h"],
+          "outputs": ["outputs", "h_e"],
+          "optimizer_name": "encoder"
+        },{
+          "model_name": "decoder",
+          "inputs": ["y_shifted", "h_e"],
+          "outputs": ["y_hat", "h_d"],
+          "optimizer_name": "decoder"
+        }],
+        "loss_name": "cross_entropy",
+        "metric_names": ["CER"]
+      }
+    },
+    "stop_condition": {
+      "class": "examples.language_translation.conditions.EpochsCompleted",
+      "kwargs": {"num_epochs": 20}
+    }
+  }
+}

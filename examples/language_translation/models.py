@@ -48,3 +48,15 @@ class Decoder(nn.Module):
             outputs.append(top.item())
 
         return [outputs]
+
+
+def build_encoder(session, *args, **kwargs):
+    input_size = session.preprocessors["french_encoder"].num_french_words
+    hidden_size = kwargs['hidden_size']
+    return Encoder(input_size, hidden_size)
+
+
+def build_decoder(session, *args, **kwargs):
+    input_size = session.preprocessors["english_encoder"].num_english_words
+    hidden_size = kwargs['hidden_size']
+    return Decoder(input_size, hidden_size)

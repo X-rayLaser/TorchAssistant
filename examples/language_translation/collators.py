@@ -16,3 +16,10 @@ class MyCollator(BaseCollator):
 
     def collate_inputs(self, *inputs):
         return torch.LongTensor(inputs)
+
+
+def build_collator(session):
+    return MyCollator(
+        session.preprocessors["french_encoder"].num_french_words,
+        session.preprocessors["english_encoder"].num_english_words
+    )

@@ -72,7 +72,8 @@ class SentenceEncoder(ValuePreprocessor, Serializable):
     def state_dict(self):
         return self.__dict__.copy()
 
-    def load(self, state_dict):
+    def load_state_dict(self, state_dict):
+        print('CALLED load_state_dict', state_dict)
         self.__dict__ = state_dict.copy()
         self.index2word = {int(k): v for k, v in self.index2word.items()}
 
