@@ -92,6 +92,75 @@ class DataSplitter(Serializable):
         pass
 
 
+class MultiSplitter:
+    def __init__(self, ratio, shuffled_indices=None):
+        import math
+        if not math.isclose(sum(ratio), 1., rel_tol=1e-5):
+            raise BadSplitError(f'Values must add to 1, but they add to {sum(ratio)} instead.')
+
+        self.ratio = ratio
+        self.shuffled_indices = shuffled_indices
+        self.slices = []
+
+    def split(self, dataset):
+        if not dataset:
+            raise BadSplitError('Cannot split an empty dataset')
+
+        shuffled_indices = self.shuffled_indices or list(range(len(dataset)))
+
+        shuffled_size = len(shuffled_indices)
+        ds_size = len(dataset)
+        if shuffled_size != ds_size:
+            raise BadSplitError(
+                f'Shuffled_indices size mismatch: {shuffled_size} for a dataset of size {ds_size}')
+
+        dataset = self.shuffled_dataset(dataset, shuffled_indices)
+
+        sizes = [int((x * ds_size)) for x in self.ratio[:-1]]
+        last_slice_size = ds_size - sum(sizes)
+        sizes.append(last_slice_size)
+
+        for i in range(len(sizes)):
+            from_index = sum(sizes[:i])
+            to_index = from_index + sizes[i]
+            self.slices.append(DatasetSlice(dataset, from_index, to_index))
+
+    def shuffled_dataset(self, ds, shuffled_indices):
+        class ShuffledDataset:
+            def __getitem__(self, idx):
+                new_index = shuffled_indices[idx]
+                return ds[new_index]
+
+            def __len__(self):
+                return len(ds)
+
+        return ShuffledDataset()
+
+    def __getitem__(self, idx):
+        return self.slices[idx]
+
+    def __getattr__(self, attr):
+        try:
+            if attr == 'train':
+                return self[0]
+            elif attr == 'val':
+                return self[1]
+            elif attr == 'test':
+                return self[2]
+            else:
+                raise IndexError
+        except IndexError:
+            raise AttributeError(f'MultiSplitter instance has no "{attr}" attribute')
+
+    @property
+    def num_parts(self):
+        return len(self.ratio)
+
+
+class BadSplitError(Exception):
+    pass
+
+
 class SimpleSplitter(DataSplitter):
     @property
     def train_ds(self):
@@ -112,6 +181,12 @@ class DatasetSlice(Dataset):
         :param index_from: start index of the slice (included in a slice)
         :param index_to: last index of the slice (excluded from a slice)
         """
+
+        if index_to <= index_from:
+            raise BadSplitError(
+                f'index_to must be greater than index_from: Got {index_to}, {index_from}'
+            )
+
         self.ds = ds
         self.index_from = index_from
         self.index_to = index_to
@@ -243,3 +318,15 @@ class WrappedDataset:
 
     def __len__(self):
         return len(self.dataset)
+
+
+class SplittableDataset(Dataset):
+    def __init__(self, split_part):
+        self.split_part = split_part
+        self.splitter = SimpleSplitter()
+
+    def __getitem__(self, idx):
+        pass
+
+    def __len__(self):
+        return

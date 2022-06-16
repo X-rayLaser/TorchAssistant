@@ -9,6 +9,12 @@
         }
       }
     },
+    "splits": {
+      "my_split": {
+        "dataset_name": "translation_ds",
+        "ratio": [0.8, 0.2]
+      }
+    },
     "preprocessors": {
       "french_encoder": {
         "class": "examples.language_translation.preprocessors.FrenchEncoder"
@@ -19,10 +25,10 @@
     },
     "learners": [{
       "preprocessor_name": "french_encoder",
-      "dataset_name": "translation_ds"
+      "dataset_name": "my_split.train"
     }, {
       "preprocessor_name": "english_encoder",
-      "dataset_name": "translation_ds"
+      "dataset_name": "my_split.train"
     }],
     "collators": {
       "my_collator": {
@@ -88,7 +94,8 @@
   "train": {
     "pipelines": {
       "encoder_decoder": {
-        "dataset_name": "translation_ds",
+        "train_dataset_name": "my_split.train",
+        "val_dataset_name": "my_split.val",
         "preprocessor_names": ["french_encoder", "english_encoder"],
         "collator_name": "my_collator",
         "batch_size": 1,

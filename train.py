@@ -1,7 +1,8 @@
 import argparse
 import json
 from scaffolding.training import train
-from scaffolding.session import TrainingSession
+#from scaffolding.session import TrainingSession
+from scaffolding.session_v2 import Session, SessionSaver
 
 
 def load_config(path):
@@ -20,7 +21,7 @@ if __name__ == '__main__':
     cmd_args = parser.parse_args()
     path = cmd_args.session_path
 
-    session = TrainingSession(path)
+    session = SessionSaver(path).load_from_latest_checkpoint()
 
     #store_path = os.path.join(checkpoints_dir, 'store.json')
 

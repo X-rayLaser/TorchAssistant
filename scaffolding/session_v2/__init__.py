@@ -155,6 +155,7 @@ class SessionInitializer:
         sections_with_loaders = [
             ('datasets', parse.Loader()),
             ('preprocessors', parse.Loader()),
+            ('splits', parse.SplitLoader()),
             ('learners', parse.LearnerLoader(self.fit_preprocessors)),
             ('collators', parse.Loader()),
             ('models', parse.Loader()),
