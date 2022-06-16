@@ -95,8 +95,7 @@ class SplitLoader(Loader):
         shuffled_indices = list(range(len(ds)))
         shuffle(shuffled_indices)
         splitter = MultiSplitter(ratio, shuffled_indices)
-        splitter.split(ds)
-        return splitter
+        return splitter.split(ds)
 
 
 class LearnerLoader(Loader):

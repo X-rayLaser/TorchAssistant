@@ -100,7 +100,6 @@ class MultiSplitter:
 
         self.ratio = ratio
         self.shuffled_indices = shuffled_indices
-        self.slices = []
 
     def split(self, dataset):
         if not dataset:
@@ -120,10 +119,13 @@ class MultiSplitter:
         last_slice_size = ds_size - sum(sizes)
         sizes.append(last_slice_size)
 
+        slices = []
         for i in range(len(sizes)):
             from_index = sum(sizes[:i])
             to_index = from_index + sizes[i]
-            self.slices.append(DatasetSlice(dataset, from_index, to_index))
+            slices.append(DatasetSlice(dataset, from_index, to_index))
+
+        return DataSplit(slices)
 
     def shuffled_dataset(self, ds, shuffled_indices):
         class ShuffledDataset:
@@ -135,6 +137,15 @@ class MultiSplitter:
                 return len(ds)
 
         return ShuffledDataset()
+
+    @property
+    def num_parts(self):
+        return len(self.ratio)
+
+
+class DataSplit:
+    def __init__(self, slices):
+        self.slices = slices
 
     def __getitem__(self, idx):
         return self.slices[idx]
@@ -151,10 +162,6 @@ class MultiSplitter:
                 raise IndexError
         except IndexError:
             raise AttributeError(f'MultiSplitter instance has no "{attr}" attribute')
-
-    @property
-    def num_parts(self):
-        return len(self.ratio)
 
 
 class BadSplitError(Exception):

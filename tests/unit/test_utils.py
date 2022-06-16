@@ -39,40 +39,40 @@ class MultiSplitterTests(unittest.TestCase):
 
     def test_sum_of_slice_sizes_equals_the_size_of_original_dataset(self):
         splitter = MultiSplitter(ratio=[1])
-        splitter.split([1, 2, 3])
-        self.assertEqual(3, sum(map(len, splitter)))
+        split = splitter.split([1, 2, 3])
+        self.assertEqual(3, sum(map(len, split)))
 
         splitter = MultiSplitter(ratio=[0.4, 0.3, 0.1, 0.2])
-        splitter.split(list(range(12)))
-        self.assertEqual(12, sum(map(len, splitter)))
+        split = splitter.split(list(range(12)))
+        self.assertEqual(12, sum(map(len, split)))
 
         splitter = MultiSplitter(ratio=[0.1] * 10)
-        splitter.split(list(range(16)))
-        self.assertEqual(16, sum(map(len, splitter)))
+        split = splitter.split(list(range(16)))
+        self.assertEqual(16, sum(map(len, split)))
 
     def test_slices(self):
         splitter = MultiSplitter(ratio=[1])
-        splitter.split([1, 2, 3])
-        self.assertEqual([1, 2, 3], list(splitter[0]))
-        self.assertEqual([1, 2, 3], list(splitter.train))
+        split = splitter.split([1, 2, 3])
+        self.assertEqual([1, 2, 3], list(split[0]))
+        self.assertEqual([1, 2, 3], list(split.train))
 
         splitter = MultiSplitter(ratio=[0.5, 0.5])
-        splitter.split([1, 2, 3])
-        self.assertEqual([1], list(splitter[0]))
-        self.assertEqual([1], list(splitter.train))
+        split = splitter.split([1, 2, 3])
+        self.assertEqual([1], list(split[0]))
+        self.assertEqual([1], list(split.train))
 
-        self.assertEqual([2, 3], list(splitter[1]))
-        self.assertEqual([2, 3], list(splitter.val))
+        self.assertEqual([2, 3], list(split[1]))
+        self.assertEqual([2, 3], list(split.val))
 
         splitter = MultiSplitter(ratio=[0.4, 0.5, 0.1])
-        splitter.split([1, 2, 3, 4, 5, 6])
-        self.assertEqual([1, 2], list(splitter[0]))
-        self.assertEqual([3, 4, 5], list(splitter[1]))
-        self.assertEqual([6], list(splitter[2]))
+        split = splitter.split([1, 2, 3, 4, 5, 6])
+        self.assertEqual([1, 2], list(split[0]))
+        self.assertEqual([3, 4, 5], list(split[1]))
+        self.assertEqual([6], list(split[2]))
 
-        self.assertEqual([1, 2], list(splitter.train))
-        self.assertEqual([3, 4, 5], list(splitter.val))
-        self.assertEqual([6], list(splitter.test))
+        self.assertEqual([1, 2], list(split.train))
+        self.assertEqual([3, 4, 5], list(split.val))
+        self.assertEqual([6], list(split.test))
 
     def test_with_bad_shuffling_indices(self):
         indices = [0, 2, 1]
@@ -85,6 +85,6 @@ class MultiSplitterTests(unittest.TestCase):
     def test_shuffling(self):
         indices = [0, 2, 1, 3]
         splitter = MultiSplitter(ratio=[0.6, 0.4], shuffled_indices=indices)
-        splitter.split([6, 7, 8, 9])
-        self.assertEqual([6, 8], list(splitter.train))
-        self.assertEqual([7, 9], list(splitter.val))
+        split = splitter.split([6, 7, 8, 9])
+        self.assertEqual([6, 8], list(split.train))
+        self.assertEqual([7, 9], list(split.val))
