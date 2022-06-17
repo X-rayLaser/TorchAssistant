@@ -57,6 +57,7 @@ class Session:
         self.stages = []
 
         # tracks progress
+        # todo: store stage number
         self.epochs_done = 0
 
     def initialize_state(self):
@@ -140,7 +141,7 @@ class SessionSaver:
         for name, optimizer_state in checkpoint['optimizers'].items():
             state.optimizers[name].load_state_dict(optimizer_state)
 
-        state.epochs_done = checkpoint["progress"]["epochs_done"]
+        session.epochs_done = checkpoint["progress"]["epochs_done"]
 
     def log_metrics(self, epoch, train_metrics, val_metrics):
         # todo: log metrics to csv file

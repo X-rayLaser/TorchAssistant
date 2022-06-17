@@ -5,43 +5,9 @@ from .formatters import Formatter
 from scaffolding.utils import WrappedDataset
 
 
-def train(session, stat_ivl=10):
-    data_pipeline = session.data_pipeline
-    train_pipeline = session.restore_from_last_checkpoint()
-    loss_fn = session.criterion
-    metrics = session.metrics
-    epochs = session.num_epochs
-    start_epoch = session.epochs_trained + 1
-    checkpoints_dir = session.checkpoints_dir
-
-    if 'loss' in metrics:
-        metrics['loss'] = loss_fn
-
-    train_loader, test_loader = data_pipeline.get_data_loaders()
-    formatter = Formatter()
-
-    for epoch in range(start_epoch, start_epoch + epochs):
-        trainer = Trainer(train_loader, train_pipeline, loss_fn)
-        print_metrics = PrintMetrics(metrics, stat_ivl, epoch, formatter)
-        trainer.add_callback(print_metrics)
-        trainer.run_epoch()
-
-        switch_to_evaluation_mode(train_pipeline)
-
-        train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
-        session.log_metrics(epoch, train_metrics, val_metrics)
-        epoch_str = formatter.format_epoch(epoch)
-        train_metrics_str = formatter.format_metrics(train_metrics, validation=False)
-        val_metrics_str = formatter.format_metrics(val_metrics, validation=True)
-
-        print(f'\r{epoch_str} {train_metrics_str}; {val_metrics_str}')
-
-        if checkpoints_dir:
-            session.make_checkpoint(train_pipeline, epoch)
-
-
-def train2(session, log_metrics, stat_ivl=10):
+def train(session, log_metrics, save_checkpoint, stat_ivl=10):
     stage = session.stages[0]
+    stop_condition = stage.stop_condition
     pipeline = stage.pipelines[0]
 
     train_pipeline = PredictionPipeline(pipeline.neural_graph, pipeline.device, pipeline.batch_adapter)
@@ -52,9 +18,13 @@ def train2(session, log_metrics, stat_ivl=10):
 
     train_loader, test_loader = get_data_loaders(pipeline)
     formatter = Formatter()
-    epochs = 20
-    start_epoch = 0
-    for epoch in range(start_epoch, start_epoch + epochs):
+    start_epoch = session.epochs_done
+
+    for epoch in range(start_epoch, start_epoch + 1000):
+        if stop_condition(epoch, []):
+            print("Stopping...")
+            break
+
         trainer = Trainer(train_loader, train_pipeline, pipeline.loss_fn)
         print_metrics = PrintMetrics(metrics, stat_ivl, epoch, formatter)
         trainer.add_callback(print_metrics)
@@ -70,8 +40,7 @@ def train2(session, log_metrics, stat_ivl=10):
 
         print(f'\r{epoch_str} {train_metrics_str}; {val_metrics_str}')
 
-        #if checkpoints_dir:
-        #    session.make_checkpoint(train_pipeline, epoch)
+        save_checkpoint(epoch)
 
 
 def get_data_loaders(pipeline):

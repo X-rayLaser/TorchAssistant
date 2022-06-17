@@ -1,8 +1,7 @@
 import argparse
 import json
-from scaffolding.training import train, train2
-#from scaffolding.session import TrainingSession
-from scaffolding.session_v2 import Session, SessionSaver
+from scaffolding.training import train
+from scaffolding.session_v2 import SessionSaver
 
 
 def load_config(path):
@@ -24,14 +23,14 @@ if __name__ == '__main__':
     saver = SessionSaver(path)
     session = saver.load_from_latest_checkpoint()
 
-    #store_path = os.path.join(checkpoints_dir, 'store.json')
-
-    #train(session)
-
     def log_metrics(epoch, train_metrics, val_metrics):
         saver.log_metrics(epoch, train_metrics, val_metrics)
 
-    train2(session, log_metrics=log_metrics)
+    def save_checkpoint(epoch):
+        session.epochs_done += 1
+        saver.save_checkpoint(session)
+
+    train(session, log_metrics=log_metrics, save_checkpoint=save_checkpoint)
 
 
 # todo: refactor code more (achieve better cohesion, loose coupling)
