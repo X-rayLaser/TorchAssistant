@@ -93,13 +93,22 @@ class DataSplitter(Serializable):
 
 
 class MultiSplitter:
-    def __init__(self, ratio, shuffled_indices=None):
+    def __init__(self, ratio):
         import math
         if not math.isclose(sum(ratio), 1., rel_tol=1e-5):
             raise BadSplitError(f'Values must add to 1, but they add to {sum(ratio)} instead.')
 
         self.ratio = ratio
+        self.shuffled_indices = None
+
+    def configure(self, shuffled_indices):
         self.shuffled_indices = shuffled_indices
+
+    def state_dict(self):
+        return dict(shuffled_indices=self.shuffled_indices)
+
+    def load_state_dict(self, state_dict):
+        self.shuffled_indices = state_dict["shuffled_indices"]
 
     def split(self, dataset):
         if not dataset:

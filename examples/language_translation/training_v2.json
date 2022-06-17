@@ -17,19 +17,14 @@
     },
     "preprocessors": {
       "french_encoder": {
-        "class": "examples.language_translation.preprocessors.FrenchEncoder"
+        "class": "examples.language_translation.preprocessors.FrenchEncoder",
+        "fit": "my_split.train"
       },
       "english_encoder": {
-        "class": "examples.language_translation.preprocessors.EnglishEncoder"
+        "class": "examples.language_translation.preprocessors.EnglishEncoder",
+        "fit": "my_split.train"
       }
     },
-    "learners": [{
-      "preprocessor_name": "french_encoder",
-      "dataset_name": "my_split.train"
-    }, {
-      "preprocessor_name": "english_encoder",
-      "dataset_name": "my_split.train"
-    }],
     "collators": {
       "my_collator": {
         "factory_fn": "examples.language_translation.collators.build_collator"

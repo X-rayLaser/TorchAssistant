@@ -76,7 +76,8 @@ class MultiSplitterTests(unittest.TestCase):
 
     def test_with_bad_shuffling_indices(self):
         indices = [0, 2, 1]
-        splitter = MultiSplitter(ratio=[1], shuffled_indices=indices)
+        splitter = MultiSplitter(ratio=[1])
+        splitter.configure(shuffled_indices=indices)
         self.assertRaises(BadSplitError, lambda: splitter.split([1]))
         self.assertRaises(BadSplitError, lambda: splitter.split([1, 2]))
         self.assertRaises(BadSplitError, lambda: splitter.split([1, 2, 3, 4]))
@@ -84,7 +85,8 @@ class MultiSplitterTests(unittest.TestCase):
 
     def test_shuffling(self):
         indices = [0, 2, 1, 3]
-        splitter = MultiSplitter(ratio=[0.6, 0.4], shuffled_indices=indices)
+        splitter = MultiSplitter(ratio=[0.6, 0.4])
+        splitter.configure(shuffled_indices=indices)
         split = splitter.split([6, 7, 8, 9])
         self.assertEqual([6, 8], list(split.train))
         self.assertEqual([7, 9], list(split.val))

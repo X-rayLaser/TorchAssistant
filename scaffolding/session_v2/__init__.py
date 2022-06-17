@@ -1,5 +1,8 @@
 import os
 import json
+from collections import defaultdict
+from random import shuffle
+
 import torch
 
 from . import parse
@@ -59,7 +62,7 @@ class Session:
 
 
 class SessionSaver:
-    save_attrs = 'datasets preprocessors collators batch_adapters losses metrics'.split(' ')
+    save_attrs = 'datasets splits preprocessors collators batch_adapters losses metrics'.split(' ')
 
     def __init__(self, session_dir):
         self.session_dir = session_dir
@@ -147,16 +150,44 @@ class SessionSaver:
         state.epochs_done = checkpoint["progress"]["epochs_done"]
 
 
+class ObjectInstaller:
+    def setup(self, session, instance, object_name=None, **kwargs):
+        pass
+
+
+class PreProcessorInstaller(ObjectInstaller):
+    def setup(self, session, instance, object_name=None, **kwargs):
+        dataset_name = instance.spec["fit"]
+        if '.' in dataset_name:
+            splitter_name, slice_name = dataset_name.split('.')
+            splitter = session.splits[splitter_name]
+            split = splitter.split(session.datasets[splitter.spec["dataset_name"]])
+            dataset = getattr(split, slice_name)
+        else:
+            dataset = session.datasets[dataset_name]
+        instance.fit(dataset)
+
+
+class SplitterInstaller(ObjectInstaller):
+    def setup(self, session, instance, object_name=None, **kwargs):
+        ds_name = instance.spec["dataset_name"]
+        ds = session.datasets[ds_name]
+
+        shuffled_indices = list(range(len(ds)))
+        shuffle(shuffled_indices)
+        instance.configure(shuffled_indices)
+
+
 class SessionInitializer:
-    def __init__(self):
-        self.fit_preprocessors = True
+    installers = defaultdict(
+        ObjectInstaller, preprocessors=PreProcessorInstaller(), splits=SplitterInstaller()
+    )
 
     def __call__(self, session, spec):
         sections_with_loaders = [
             ('datasets', parse.Loader()),
-            ('preprocessors', parse.Loader()),
             ('splits', parse.SplitLoader()),
-            ('learners', parse.LearnerLoader(self.fit_preprocessors)),
+            ('preprocessors', parse.PreProcessorLoader()),
             ('collators', parse.Loader()),
             ('models', parse.Loader()),
             ('optimizers', parse.OptimizerLoader()),
@@ -166,36 +197,44 @@ class SessionInitializer:
         ]
 
         for section_name, loader in sections_with_loaders:
-            self.load_section(session, spec, section_name, loader)
+            installer = self.installers[section_name]
+            self.load_section(session, spec, section_name, loader, installer)
 
         session.stop_condition = parse.Loader().load(session, spec["train"]["stop_condition"])
         session.device = torch.device(spec["train"].get("device", "cpu"))
 
-    def load_section(self, session, spec, section_name, loader):
-        section = self.load_init_section(session, spec, section_name, loader)
+    def load_section(self, session, spec, section_name, loader, installer):
+        section = self.load_init_section(session, spec, section_name, loader, installer)
         setattr(session, section_name, section)
 
-    def load_init_section(self, session, spec, section_name, loader):
+    def load_init_section(self, session, spec, section_name, loader, installer):
         init_dict = spec["initialize"]
 
         section_spec = init_dict[section_name]
 
         if isinstance(section_spec, dict):
-            return {name: loader.load(session, spec, name)
+            return {name: self.build_object(session, spec, loader, installer, name)
                     for name, spec in section_spec.items()}
 
         if isinstance(section_spec, list):
-            return [loader.load(session, d) for d in section_spec]
+            return [self.build_object(session, d, loader, installer) for d in section_spec]
+
+    def build_object(self, session, spec, loader, installer, name=None):
+        instance = loader.load(session, spec, name)
+        installer.setup(session, instance, object_name=name)
+        return instance
 
 
 class SessionRestorer(SessionInitializer):
+    installers = defaultdict(ObjectInstaller)
+
     def __init__(self, static_dir):
         super().__init__()
         self.static_dir = static_dir
         self.fit_preprocessors = False
 
-    def load_section(self, session, spec, section_name, loader):
-        super().load_section(session, spec, section_name, loader)
+    def load_section(self, session, spec, section_name, loader, installer):
+        super().load_section(session, spec, section_name, loader, installer)
         persistence = SectionPersistence(self.static_dir)
         persistence.load(session, section_name)
 
@@ -232,3 +271,8 @@ class SectionPersistence:
 
     def _build_save_path(self, section_name):
         return os.path.join(self.static_dir, f'{section_name}.json')
+
+
+# todo: when creating session: 1) parse objects and instantiate them; 2) configure them; 3) use
+#       when restoring session: 1) parse objects and instantiate them; 2) load state; 3) use
+# 3 sets of subclasses: builders (or parsers), configurators, state loaders

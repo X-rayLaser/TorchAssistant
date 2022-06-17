@@ -88,35 +88,17 @@ class Loader:
 
 class SplitLoader(Loader):
     def load(self, session, spec, object_name=None):
-        ds_name = spec["dataset_name"]
         ratio = spec["ratio"]
-        ds = session.datasets[ds_name]
-
-        shuffled_indices = list(range(len(ds)))
-        shuffle(shuffled_indices)
-        splitter = MultiSplitter(ratio, shuffled_indices)
-        return splitter.split(ds)
+        splitter = MultiSplitter(ratio)
+        splitter.spec = spec
+        return splitter
 
 
-class LearnerLoader(Loader):
-    def __init__(self, fit_preprocessors):
-        self.fit_preprocessors = fit_preprocessors
-
+class PreProcessorLoader(Loader):
     def load(self, session, spec, object_name=None):
-        proc_name = spec["preprocessor_name"]
-        ds_name = spec["dataset_name"]
-
-        if self.fit_preprocessors:
-            if '.' in ds_name:
-                split_name, split_part = ds_name.split('.')
-                dataset = getattr(session.splits[split_name], split_part)
-            else:
-                dataset = session.datasets[ds_name]
-
-            preprocessor = session.preprocessors[proc_name]
-            preprocessor.fit(dataset)
-
-        return Learner(proc_name, ds_name)
+        instance = super().load(session, spec, object_name)
+        instance.spec = spec
+        return instance
 
 
 class OptimizerLoader(Loader):
