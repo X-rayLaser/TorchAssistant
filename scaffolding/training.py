@@ -2,6 +2,7 @@ import torch
 from .utils import switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
 from .formatters import Formatter
+from scaffolding.utils import WrappedDataset
 
 
 def train(session, stat_ivl=10):
@@ -37,6 +38,56 @@ def train(session, stat_ivl=10):
 
         if checkpoints_dir:
             session.make_checkpoint(train_pipeline, epoch)
+
+
+def train2(session, log_metrics, stat_ivl=10):
+    stage = session.stages[0]
+    pipeline = stage.pipelines[0]
+
+    train_pipeline = PredictionPipeline(pipeline.neural_graph, pipeline.device, pipeline.batch_adapter)
+
+    metrics = session.metrics
+
+    metrics['loss'] = pipeline.loss_fn
+
+    train_loader, test_loader = get_data_loaders(pipeline)
+    formatter = Formatter()
+    epochs = 20
+    start_epoch = 0
+    for epoch in range(start_epoch, start_epoch + epochs):
+        trainer = Trainer(train_loader, train_pipeline, pipeline.loss_fn)
+        print_metrics = PrintMetrics(metrics, stat_ivl, epoch, formatter)
+        trainer.add_callback(print_metrics)
+        trainer.run_epoch()
+
+        switch_to_evaluation_mode(train_pipeline)
+
+        train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
+        log_metrics(epoch, train_metrics, val_metrics)
+        epoch_str = formatter.format_epoch(epoch)
+        train_metrics_str = formatter.format_metrics(train_metrics, validation=False)
+        val_metrics_str = formatter.format_metrics(val_metrics, validation=True)
+
+        print(f'\r{epoch_str} {train_metrics_str}; {val_metrics_str}')
+
+        #if checkpoints_dir:
+        #    session.make_checkpoint(train_pipeline, epoch)
+
+
+def get_data_loaders(pipeline):
+    train_set, test_set = pipeline.train_dataset, pipeline.val_dataset
+
+    if pipeline.preprocessors:
+        train_set = WrappedDataset(train_set, pipeline.preprocessors)
+        test_set = WrappedDataset(test_set, pipeline.preprocessors)
+
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=pipeline.batch_size,
+                                               shuffle=True, num_workers=2, collate_fn=pipeline.collator)
+
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=pipeline.batch_size,
+                                              shuffle=False, num_workers=2, collate_fn=pipeline.collator)
+
+    return train_loader, test_loader
 
 
 class PrintMetrics:

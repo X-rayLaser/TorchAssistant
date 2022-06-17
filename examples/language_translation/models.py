@@ -32,7 +32,6 @@ class Decoder(nn.Module):
         output = self.embedding(x)
 
         output = F.relu(output)
-
         output, hidden = self.gru(output, hidden)
         output = self.out(output)
         return output, hidden
@@ -57,6 +56,7 @@ def build_encoder(session, *args, **kwargs):
 
 
 def build_decoder(session, *args, **kwargs):
-    input_size = session.preprocessors["english_encoder"].num_english_words
     hidden_size = kwargs['hidden_size']
-    return Decoder(input_size, hidden_size)
+    output_size = session.preprocessors["english_encoder"].num_english_words
+
+    return Decoder(hidden_size, output_size)

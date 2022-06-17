@@ -274,17 +274,20 @@ def import_entity(dotted_path):
 
 def switch_to_train_mode(prediction_pipeline):
     for node in prediction_pipeline:
-        node.net.instance.train()
+        #node.net.instance.train()
+        node.net.train()
 
 
 def switch_to_evaluation_mode(prediction_pipeline):
     for node in prediction_pipeline:
-        node.net.instance.eval()
+        #node.net.instance.eval()
+        node.net.eval()
 
 
 def change_model_device(train_pipeline, device):
     for model in train_pipeline:
-        model.net.instance.to(device)
+        #model.net.instance.to(device)
+        model.net.to(device)
 
 
 def change_batch_device(batch, device):

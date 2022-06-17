@@ -2,10 +2,12 @@ import os
 import json
 from collections import defaultdict
 from random import shuffle
+import csv
 
 import torch
 
 from . import parse
+from .parse import get_dataset
 
 
 def create_session(spec):
@@ -51,8 +53,8 @@ class Session:
         self.losses = {}
         self.metrics = {}
         self.pipelines = {}
-        self.stop_condition = None
-        self.device = None
+
+        self.stages = []
 
         # tracks progress
         self.epochs_done = 0
@@ -70,6 +72,7 @@ class SessionSaver:
         self.spec_path = os.path.join(session_dir, 'spec.json')
         self.static_dir = os.path.join(session_dir, 'static')
         self.checkpoints_dir = os.path.join(session_dir, 'checkpoints')
+        self.history_path = os.path.join(session_dir, 'metrics')
         self.extra_path = os.path.join(self.static_dir, 'extra_params.json')
 
     def initial_save(self, session, spec):
@@ -88,11 +91,6 @@ class SessionSaver:
         restorer = SessionRestorer(self.static_dir)
         restorer(session, spec)
 
-        extra_params = load_json(self.extra_path)
-        if hasattr(session.stop_condition, 'load_state_dict'):
-            condition_state = extra_params.get("stop_condition", {})
-            session.stop_condition.load_state_dict(condition_state)
-
         checkpoint_dirs = os.listdir(self.checkpoints_dir)
         latest_epoch = max(map(int, checkpoint_dirs))
         self.load_checkpoint(session, name=str(latest_epoch))
@@ -105,11 +103,6 @@ class SessionSaver:
         section_persistence = SectionPersistence(self.static_dir)
         for attr in self.save_attrs:
             section_persistence.save(session, attr)
-
-        extra_params = {}
-        if hasattr(session.stop_condition, 'state_dict'):
-            extra_params["stop_condition"] = session.stop_condition.state_dict()
-        save_as_json(extra_params, self.extra_path)
 
     def save_checkpoint(self, session):
         state_dir = self.checkpoints_dir
@@ -149,6 +142,44 @@ class SessionSaver:
 
         state.epochs_done = checkpoint["progress"]["epochs_done"]
 
+    def log_metrics(self, epoch, train_metrics, val_metrics):
+        # todo: log metrics to csv file
+        history = TrainingHistory(self.history_path)
+        history.add_entry(epoch, train_metrics, val_metrics)
+
+
+class TrainingHistory:
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def add_entry(self, epoch, train_metrics, val_metrics):
+        # todo: make sure the ordering is right
+        val_metrics = {f'val {k}': v for k, v in val_metrics.items()}
+
+        all_metrics = {}
+        all_metrics.update(train_metrics)
+        all_metrics.update(val_metrics)
+
+        row_dict = {'epoch': epoch}
+        row_dict.update({k: self.scalar(v) for k, v in all_metrics.items()})
+
+        with open(self.file_path, 'a', encoding='utf-8', newline='') as csvfile:
+            fieldnames = list(row_dict.keys())
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writerow(row_dict)
+
+    def scalar(self, t):
+        return t.item() if hasattr(t, 'item') else t
+
+    @classmethod
+    def create(cls, path, field_names):
+        with open(path, 'w', encoding='utf-8', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            row = ['Epoch #'] + field_names
+            writer.writerow(row)
+        return cls(path)
+
+
 
 class ObjectInstaller:
     def setup(self, session, instance, object_name=None, **kwargs):
@@ -158,13 +189,7 @@ class ObjectInstaller:
 class PreProcessorInstaller(ObjectInstaller):
     def setup(self, session, instance, object_name=None, **kwargs):
         dataset_name = instance.spec["fit"]
-        if '.' in dataset_name:
-            splitter_name, slice_name = dataset_name.split('.')
-            splitter = session.splits[splitter_name]
-            split = splitter.split(session.datasets[splitter.spec["dataset_name"]])
-            dataset = getattr(split, slice_name)
-        else:
-            dataset = session.datasets[dataset_name]
+        dataset = get_dataset(session, dataset_name)
         instance.fit(dataset)
 
 
@@ -193,19 +218,24 @@ class SessionInitializer:
             ('optimizers', parse.OptimizerLoader()),
             ('batch_adapters', parse.Loader()),
             ('losses', parse.LossLoader()),
-            ('metrics', parse.MetricLoader())
+            ('metrics', parse.MetricLoader()),
+            ('pipelines', parse.PipelineLoader())
         ]
 
         for section_name, loader in sections_with_loaders:
             installer = self.installers[section_name]
             self.load_section(session, spec, section_name, loader, installer)
 
-        session.stop_condition = parse.Loader().load(session, spec["train"]["stop_condition"])
-        session.device = torch.device(spec["train"].get("device", "cpu"))
+        self.load_stages(session, spec)
 
     def load_section(self, session, spec, section_name, loader, installer):
         section = self.load_init_section(session, spec, section_name, loader, installer)
         setattr(session, section_name, section)
+
+    def load_stages(self, session, spec):
+        stages_spec = spec["train"]["stages"]
+        stage_loader = parse.StageLoader()
+        session.stages = [stage_loader.load(session, stage) for stage in stages_spec]
 
     def load_init_section(self, session, spec, section_name, loader, installer):
         init_dict = spec["initialize"]

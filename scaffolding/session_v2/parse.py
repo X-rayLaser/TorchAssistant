@@ -155,27 +155,31 @@ class MetricLoader(Loader):
 
 class PipelineLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
-        dataset = session.datasets[pipeline_spec.ds_name]
+        train_dataset = get_dataset(session, pipeline_spec["train_dataset"])
+        val_dataset = get_dataset(session, pipeline_spec["val_dataset"])
         preprocessors = [session.preprocessors[name]
-                         for name in pipeline_spec.preprocessor_names]
+                         for name in pipeline_spec["preprocessor_names"]]
 
-        collator = session.collators[pipeline_spec.collator_name]
-        batch_size = pipeline_spec.batch_size
-        batch_adapter = session.batch_adapters[pipeline_spec.batch_adapter_name]
+        collator = session.collators[pipeline_spec["collator_name"]]
+        batch_size = pipeline_spec["batch_size"]
+        batch_adapter = session.batch_adapters[pipeline_spec["batch_adapter_name"]]
 
         neural_graph = self.parse_neural_graph(session, pipeline_spec['neural_graph'])
-        loss_fn = session.losses[pipeline_spec.loss_name]
-        metric_fns = [session.metrics[name] for name in pipeline_spec.metric_names]
+        loss_fn = session.losses[pipeline_spec["loss_name"]]
+        metric_fns = [session.metrics[name] for name in pipeline_spec["metric_names"]]
+        device = pipeline_spec.get("device", "cpu")
 
         return Pipeline(
-            dataset=dataset,
+            train_dataset=train_dataset,
+            val_dataset=val_dataset,
             preprocessors=preprocessors,
             collator=collator,
             batch_size=batch_size,
             batch_adapter=batch_adapter,
             neural_graph=neural_graph,
             loss_fn=loss_fn,
-            metric_fns=metric_fns
+            metric_fns=metric_fns,
+            device=device
         )
 
     def parse_neural_graph(self, session, graph_spec):
@@ -200,17 +204,32 @@ class PipelineLoader(Loader):
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
 
 
+class StageLoader(Loader):
+    def load(self, session, spec, object_name=None):
+        mode = spec.get("mode", "interleave")
+        pipelines = spec["pipelines"]
+        stop_condition_dict = spec.get("stop_condition")
+
+        pipelines = [session.pipelines[name] for name in pipelines]
+
+        stop_condition = Loader().load(session, stop_condition_dict)
+        return Stage(mode, pipelines, stop_condition)
+
+
 class Pipeline:
     def __init__(self, *,
-                 dataset,
+                 train_dataset,
+                 val_dataset,
                  preprocessors,
                  collator,
                  batch_size,
                  batch_adapter,
                  neural_graph,
                  loss_fn,
-                 metric_fns):
-        self.dataset = dataset
+                 metric_fns,
+                 device):
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
         self.preprocessors = preprocessors
         self.collator = collator
         self.batch_size = batch_size
@@ -218,6 +237,7 @@ class Pipeline:
         self.neural_graph = neural_graph
         self.loss_fn = loss_fn
         self.metric_fns = metric_fns
+        self.device = device
 
 
 class Node:
@@ -245,5 +265,22 @@ class Node:
         return self.predict(*args, inference_mode=inference_mode)
 
 
+class Stage:
+    def __init__(self, mode, pipelines, stop_condition):
+        self.mode = mode
+        self.pipelines = pipelines
+        self.stop_condition = stop_condition
+
+
+def get_dataset(session, dataset_name):
+    if '.' in dataset_name:
+        splitter_name, slice_name = dataset_name.split('.')
+        splitter = session.splits[splitter_name]
+        split = splitter.split(session.datasets[splitter.spec["dataset_name"]])
+        dataset = getattr(split, slice_name)
+    else:
+        dataset = session.datasets[dataset_name]
+    return dataset
+
+
 # todo: introduce Action and Definition abstractions and new syntax (list of actions and definitions)
-# todo:

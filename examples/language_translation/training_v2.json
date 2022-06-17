@@ -84,13 +84,11 @@
         "inputs": ["y_hat", "y"],
         "transform": "examples.language_translation.transforms.DecodeClassesTransform"
       }
-    }
-  },
-  "train": {
+    },
     "pipelines": {
       "encoder_decoder": {
-        "train_dataset_name": "my_split.train",
-        "val_dataset_name": "my_split.val",
+        "train_dataset": "my_split.train",
+        "val_dataset": "my_split.val",
         "preprocessor_names": ["french_encoder", "english_encoder"],
         "collator_name": "my_collator",
         "batch_size": 1,
@@ -107,12 +105,19 @@
           "optimizer_name": "decoder"
         }],
         "loss_name": "cross_entropy",
-        "metric_names": ["CER"]
+        "metric_names": ["CER"],
+        "device": "cpu"
       }
-    },
-    "stop_condition": {
-      "class": "scaffolding.stop_conditions.EpochsCompleted",
-      "kwargs": {"num_epochs": 20}
     }
+  },
+  "train": {
+    "stages": [{
+      "mode": "interleave",
+      "pipelines": ["encoder_decoder"],
+      "stop_condition": {
+        "class": "scaffolding.stop_conditions.EpochsCompleted",
+        "kwargs": {"num_epochs": 20}
+      }
+    }]
   }
 }
