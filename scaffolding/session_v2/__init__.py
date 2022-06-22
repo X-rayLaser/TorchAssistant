@@ -35,11 +35,59 @@ def save_as_json(d, save_path):
         f.write(json.dumps(d))
 
 
+class ProgressBar:
+    def __init__(self, stage_id, epochs_done, completed):
+        self.stage_id = stage_id
+        self.epochs_done = epochs_done
+        self.completed = completed
+
+    def asdict(self):
+        return self.__dict__
+
+
+class Progress:
+    def __init__(self, progress_bars):
+        self.progress_bars = progress_bars
+
+    @property
+    def epochs_done_total(self):
+        return sum(bar.epochs_done for bar in self.progress_bars)
+
+    def increment_progress(self):
+        stage_id = self.get_current_stage_id()
+        self.progress_bars[stage_id].epochs_done += 1
+        self.progress_bars[stage_id].completed = False
+
+    def mark_completed(self):
+        stage_id = self.get_current_stage_id()
+        self.progress_bars[stage_id].completed = True
+
+    def get_current_stage_id(self):
+        ids = [idx for idx, bar in enumerate(self.progress_bars) if not bar.completed]
+        if ids:
+            return ids[0]
+
+        raise StopTrainingError('All stages are completed')
+
+    def __getitem__(self, idx):
+        return self.progress_bars[idx]
+
+    def to_list(self):
+        return [bar.asdict() for bar in self.progress_bars]
+
+    def from_list(self, items):
+        self.progress_bars = [ProgressBar(**d) for d in items]
+
+
+class StopTrainingError(Exception):
+    pass
+
+
+# todo: rename to state view
 class State:
-    def __init__(self, models, optimizers, metrics=None, epochs_done=0):
+    def __init__(self, models, optimizers):
         self.models = models
         self.optimizers = optimizers
-        self.epochs_done = epochs_done
 
 
 class Session:
@@ -58,10 +106,10 @@ class Session:
 
         # tracks progress
         # todo: store stage number
-        self.epochs_done = 0
+        self.progress = Progress([])
 
     def initialize_state(self):
-        return State(models=self.models, optimizers=self.optimizers, epochs_done=self.epochs_done)
+        return State(models=self.models, optimizers=self.optimizers)
 
 
 class SessionSaver:
@@ -110,7 +158,7 @@ class SessionSaver:
         # todo: map locations when needed
         state = session.initialize_state()
 
-        checkpoint_dir = os.path.join(state_dir, str(state.epochs_done))
+        checkpoint_dir = os.path.join(state_dir, str(session.progress.epochs_done_total))
         os.makedirs(checkpoint_dir)
         save_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
 
@@ -118,12 +166,10 @@ class SessionSaver:
 
         optimizers_dict = {name: optimizer.state_dict() for name, optimizer in state.optimizers.items()}
 
-        progress_dict = dict(epochs_done=state.epochs_done)
-
         torch.save({
             'models': models_dict,
             'optimizers': optimizers_dict,
-            'progress': progress_dict
+            'progress': session.progress.to_list()
         }, save_path)
 
     def load_checkpoint(self, session, name):
@@ -141,7 +187,7 @@ class SessionSaver:
         for name, optimizer_state in checkpoint['optimizers'].items():
             state.optimizers[name].load_state_dict(optimizer_state)
 
-        session.epochs_done = checkpoint["progress"]["epochs_done"]
+        session.progress.from_list(checkpoint["progress"])
 
     def log_metrics(self, epoch, train_metrics, val_metrics):
         # todo: log metrics to csv file
@@ -179,7 +225,6 @@ class TrainingHistory:
             row = ['Epoch #'] + field_names
             writer.writerow(row)
         return cls(path)
-
 
 
 class ObjectInstaller:
@@ -229,6 +274,8 @@ class SessionInitializer:
 
         self.load_stages(session, spec)
 
+        self.initialize_progress(session)
+
     def load_section(self, session, spec, section_name, loader, installer):
         section = self.load_init_section(session, spec, section_name, loader, installer)
         setattr(session, section_name, section)
@@ -237,6 +284,10 @@ class SessionInitializer:
         stages_spec = spec["train"]["stages"]
         stage_loader = parse.StageLoader()
         session.stages = [stage_loader.load(session, stage) for stage in stages_spec]
+
+    def initialize_progress(self, session):
+        bars = [ProgressBar(idx, 0, completed=False) for idx in range(len(session.stages))]
+        session.progress = Progress(bars)
 
     def load_init_section(self, session, spec, section_name, loader, installer):
         init_dict = spec["initialize"]

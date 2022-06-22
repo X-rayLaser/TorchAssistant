@@ -116,7 +116,15 @@
       "pipelines": ["encoder_decoder"],
       "stop_condition": {
         "class": "scaffolding.stop_conditions.EpochsCompleted",
-        "kwargs": {"num_epochs": 20}
+        "kwargs": {"num_epochs": 7}
+      }
+    },
+    {
+      "mode": "interleave",
+      "pipelines": ["encoder_decoder"],
+      "stop_condition": {
+        "class": "scaffolding.stop_conditions.EpochsCompleted",
+        "kwargs": {"num_epochs": 3}
       }
     }]
   }

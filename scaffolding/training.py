@@ -3,10 +3,24 @@ from .utils import switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
 from .formatters import Formatter
 from scaffolding.utils import WrappedDataset
+from scaffolding.session_v2 import StopTrainingError
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=10):
-    stage = session.stages[0]
+    while True:
+        try:
+            stage_number = session.progress.get_current_stage_id()
+            print(f'Training stage {stage_number} in progress')
+            train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl)
+            print(f'Training stage {stage_number} is completed')
+        except StopTrainingError:
+            break
+
+    print("Training is completed")
+
+
+def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10):
+    stage = session.stages[stage_number]
     stop_condition = stage.stop_condition
     pipeline = stage.pipelines[0]
 
@@ -18,13 +32,9 @@ def train(session, log_metrics, save_checkpoint, stat_ivl=10):
 
     train_loader, test_loader = get_data_loaders(pipeline)
     formatter = Formatter()
-    start_epoch = session.epochs_done
+    start_epoch = session.progress.epochs_done_total + 1
 
     for epoch in range(start_epoch, start_epoch + 1000):
-        if stop_condition(epoch, []):
-            print("Stopping...")
-            break
-
         trainer = Trainer(train_loader, train_pipeline, pipeline.loss_fn)
         print_metrics = PrintMetrics(metrics, stat_ivl, epoch, formatter)
         trainer.add_callback(print_metrics)
@@ -40,7 +50,17 @@ def train(session, log_metrics, save_checkpoint, stat_ivl=10):
 
         print(f'\r{epoch_str} {train_metrics_str}; {val_metrics_str}')
 
+        session.progress.increment_progress()
+
+        should_stop = stop_condition(session.progress[stage_number].epochs_done, [])
+
+        if should_stop:
+            session.progress.mark_completed()
+
         save_checkpoint(epoch)
+
+        if should_stop:
+            break
 
 
 def get_data_loaders(pipeline):

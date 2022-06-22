@@ -27,7 +27,6 @@ if __name__ == '__main__':
         saver.log_metrics(epoch, train_metrics, val_metrics)
 
     def save_checkpoint(epoch):
-        session.epochs_done += 1
         saver.save_checkpoint(session)
 
     train(session, log_metrics=log_metrics, save_checkpoint=save_checkpoint)
