@@ -105,7 +105,9 @@
           "optimizer_name": "decoder"
         }],
         "loss_name": "cross_entropy",
+        "loss_display_name": "my loss",
         "metric_names": ["CER"],
+        "metric_display_names": ["encoder-decoder CER"],
         "device": "cpu"
       }
     }
@@ -116,12 +118,12 @@
       "pipelines": ["encoder_decoder"],
       "stop_condition": {
         "class": "scaffolding.stop_conditions.EpochsCompleted",
-        "kwargs": {"num_epochs": 7}
+        "kwargs": {"num_epochs": 2}
       }
     },
     {
       "mode": "interleave",
-      "pipelines": ["encoder_decoder"],
+      "pipelines": ["encoder_decoder", "encoder_decoder", "encoder_decoder"],
       "stop_condition": {
         "class": "scaffolding.stop_conditions.EpochsCompleted",
         "kwargs": {"num_epochs": 3}

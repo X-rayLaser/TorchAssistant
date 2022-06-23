@@ -25,7 +25,7 @@ class Formatter:
         progress = self.progress_bar.updated(iteration, num_iterations)
         epoch_str = self.format_epoch(epoch)
         # todo: show also time elapsed
-        return f'\r{epoch_str} {metrics_str} {progress} {iteration} / {num_iterations}'
+        return f'{epoch_str} {metrics_str} {progress} {iteration} / {num_iterations}'
 
 
 class ProgressBar:

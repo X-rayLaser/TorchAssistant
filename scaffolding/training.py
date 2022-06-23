@@ -24,34 +24,39 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
     stop_condition = stage.stop_condition
     pipeline = stage.pipelines[0]
 
-    train_pipeline = PredictionPipeline(pipeline.neural_graph, pipeline.device, pipeline.batch_adapter)
-
     metrics = session.metrics
 
     metrics['loss'] = pipeline.loss_fn
 
-    train_loader, test_loader = get_data_loaders(pipeline)
     formatter = Formatter()
     start_epoch = session.progress.epochs_done_total + 1
 
+    metric_dicts = [metrics] * len(stage.pipelines)
     for epoch in range(start_epoch, start_epoch + 1000):
-        trainer = Trainer(train_loader, train_pipeline, pipeline.loss_fn)
-        print_metrics = PrintMetrics(metrics, stat_ivl, epoch, formatter)
-        trainer.add_callback(print_metrics)
-        trainer.run_epoch()
+        print_metrics = PrintMetrics(metric_dicts, stat_ivl, epoch, formatter)
 
-        switch_to_evaluation_mode(train_pipeline)
+        for log_entries in interleave_training(stage.pipelines):
+            print_metrics(log_entries)
 
-        train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
-        log_metrics(epoch, train_metrics, val_metrics)
+        # todo: choose which datasets/split slices to use for evaluation and with which metrics
+
+        metric_strings = []
+        for pipeline in stage.pipelines:
+            train_metrics, val_metrics = evaluate_pipeline(session, pipeline)
+            train_metric_string = formatter.format_metrics(train_metrics, validation=False)
+            val_metric_string = formatter.format_metrics(val_metrics, validation=True)
+            metric_string = f'{train_metric_string}; {val_metric_string}'
+            metric_strings.append(metric_string)
+
+        #log_metrics(epoch, train_metrics, val_metrics)
         epoch_str = formatter.format_epoch(epoch)
-        train_metrics_str = formatter.format_metrics(train_metrics, validation=False)
-        val_metrics_str = formatter.format_metrics(val_metrics, validation=True)
 
-        print(f'\r{epoch_str} {train_metrics_str}; {val_metrics_str}')
+        final_metrics_string = '  |  '.join(metric_strings)
+        print(f'\r{epoch_str} {final_metrics_string}')
 
         session.progress.increment_progress()
 
+        # todo; more sophisticated stop condition that can look at number of iterations and more
         should_stop = stop_condition(session.progress[stage_number].epochs_done, [])
 
         if should_stop:
@@ -61,6 +66,74 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
         if should_stop:
             break
+
+
+def interleave_training(pipelines):
+    training_loops = []
+    for pipeline in pipelines:
+        train_pipeline = PredictionPipeline(
+            pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
+        )
+        train_loader, _ = get_data_loaders(pipeline)
+        training_loops.append(TrainingLoop(train_loader, train_pipeline, pipeline.loss_fn))
+
+    iterators = [iter(loop) for loop in training_loops]
+    while True:
+        try:
+            log_entries = [next(it) for it in iterators]
+            yield log_entries
+        except StopIteration:
+            break
+
+
+def evaluate_pipeline(session, pipeline):
+    train_loader, test_loader = get_data_loaders(pipeline)
+    train_pipeline = PredictionPipeline(
+        pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
+    )
+
+    metrics = session.metrics
+    metrics['loss'] = pipeline.loss_fn
+
+    switch_to_evaluation_mode(train_pipeline)
+
+    train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
+
+    return train_metrics, val_metrics
+
+
+def print_progress(log_entries):
+    pass
+
+
+class TrainingLoop:
+    def __init__(self, data_loader, prediction_pipeline, loss_fn):
+        self.data_loader = data_loader
+        self.prediction_pipeline = prediction_pipeline
+        self.loss_fn = loss_fn
+
+    def __iter__(self):
+        switch_to_train_mode(self.prediction_pipeline)
+        num_iterations = len(self.data_loader)
+
+        for i, batch in enumerate(self.data_loader):
+            inputs, targets = self.prediction_pipeline.adapt_batch(batch)
+            loss, outputs = self.train_on_batch(inputs, targets)
+            yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, loss)
+
+    def train_on_batch(self, inputs, targets):
+        for node in self.prediction_pipeline:
+            node.optimizer.zero_grad()
+
+        outputs = self.prediction_pipeline(inputs, inference_mode=False)
+
+        loss = self.loss_fn(outputs, targets)
+        loss.backward()
+
+        for node in self.prediction_pipeline:
+            node.optimizer.step()
+
+        return loss, outputs
 
 
 def get_data_loaders(pipeline):
@@ -80,6 +153,28 @@ def get_data_loaders(pipeline):
 
 
 class PrintMetrics:
+    def __init__(self, metric_dicts, ivl, epoch, format_fn):
+        self.interval = ivl
+        self.formatters = []
+
+        for metrics in metric_dicts:
+            self.formatters.append(
+                RunningMetricsSetFormatter(metrics, ivl, epoch, format_fn)
+            )
+
+    def __call__(self, log_entries):
+        columns = [self.formatters[i](entry) for i, entry in enumerate(log_entries)]
+
+        iteration = log_entries[0].iteration
+
+        if iteration % self.interval == self.interval - 1:
+            s = '  |  '.join(columns)
+            print(f'\r{s}', end='')
+            for formatter in self.formatters:
+                formatter.reset()
+
+
+class RunningMetricsSetFormatter:
     def __init__(self, metrics, ivl, epoch, format_fn):
         self.metrics = metrics
         self.interval = ivl
@@ -96,15 +191,14 @@ class PrintMetrics:
         update_running_metrics(self.running_metrics, self.metrics,
                                iteration_log.outputs, iteration_log.targets)
 
-        if iteration % self.interval == self.interval - 1:
-            s = self.format_fn(self.epoch, iteration + 1, iteration_log.num_iterations,
-                               self.metrics, self.running_loss, self.running_metrics)
-            print(s, end='')
+        return self.format_fn(self.epoch, iteration + 1, iteration_log.num_iterations,
+                              self.metrics, self.running_loss, self.running_metrics)
 
-            for metric_avg in self.running_metrics.values():
-                metric_avg.reset()
+    def reset(self):
+        for metric_avg in self.running_metrics.values():
+            metric_avg.reset()
 
-            self.running_loss.reset()
+        self.running_loss.reset()
 
 
 def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
