@@ -23,13 +23,10 @@ if __name__ == '__main__':
     saver = SessionSaver(path)
     session = saver.load_from_latest_checkpoint()
 
-    def log_metrics(epoch, train_metrics, val_metrics):
-        saver.log_metrics(epoch, train_metrics, val_metrics)
-
     def save_checkpoint(epoch):
         saver.save_checkpoint(session)
 
-    train(session, log_metrics=log_metrics, save_checkpoint=save_checkpoint)
+    train(session, log_metrics=saver.log_metrics, save_checkpoint=save_checkpoint)
 
 
 # todo: refactor code more (achieve better cohesion, loose coupling)

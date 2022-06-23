@@ -121,13 +121,14 @@ class SessionSaver:
         self.spec_path = os.path.join(session_dir, 'spec.json')
         self.static_dir = os.path.join(session_dir, 'static')
         self.checkpoints_dir = os.path.join(session_dir, 'checkpoints')
-        self.history_path = os.path.join(session_dir, 'metrics')
+        self.history_dir = os.path.join(session_dir, 'metrics')
         self.extra_path = os.path.join(self.static_dir, 'extra_params.json')
 
     def initial_save(self, session, spec):
         os.makedirs(self.session_dir)
         os.makedirs(self.static_dir)
         os.makedirs(self.checkpoints_dir)
+        os.makedirs(self.history_dir)
 
         self._save_spec(spec)
         self._save_static(session)
@@ -189,9 +190,10 @@ class SessionSaver:
 
         session.progress.from_list(checkpoint["progress"])
 
-    def log_metrics(self, epoch, train_metrics, val_metrics):
+    def log_metrics(self, stage_number, epoch, train_metrics, val_metrics):
         # todo: log metrics to csv file
-        history = TrainingHistory(self.history_path)
+        history_path = os.path.join(self.history_dir, f'{stage_number}.csv')
+        history = TrainingHistory(history_path)
         history.add_entry(epoch, train_metrics, val_metrics)
 
 
@@ -210,9 +212,13 @@ class TrainingHistory:
         row_dict = {'epoch': epoch}
         row_dict.update({k: self.scalar(v) for k, v in all_metrics.items()})
 
+        field_names = list(row_dict.keys())
+
+        if not os.path.exists(self.file_path):
+            self.create(self.file_path, field_names)
+
         with open(self.file_path, 'a', encoding='utf-8', newline='') as csvfile:
-            fieldnames = list(row_dict.keys())
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer = csv.DictWriter(csvfile, fieldnames=field_names)
             writer.writerow(row_dict)
 
     def scalar(self, t):
@@ -222,8 +228,7 @@ class TrainingHistory:
     def create(cls, path, field_names):
         with open(path, 'w', encoding='utf-8', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            row = ['Epoch #'] + field_names
-            writer.writerow(row)
+            writer.writerow(field_names)
         return cls(path)
 
 

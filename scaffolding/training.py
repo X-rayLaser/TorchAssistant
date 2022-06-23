@@ -36,17 +36,18 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
         # todo: choose which datasets/split slices to use for evaluation and with which metrics
 
         metric_strings = []
-        all_train_metrics = []
-        all_val_metrics = []
+        all_train_metrics = {}
+        all_val_metrics = {}
         for pipeline in stage.pipelines:
             train_metrics, val_metrics = evaluate_pipeline(pipeline)
-            #print(train_metrics, val_metrics)
+            all_train_metrics.update(train_metrics)
+            all_val_metrics.update(val_metrics)
             train_metric_string = formatter.format_metrics(train_metrics, validation=False)
             val_metric_string = formatter.format_metrics(val_metrics, validation=True)
             metric_string = f'{train_metric_string}; {val_metric_string}'
             metric_strings.append(metric_string)
 
-        #log_metrics(epoch, train_metrics, val_metrics)
+        log_metrics(stage_number, epoch, all_train_metrics, all_val_metrics)
         epoch_str = formatter.format_epoch(epoch)
 
         final_metrics_string = '  |  '.join(metric_strings)
@@ -204,8 +205,9 @@ class RunningMetricsSetFormatter:
     def __call__(self, iteration_log):
         iteration = iteration_log.iteration
 
-        update_running_metrics(self.running_metrics, self.metrics,
-                               iteration_log.outputs, iteration_log.targets)
+        with torch.no_grad():
+            update_running_metrics(self.running_metrics, self.metrics,
+                                   iteration_log.outputs, iteration_log.targets)
 
         return self.format_fn(self.epoch, iteration + 1, iteration_log.num_iterations,
                               self.metrics, self.running_metrics)
