@@ -22,16 +22,11 @@ def train(session, log_metrics, save_checkpoint, stat_ivl=10):
 def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10):
     stage = session.stages[stage_number]
     stop_condition = stage.stop_condition
-    pipeline = stage.pipelines[0]
-
-    metrics = session.metrics
-
-    metrics['loss'] = pipeline.loss_fn
 
     formatter = Formatter()
     start_epoch = session.progress.epochs_done_total + 1
 
-    metric_dicts = [metrics] * len(stage.pipelines)
+    metric_dicts = [pipeline.metric_fns for pipeline in stage.pipelines]
     for epoch in range(start_epoch, start_epoch + 1000):
         print_metrics = PrintMetrics(metric_dicts, stat_ivl, epoch, formatter)
 
@@ -92,7 +87,7 @@ def evaluate_pipeline(session, pipeline):
         pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
     )
 
-    metrics = session.metrics
+    metrics = pipeline.metric_fns
     metrics['loss'] = pipeline.loss_fn
 
     switch_to_evaluation_mode(train_pipeline)
@@ -156,7 +151,6 @@ class PrintMetrics:
     def __init__(self, metric_dicts, ivl, epoch, format_fn):
         self.interval = ivl
         self.formatters = []
-
         for metrics in metric_dicts:
             self.formatters.append(
                 RunningMetricsSetFormatter(metrics, ivl, epoch, format_fn)
@@ -224,47 +218,7 @@ def evaluate(val_pipeline, dataloader, metrics, num_batches):
 
 def update_running_metrics(moving_averages, metrics, outputs, targets):
     for metric_name, metric in metrics.items():
-        moving_averages[metric_name].update(metric(outputs, targets))
-
-
-class Trainer:
-    def __init__(self, data_loader, prediction_pipeline, loss_fn):
-        self.data_loader = data_loader
-        self.prediction_pipeline = prediction_pipeline
-        self.loss_fn = loss_fn
-        self.callbacks = []
-
-    def add_callback(self, cb):
-        self.callbacks.append(cb)
-
-    def run_epoch(self):
-        switch_to_train_mode(self.prediction_pipeline)
-
-        num_iterations = len(self.data_loader)
-        for i, batch in enumerate(self.data_loader):
-            inputs, targets = self.prediction_pipeline.adapt_batch(batch)
-            loss, outputs = self.train_on_batch(inputs, targets)
-            self.invoke_callbacks(
-                IterationLogEntry(i, num_iterations, inputs, outputs, targets, loss)
-            )
-
-    def invoke_callbacks(self, log_entry):
-        for cb in self.callbacks:
-            cb(log_entry)
-
-    def train_on_batch(self, inputs, targets):
-        for node in self.prediction_pipeline:
-            node.optimizer.zero_grad()
-
-        outputs = self.prediction_pipeline(inputs, inference_mode=False)
-
-        loss = self.loss_fn(outputs, targets)
-        loss.backward()
-
-        for node in self.prediction_pipeline:
-            node.optimizer.step()
-
-        return loss, outputs
+        moving_averages[metric.name].update(metric(outputs, targets))
 
 
 class IterationLogEntry:

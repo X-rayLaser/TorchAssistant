@@ -34,6 +34,9 @@ class Metric:
         self.transform_fn = transform_fn
         self.device = device
 
+    def rename_and_clone(self, new_name):
+        return self.__class__(new_name, self.metric_fn, self.metric_args, self.transform_fn, self.device)
+
     def __call__(self, outputs, targets):
         """
 

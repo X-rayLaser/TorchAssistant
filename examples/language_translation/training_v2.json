@@ -105,9 +105,32 @@
           "optimizer_name": "decoder"
         }],
         "loss_name": "cross_entropy",
-        "loss_display_name": "my loss",
         "metric_names": ["CER"],
-        "metric_display_names": ["encoder-decoder CER"],
+        "metric_display_names": ["CER"],
+        "device": "cpu"
+      },
+      "foo": {
+        "train_dataset": "my_split.train",
+        "val_dataset": "my_split.val",
+        "preprocessor_names": ["french_encoder", "english_encoder"],
+        "collator_name": "my_collator",
+        "batch_size": 1,
+        "batch_adapter_name": "adapter",
+        "neural_graph": [{
+          "model_name": "encoder",
+          "inputs": ["x", "h"],
+          "outputs": ["outputs", "h_e"],
+          "optimizer_name": "encoder"
+        },{
+          "model_name": "decoder",
+          "inputs": ["y_shifted", "h_e"],
+          "outputs": ["y_hat", "h_d"],
+          "optimizer_name": "decoder"
+        }],
+        "loss_name": "cross_entropy",
+        "loss_display_name": "foo loss",
+        "metric_names": ["CER"],
+        "metric_display_names": ["foo CER"],
         "device": "cpu"
       }
     }
@@ -123,7 +146,7 @@
     },
     {
       "mode": "interleave",
-      "pipelines": ["encoder_decoder", "encoder_decoder", "encoder_decoder"],
+      "pipelines": ["encoder_decoder", "foo"],
       "stop_condition": {
         "class": "scaffolding.stop_conditions.EpochsCompleted",
         "kwargs": {"num_epochs": 3}

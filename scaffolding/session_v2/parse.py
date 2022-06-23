@@ -166,7 +166,8 @@ class PipelineLoader(Loader):
 
         neural_graph = self.parse_neural_graph(session, pipeline_spec['neural_graph'])
         loss_fn = session.losses[pipeline_spec["loss_name"]]
-        metric_fns = [session.metrics[name] for name in pipeline_spec["metric_names"]]
+
+        metric_fns = self.parse_metrics(session, pipeline_spec)
         device = pipeline_spec.get("device", "cpu")
 
         return Pipeline(
@@ -181,6 +182,12 @@ class PipelineLoader(Loader):
             metric_fns=metric_fns,
             device=device
         )
+
+    def parse_metrics(self, session, pipeline_spec):
+        display_names = pipeline_spec.get("metric_display_names", pipeline_spec["metric_names"])
+        names = zip(pipeline_spec["metric_names"], display_names)
+        return {display_name: session.metrics[name].rename_and_clone(display_name)
+                for name, display_name in names}
 
     def parse_neural_graph(self, session, graph_spec):
         nodes = []
