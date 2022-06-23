@@ -105,6 +105,7 @@
           "optimizer_name": "decoder"
         }],
         "loss_name": "cross_entropy",
+        "loss_display_name": "ed_loss",
         "metric_names": ["CER"],
         "metric_display_names": ["CER"],
         "device": "cpu"
@@ -128,9 +129,9 @@
           "optimizer_name": "decoder"
         }],
         "loss_name": "cross_entropy",
-        "loss_display_name": "foo loss",
+        "loss_display_name": "foo_loss",
         "metric_names": ["CER"],
-        "metric_display_names": ["foo CER"],
+        "metric_display_names": ["foo_CER"],
         "device": "cpu"
       }
     }

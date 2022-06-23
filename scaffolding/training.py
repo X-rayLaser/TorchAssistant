@@ -36,8 +36,11 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
         # todo: choose which datasets/split slices to use for evaluation and with which metrics
 
         metric_strings = []
+        all_train_metrics = []
+        all_val_metrics = []
         for pipeline in stage.pipelines:
-            train_metrics, val_metrics = evaluate_pipeline(session, pipeline)
+            train_metrics, val_metrics = evaluate_pipeline(pipeline)
+            #print(train_metrics, val_metrics)
             train_metric_string = formatter.format_metrics(train_metrics, validation=False)
             val_metric_string = formatter.format_metrics(val_metrics, validation=True)
             metric_string = f'{train_metric_string}; {val_metric_string}'
@@ -81,14 +84,13 @@ def interleave_training(pipelines):
             break
 
 
-def evaluate_pipeline(session, pipeline):
+def evaluate_pipeline(pipeline):
     train_loader, test_loader = get_data_loaders(pipeline)
     train_pipeline = PredictionPipeline(
         pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
     )
 
     metrics = pipeline.metric_fns
-    metrics['loss'] = pipeline.loss_fn
 
     switch_to_evaluation_mode(train_pipeline)
 
@@ -97,8 +99,30 @@ def evaluate_pipeline(session, pipeline):
     return train_metrics, val_metrics
 
 
-def print_progress(log_entries):
-    pass
+def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
+    train_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)
+    val_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
+    return train_metrics, val_metrics
+
+
+def evaluate(val_pipeline, dataloader, metrics, num_batches):
+    moving_averages = {metric.name: MovingAverage() for _, metric in metrics.items()}
+
+    with torch.no_grad():
+        for i, batch in enumerate(dataloader):
+            if i >= num_batches:
+                break
+
+            inputs, targets = val_pipeline.adapt_batch(batch)
+            all_outputs = val_pipeline(inputs, inference_mode=False)
+            update_running_metrics(moving_averages, metrics, all_outputs, targets)
+
+    return {metric_name: avg.value for metric_name, avg in moving_averages.items()}
+
+
+def update_running_metrics(moving_averages, metrics, outputs, targets):
+    for metric_name, metric in metrics.items():
+        moving_averages[metric.name].update(metric(outputs, targets))
 
 
 class TrainingLoop:
@@ -175,50 +199,20 @@ class RunningMetricsSetFormatter:
         self.epoch = epoch
         self.format_fn = format_fn
 
-        self.running_loss = MovingAverage()
         self.running_metrics = {name: MovingAverage() for name in metrics}
 
     def __call__(self, iteration_log):
         iteration = iteration_log.iteration
 
-        self.running_loss.update(iteration_log.loss.item())
         update_running_metrics(self.running_metrics, self.metrics,
                                iteration_log.outputs, iteration_log.targets)
 
         return self.format_fn(self.epoch, iteration + 1, iteration_log.num_iterations,
-                              self.metrics, self.running_loss, self.running_metrics)
+                              self.metrics, self.running_metrics)
 
     def reset(self):
         for metric_avg in self.running_metrics.values():
             metric_avg.reset()
-
-        self.running_loss.reset()
-
-
-def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
-    train_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)
-    val_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
-    return train_metrics, val_metrics
-
-
-def evaluate(val_pipeline, dataloader, metrics, num_batches):
-    moving_averages = {metric_name: MovingAverage() for metric_name in metrics}
-
-    with torch.no_grad():
-        for i, batch in enumerate(dataloader):
-            if i >= num_batches:
-                break
-
-            inputs, targets = val_pipeline.adapt_batch(batch)
-            all_outputs = val_pipeline(inputs, inference_mode=False)
-            update_running_metrics(moving_averages, metrics, all_outputs, targets)
-
-    return {metric_name: avg.value for metric_name, avg in moving_averages.items()}
-
-
-def update_running_metrics(moving_averages, metrics, outputs, targets):
-    for metric_name, metric in metrics.items():
-        moving_averages[metric.name].update(metric(outputs, targets))
 
 
 class IterationLogEntry:

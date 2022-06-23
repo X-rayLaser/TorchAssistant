@@ -165,9 +165,17 @@ class PipelineLoader(Loader):
         batch_adapter = session.batch_adapters[pipeline_spec["batch_adapter_name"]]
 
         neural_graph = self.parse_neural_graph(session, pipeline_spec['neural_graph'])
-        loss_fn = session.losses[pipeline_spec["loss_name"]]
+
+        loss_name = pipeline_spec["loss_name"]
+        loss_fn = session.losses[loss_name]
 
         metric_fns = self.parse_metrics(session, pipeline_spec)
+
+        if 'loss_display_name' in pipeline_spec:
+            loss_display_name = pipeline_spec.get('loss_display_name', loss_name)
+            loss_fn = session.losses[loss_name].rename_and_clone(loss_display_name)
+            metric_fns[loss_display_name] = loss_fn
+
         device = pipeline_spec.get("device", "cpu")
 
         return Pipeline(
