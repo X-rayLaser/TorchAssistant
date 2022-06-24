@@ -2,7 +2,6 @@ import argparse
 import json
 
 from scaffolding.training import evaluate, evaluate_pipeline
-from scaffolding import parse
 from scaffolding.session_v2 import SessionSaver, load_json
 from scaffolding.session_v2.parse import PipelineLoader
 from scaffolding.formatters import Formatter
