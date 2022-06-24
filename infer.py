@@ -3,7 +3,7 @@ from scaffolding.utils import instantiate_class
 import torch
 from train import load_config
 from evaluate import load_json, override_pipelines
-from scaffolding.session_v2 import SessionSaver
+from scaffolding.session import SessionSaver
 from scaffolding.training import PredictionPipeline
 from scaffolding.utils import WrappedDataset
 

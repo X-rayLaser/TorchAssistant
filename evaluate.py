@@ -2,8 +2,8 @@ import argparse
 import json
 
 from scaffolding.training import evaluate, evaluate_pipeline
-from scaffolding.session_v2 import SessionSaver, load_json
-from scaffolding.session_v2.parse import PipelineLoader
+from scaffolding.session import SessionSaver, load_json
+from scaffolding.session.parse import PipelineLoader
 from scaffolding.formatters import Formatter
 
 

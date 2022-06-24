@@ -358,8 +358,3 @@ class SectionPersistence:
 
     def _build_save_path(self, section_name):
         return os.path.join(self.static_dir, f'{section_name}.json')
-
-
-# todo: when creating session: 1) parse objects and instantiate them; 2) configure them; 3) use
-#       when restoring session: 1) parse objects and instantiate them; 2) load state; 3) use
-# 3 sets of subclasses: builders (or parsers), configurators, state loaders

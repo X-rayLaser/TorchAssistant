@@ -4,7 +4,7 @@ import os
 
 #from scaffolding.session import TrainingSession, ConfigParser, SessionBuilder, CheckpointKeeper
 #from scaffolding import parse
-from scaffolding.session_v2 import create_and_save_session
+from scaffolding.session import create_and_save_session
 
 
 def load_config(path):

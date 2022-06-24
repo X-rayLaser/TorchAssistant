@@ -1,7 +1,7 @@
 import argparse
 import json
 from scaffolding.training import train
-from scaffolding.session_v2 import SessionSaver
+from scaffolding.session import SessionSaver
 
 
 def load_config(path):

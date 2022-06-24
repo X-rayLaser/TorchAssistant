@@ -3,7 +3,7 @@ from .utils import switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
 from .formatters import Formatter
 from scaffolding.utils import WrappedDataset
-from scaffolding.session_v2 import StopTrainingError
+from scaffolding.session import StopTrainingError
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=10):
