@@ -1,5 +1,5 @@
 import unittest
-from scaffolding.utils import MultiSplitter, BadSplitError
+from scaffolding.data_splitters import MultiSplitter, BadSplitError
 
 
 class MultiSplitterTests(unittest.TestCase):

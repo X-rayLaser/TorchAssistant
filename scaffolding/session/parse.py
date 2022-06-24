@@ -5,7 +5,8 @@ from random import shuffle
 import torch
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity, MultiSplitter
+from scaffolding.utils import instantiate_class, import_function, import_entity
+from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 
 
