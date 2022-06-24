@@ -1,33 +1,32 @@
 {
-  "pipeline": {
-    "checkpoints_dir": "pretrained",
-    "data": {
-      "input_adapter": {
-        "class": "examples.language_translation.adapters.InputAdapter"
-      }
-    },
-    "model": [
-      {
-        "name": "encoder",
-        "inputs": ["x", "h"],
-        "outputs": [
-          "outputs", "h_e"
-        ]
-      }, {
-        "name": "decoder",
-        "inputs": ["sos", "h_e"],
-        "outputs": ["y_hat"]
-      }],
+  "session_dir": "pretrained",
+  "input_adapter": {
+    "class": "examples.language_translation.adapters.InputAdapter"
+  },
+  "pipelines": {
+    "encoder_decoder": {
       "batch_adapter": {
         "class": "examples.language_translation.adapters.InferenceAdapter",
         "kwargs": {"hidden_size": 32}
       },
-    "results": ["y_hat"],
-    "post_processor": {
-      "class": "examples.language_translation.postprocessors.PostProcessor"
-    },
-    "output_device": {
-      "class": "examples.language_translation.output_devices.Printer"
+      "neural_graph": [{
+        "model_name": "encoder",
+        "inputs": ["x", "h"],
+        "outputs": ["outputs", "h_e"],
+        "optimizer_name": "encoder"
+      },{
+        "model_name": "decoder",
+        "inputs": ["sos", "h_e"],
+        "outputs": ["y_hat"],
+        "optimizer_name": "decoder"
+      }]
     }
+  },
+  "results": ["y_hat"],
+  "post_processor": {
+    "class": "examples.language_translation.postprocessors.PostProcessor"
+  },
+  "output_device": {
+    "class": "examples.language_translation.output_devices.Printer"
   }
 }

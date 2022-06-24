@@ -162,7 +162,10 @@ class PipelineLoader(Loader):
 
         collator = session.collators[pipeline_spec["collator_name"]]
         batch_size = pipeline_spec["batch_size"]
-        batch_adapter = session.batch_adapters[pipeline_spec["batch_adapter_name"]]
+        if "batch_adapter" in pipeline_spec:
+            batch_adapter = Loader().load(session, pipeline_spec["batch_adapter"])
+        else:
+            batch_adapter = session.batch_adapters[pipeline_spec["batch_adapter_name"]]
 
         neural_graph = self.parse_neural_graph(session, pipeline_spec['neural_graph'])
 

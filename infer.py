@@ -1,23 +1,25 @@
 import argparse
 from scaffolding.utils import instantiate_class
-from scaffolding.parse import build_generic_serializable_instance
 import torch
 from train import load_config
-from scaffolding.session import TrainingSession
+from evaluate import load_json, override_pipelines
+from scaffolding.session_v2 import SessionSaver
+from scaffolding.training import PredictionPipeline
+from scaffolding.utils import WrappedDataset
 
 
 def parse_input_adapter(config_dict):
-    adapter_dict = config_dict["data"]["input_adapter"]
+    adapter_dict = config_dict["input_adapter"]
 
     return instantiate_class(
         adapter_dict["class"], *adapter_dict.get("args", []), **adapter_dict.get("kwargs", {})
     )
 
 
-def parse_post_processor(config_dict):
+def parse_post_processor(pipeline, config_dict):
     post_processor_dict = config_dict["post_processor"]
     # todo: consider to pass dynamic_kwargs instead of data pipeline instance
-    post_processor_args = [data_pipeline] + post_processor_dict.get("args", [])
+    post_processor_args = [pipeline] + post_processor_dict.get("args", [])
     return instantiate_class(post_processor_dict["class"],
                              *post_processor_args,
                              **post_processor_dict.get("kwargs", {}))
@@ -30,16 +32,13 @@ def parse_output_device(config_dict):
     )
 
 
-def override_from_config(prediction_pipeline, config):
-    # todo: should be able to override device
+def process_input(pipeline, input_adapter, input_string):
+    ds = [input_adapter(input_string)]
 
-    for i, node in enumerate(prediction_pipeline.model):
-        node.inputs = config["model"][i]["inputs"]
-        node.outputs = config["model"][i]["outputs"]
+    if pipeline.preprocessors:
+        ds = WrappedDataset(ds, pipeline.preprocessors)
 
-    batch_adapter_config = config.get("batch_adapter")
-    if batch_adapter_config:
-        prediction_pipeline.batch_adapter = build_generic_serializable_instance(batch_adapter_config)
+    return pipeline.collator.collate_inputs(ds[0])
 
 
 if __name__ == '__main__':
@@ -54,27 +53,30 @@ if __name__ == '__main__':
     input_string = cmd_args.input_string
 
     config = load_config(path)
-    config = config["pipeline"]
-    pretrained_dir = config["checkpoints_dir"]
 
-    session = TrainingSession(pretrained_dir)
+    session_dir = config["session_dir"]
 
-    data_pipeline = session.data_pipeline
+    saver = SessionSaver(session_dir)
+    session = saver.load_from_latest_checkpoint()
+    old_spec = load_json(saver.spec_path)
+    new_pipelines_spec = config["pipelines"]
+    pipelines = override_pipelines(session, old_spec, new_pipelines_spec)
 
-    batch_adapter = session.batch_adapter
+    pipeline = pipelines[0]
 
-    prediction_pipeline = session.restore_from_last_checkpoint(inference_mode=True)
-    override_from_config(prediction_pipeline, config)
+    prediction_pipeline = PredictionPipeline(
+        pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
+    )
 
     input_adapter = parse_input_adapter(config)
-    post_processor = parse_post_processor(config)
+    post_processor = parse_post_processor(pipeline, config)
     output_device = parse_output_device(config)
 
     outputs_keys = config["results"]
 
     print('Running inference on: ', input_string)
 
-    batch = data_pipeline.process_raw_input(input_string, input_adapter)
+    batch = process_input(pipeline, input_adapter, input_string)
 
     with torch.no_grad():
         inputs, _ = prediction_pipeline.adapt_batch(batch)

@@ -1,4 +1,5 @@
 {
+  "session_dir": "pretrained",
   "pipeline": {
     "checkpoints_dir": "pretrained",
     "data": {

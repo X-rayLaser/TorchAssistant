@@ -15,10 +15,8 @@ def load_config(path):
     return json.loads(s)
 
 
-def override_pipelines(session, old_spec):
+def override_pipelines(session, old_spec, new_pipelines_spec):
     pipeline_loader = PipelineLoader()
-
-    new_pipelines_spec = config["pipelines"]
 
     old_pipelines_spec = old_spec["initialize"]["pipelines"]
 
@@ -63,5 +61,6 @@ if __name__ == '__main__':
     session = saver.load_from_latest_checkpoint()
     old_spec = load_json(saver.spec_path)
 
-    pipelines = override_pipelines(session, old_spec)
+    new_pipelines_spec = config["pipelines"]
+    pipelines = override_pipelines(session, old_spec, new_pipelines_spec)
     print_metrics(pipelines, Formatter())

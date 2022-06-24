@@ -1,6 +1,6 @@
 class PostProcessor:
-    def __init__(self, data_pipeline, *args, **kwargs):
-        self.decoder = data_pipeline.preprocessors[1]
+    def __init__(self, pipeline, *args, **kwargs):
+        self.decoder = pipeline.preprocessors[1]
 
     def __call__(self, predictions_dict):
         return {k: self.to_text(v) for k, v in predictions_dict.items()}
