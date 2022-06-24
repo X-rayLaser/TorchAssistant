@@ -47,11 +47,12 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
             metric_string = f'{train_metric_string}; {val_metric_string}'
             metric_strings.append(metric_string)
 
-        log_metrics(stage_number, epoch, all_train_metrics, all_val_metrics)
         epoch_str = formatter.format_epoch(epoch)
 
         final_metrics_string = '  |  '.join(metric_strings)
         print(f'\r{epoch_str} {final_metrics_string}')
+
+        log_metrics(stage_number, epoch, all_train_metrics, all_val_metrics)
 
         session.progress.increment_progress()
 

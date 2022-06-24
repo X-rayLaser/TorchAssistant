@@ -1,37 +1,15 @@
 {
-  "pipeline": {
-    "training": {
-      "checkpoints_dir": "pretrained",
-      "batch_adapter": {
-        "class": "examples.language_translation.adapters.BatchAdapter",
-        "kwargs": {"hidden_size": 32}
-      },
-      "loss": {
-        "class": "CrossEntropyLoss",
-        "kwargs": {
-          "reduction": "sum"
-        },
-        "inputs": ["y_hat", "y"],
-        "transform": "examples.language_translation.transforms.transform"
-      },
-      "metrics": {
-        "loss": {
-          "inputs": ["y_hat", "y"],
-          "transform": "examples.language_translation.transforms.transform"
-        },
-        "token_counter": {
-          "inputs": ["y_hat"],
-          "transform": "examples.language_translation.transforms.reverse_onehot"
-        },
-        "CharErrorRate": {
-          "inputs": ["y_hat", "y"],
-          "transform": "examples.language_translation.transforms.DecodeClassesTransform"
-        },
-        "WordErrorRate": {
-          "inputs": ["y_hat", "y"],
-          "transform": "examples.language_translation.transforms.DecodeClassesTransform"
-        }
-      }
+  "session_dir": "pretrained",
+  "pipelines": {
+    "encoder_decoder": {
+      "train_dataset": "my_split.train",
+      "val_dataset": "my_split.val",
+      "batch_adapter_name": "adapter",
+      "loss_name": "cross_entropy",
+      "loss_display_name": "encoder_decoder_loss",
+      "metric_names": ["CER"],
+      "metric_display_names": ["encoder_decoder_CER"],
+      "device": "cpu"
     }
   }
 }

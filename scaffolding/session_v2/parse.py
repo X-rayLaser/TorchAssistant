@@ -173,8 +173,7 @@ class PipelineLoader(Loader):
 
         if 'loss_display_name' in pipeline_spec:
             loss_display_name = pipeline_spec.get('loss_display_name', loss_name)
-            loss_fn = session.losses[loss_name].rename_and_clone(loss_display_name)
-            metric_fns[loss_display_name] = loss_fn
+            metric_fns[loss_display_name] = loss_fn.rename_and_clone(loss_display_name)
 
         device = pipeline_spec.get("device", "cpu")
 

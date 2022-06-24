@@ -1,16 +1,48 @@
 import argparse
 import json
 
-from scaffolding.training import evaluate
+from scaffolding.training import evaluate, evaluate_pipeline
 from scaffolding import parse
-from scaffolding.session import TrainingSession
+from scaffolding.session_v2 import SessionSaver, load_json
+from scaffolding.session_v2.parse import PipelineLoader
+from scaffolding.formatters import Formatter
 
 
 def load_config(path):
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         s = f.read()
 
     return json.loads(s)
+
+
+def override_pipelines(session, old_spec):
+    pipeline_loader = PipelineLoader()
+
+    new_pipelines_spec = config["pipelines"]
+
+    old_pipelines_spec = old_spec["initialize"]["pipelines"]
+
+    pipeline_spec = {}
+    for name, override_options in new_pipelines_spec.items():
+        pipeline_spec[name] = old_pipelines_spec[name]
+        pipeline_spec[name].update(override_options)
+
+    return [pipeline_loader.load(session, options)
+            for _, options in pipeline_spec.items()]
+
+
+def print_metrics(pipelines, formatter):
+    metric_strings = []
+
+    for pipeline in pipelines:
+        train_metrics, val_metrics = evaluate_pipeline(pipeline)
+        train_metric_string = formatter.format_metrics(train_metrics, validation=False)
+        val_metric_string = formatter.format_metrics(val_metrics, validation=True)
+        metric_string = f'{train_metric_string}; {val_metric_string}'
+        metric_strings.append(metric_string)
+
+    final_metrics_string = '  |  '.join(metric_strings)
+    print(f'\r{final_metrics_string}')
 
 
 if __name__ == '__main__':
@@ -24,36 +56,12 @@ if __name__ == '__main__':
     path = cmd_args.config
 
     config = load_config(path)
-    config = config["pipeline"]
 
-    pretrained_dir = parse.parse_checkpoint_dir(config)
+    session_dir = config["session_dir"]
 
-    session = TrainingSession(pretrained_dir)
+    saver = SessionSaver(session_dir)
+    session = saver.load_from_latest_checkpoint()
+    old_spec = load_json(saver.spec_path)
 
-    data_pipeline = session.data_pipeline
-    prediction_pipeline = session.restore_from_last_checkpoint()
-    loss_fn = session.criterion
-    metrics = session.metrics
-
-    # overrides from config
-    if "loss" in config["training"]:
-        loss_fn = parse.parse_loss(config["training"]["loss"], session.device)
-
-    if "metrics" in config["training"]:
-        metrics = parse.parse_metrics(config["training"]["metrics"], data_pipeline, session.device)
-
-    train_loader, test_loader = data_pipeline.get_data_loaders()
-
-    if 'loss' in metrics:
-        metrics['loss'] = session.criterion
-
-    s = ''
-    computed_metrics = evaluate(prediction_pipeline, train_loader, metrics, num_batches=64)
-    for name, value in computed_metrics.items():
-        s += f'{name}: {value}; '
-
-    computed_metrics = evaluate(prediction_pipeline, test_loader, metrics, num_batches=64)
-    for name, value in computed_metrics.items():
-        s += f'val {name}: {value}; '
-
-    print(s)
+    pipelines = override_pipelines(session, old_spec)
+    print_metrics(pipelines, Formatter())
