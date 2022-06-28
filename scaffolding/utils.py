@@ -1,4 +1,6 @@
 import importlib
+from itertools import zip_longest
+
 from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
 
 
@@ -118,9 +120,8 @@ class WrappedDataset:
         if not (isinstance(example, list) or isinstance(example, tuple)):
             example = [example]
 
+        # todo: top if statement seems to be redundant
         if isinstance(example, list) or isinstance(example, tuple):
-            from itertools import zip_longest
-
             if len(example) > len(self.preprocessors):
                 # when number of inputs > number of preprocessors, leave redundant ones as is
                 pairs = zip_longest(example, self.preprocessors)

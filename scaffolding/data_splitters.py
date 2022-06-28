@@ -34,10 +34,11 @@ class DataSplitter(Serializable):
 
 
 class MultiSplitter:
-    def __init__(self, ratio):
+    def __init__(self, dataset_name, ratio):
         if not math.isclose(sum(ratio), 1., rel_tol=1e-5):
             raise BadSplitError(f'Values must add to 1, but they add to {sum(ratio)} instead.')
 
+        self.dataset_name = dataset_name
         self.ratio = ratio
         self.shuffled_indices = None
 

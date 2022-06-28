@@ -4,7 +4,7 @@ import inspect
 import torch
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset
+from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset, WrappedDataset
 from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 
@@ -91,6 +91,7 @@ class DatasetLoader(Loader):
         if 'class' in spec:
             return Loader().load(session, spec, object_name)
 
+        # in that case, we are building a composite dataset
         if 'link' in spec:
             referred_ds = spec["link"]
             dataset = get_dataset(session, referred_ds)
@@ -100,23 +101,22 @@ class DatasetLoader(Loader):
             dataset = MergedDataset(*merge_datasets)
         else:
             raise BadSpecificationError(f'Either one of these keys must be present: "class", "link" or "merge"')
-        spec.get("preprocessors")
-        dataset.spec = spec
-        return dataset
+
+        preprocessors = spec.get("preprocessors", [])
+        return WrappedDataset(dataset, preprocessors)
 
 
 class SplitLoader(Loader):
     def load(self, session, spec, object_name=None):
+        dataset_name = spec["dataset_name"]
         ratio = spec["ratio"]
-        splitter = MultiSplitter(ratio)
-        splitter.spec = spec
+        splitter = MultiSplitter(dataset_name, ratio)
         return splitter
 
 
 class PreProcessorLoader(Loader):
     def load(self, session, spec, object_name=None):
         instance = super().load(session, spec, object_name)
-        instance.spec = spec
         return instance
 
 
@@ -124,15 +124,14 @@ class NeuralMap:
     def __init__(self, model):
         self.model = model
 
-    def process(self, example):
-        return example
+    def process(self, x):
+        return x
 
 
 class NeuralMapLoader(Loader):
     def load(self, session, spec, object_name=None):
         model = spec["mapper_model"]
         instance = NeuralMap(model)
-        instance.spec = spec
         return instance
 
 
@@ -329,7 +328,7 @@ def get_dataset(session, dataset_name):
     if '.' in dataset_name:
         splitter_name, slice_name = dataset_name.split('.')
         splitter = session.splits[splitter_name]
-        split = splitter.split(session.datasets[splitter.spec["dataset_name"]])
+        split = splitter.split(session.datasets[splitter.dataset_name])
         dataset = getattr(split, slice_name)
     else:
         dataset = session.datasets[dataset_name]
