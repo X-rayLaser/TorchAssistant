@@ -93,9 +93,11 @@ class State:
 class Session:
     def __init__(self):
         self.datasets = {}
+        self.splits = {}
         self.preprocessors = {}
         self.collators = {}
         self.models = {}
+        self.neural_maps = {}
         self.optimizers = {}
         self.batch_adapters = {}
         self.losses = {}
@@ -150,9 +152,12 @@ class SessionSaver:
         save_as_json(spec, self.spec_path)
 
     def _save_static(self, session):
-        section_persistence = SectionPersistence(self.static_dir)
+        object_persistence = ObjectPersistence(self.static_dir)
+
         for attr in self.save_attrs:
-            section_persistence.save(session, attr)
+            section = getattr(session, attr)
+            for name, instance in section.items():
+                object_persistence.save(instance, name)
 
     def save_checkpoint(self, session):
         state_dir = self.checkpoints_dir
@@ -233,20 +238,20 @@ class TrainingHistory:
 
 
 class ObjectInstaller:
-    def setup(self, session, instance, object_name=None, **kwargs):
+    def setup(self, session, instance, spec=None, **kwargs):
         pass
 
 
 class PreProcessorInstaller(ObjectInstaller):
-    def setup(self, session, instance, object_name=None, **kwargs):
-        dataset_name = instance.spec["fit"]
+    def setup(self, session, instance, spec=None, **kwargs):
+        dataset_name = spec["fit"]
         dataset = get_dataset(session, dataset_name)
         instance.fit(dataset)
 
 
 class SplitterInstaller(ObjectInstaller):
-    def setup(self, session, instance, object_name=None, **kwargs):
-        ds_name = instance.spec["dataset_name"]
+    def setup(self, session, instance, spec=None, **kwargs):
+        ds_name = spec["dataset_name"]
         ds = session.datasets[ds_name]
 
         shuffled_indices = list(range(len(ds)))
@@ -255,35 +260,46 @@ class SplitterInstaller(ObjectInstaller):
 
 
 class SessionInitializer:
-    installers = defaultdict(
-        ObjectInstaller, preprocessors=PreProcessorInstaller(), splits=SplitterInstaller()
-    )
+    group_to_loader = {
+        'datasets': parse.DatasetLoader(),
+        'splits': parse.SplitLoader(),
+        'preprocessors': parse.PreProcessorLoader(),
+        'collators': parse.Loader(),
+        'models': parse.Loader(),
+        'neural_maps': parse.NeuralMapLoader(),
+        'optimizers': parse.OptimizerLoader(),
+        'batch_adapters': parse.Loader(),
+        'losses': parse.LossLoader(),
+        'metrics': parse.MetricLoader()
+    }
+
+    installers = defaultdict(ObjectInstaller, {
+        'preprocessors': PreProcessorInstaller(),
+        'splits': SplitterInstaller()
+    })
 
     def __call__(self, session, spec):
-        sections_with_loaders = [
-            ('datasets', parse.Loader()),
-            ('splits', parse.SplitLoader()),
-            ('preprocessors', parse.PreProcessorLoader()),
-            ('collators', parse.Loader()),
-            ('models', parse.Loader()),
-            ('optimizers', parse.OptimizerLoader()),
-            ('batch_adapters', parse.Loader()),
-            ('losses', parse.LossLoader()),
-            ('metrics', parse.MetricLoader()),
-            ('pipelines', parse.PipelineLoader())
-        ]
+        init_dict = spec["initialize"]
 
-        for section_name, loader in sections_with_loaders:
-            installer = self.installers[section_name]
-            self.load_section(session, spec, section_name, loader, installer)
+        definitions = init_dict["definitions"]
+
+        for d in definitions:
+            self.build_object(session, d)
+
+        self.prepare_pipelines(session, init_dict["pipelines"])
 
         self.load_stages(session, spec)
 
         self.initialize_progress(session)
 
-    def load_section(self, session, spec, section_name, loader, installer):
-        section = self.load_init_section(session, spec, section_name, loader, installer)
-        setattr(session, section_name, section)
+    def prepare_pipelines(self, session, spec):
+        loader = parse.PipelineLoader()
+
+        pipelines = {}
+        for name, pipeline_spec in spec.items():
+            pipeline = loader.load(session, pipeline_spec)
+            pipelines[name] = pipeline
+        session.pipelines = pipelines
 
     def load_stages(self, session, spec):
         stages_spec = spec["train"]["stages"]
@@ -294,21 +310,17 @@ class SessionInitializer:
         bars = [ProgressBar(idx, 0, completed=False) for idx in range(len(session.stages))]
         session.progress = Progress(bars)
 
-    def load_init_section(self, session, spec, section_name, loader, installer):
-        init_dict = spec["initialize"]
-
-        section_spec = init_dict[section_name]
-
-        if isinstance(section_spec, dict):
-            return {name: self.build_object(session, spec, loader, installer, name)
-                    for name, spec in section_spec.items()}
-
-        if isinstance(section_spec, list):
-            return [self.build_object(session, d, loader, installer) for d in section_spec]
-
-    def build_object(self, session, spec, loader, installer, name=None):
+    def build_object(self, session, definition):
+        group = definition["group"]
+        loader = self.group_to_loader[group]
+        installer = self.installers[group]
+        name = definition["name"]
+        spec = definition["spec"]
         instance = loader.load(session, spec, name)
-        installer.setup(session, instance, object_name=name)
+        installer.setup(session, instance, spec)
+
+        section = getattr(session, group)
+        section[name] = instance
         return instance
 
 
@@ -318,43 +330,33 @@ class SessionRestorer(SessionInitializer):
     def __init__(self, static_dir):
         super().__init__()
         self.static_dir = static_dir
-        self.fit_preprocessors = False
 
-    def load_section(self, session, spec, section_name, loader, installer):
-        super().load_section(session, spec, section_name, loader, installer)
-        persistence = SectionPersistence(self.static_dir)
-        persistence.load(session, section_name)
+    def build_object(self, session, definition):
+        instance = super().build_object(session, definition)
+        name = definition["name"]
+        persistence = ObjectPersistence(self.static_dir)
+        persistence.load(instance, name)
 
 
-class SectionPersistence:
+class ObjectPersistence:
     def __init__(self, static_dir):
         self.static_dir = static_dir
 
-    def save(self, session, section_name):
-        objects_dict = getattr(session, section_name)
-
-        path = self._build_save_path(section_name)
-        serialized_dict = {}
-        for name, obj in objects_dict.items():
-            if hasattr(obj, 'state_dict'):
-                serialized_dict[name] = obj.state_dict()
-            else:
-                serialized_dict[name] = {}
+    def save(self, instance, object_name):
+        path = self._build_save_path(object_name)
+        serialized_dict = instance.state_dict() if hasattr(instance, 'state_dict') else {}
         save_as_json(serialized_dict, path)
 
-    def load(self, session, section_name):
-        objects_dict = getattr(session, section_name)
+    def load(self, instance, object_name):
+        path = self._build_save_path(object_name)
 
-        path = self._build_save_path(section_name)
         if not os.path.exists(path):
             return
 
-        serialized_dict = load_json(path)
+        object_state = load_json(path)
 
-        for name, object_state in serialized_dict.items():
-            an_object = objects_dict[name]
-            if hasattr(an_object, 'load_state_dict'):
-                an_object.load_state_dict(object_state)
+        if hasattr(instance, 'load_state_dict'):
+            instance.load_state_dict(object_state)
 
-    def _build_save_path(self, section_name):
-        return os.path.join(self.static_dir, f'{section_name}.json')
+    def _build_save_path(self, name):
+        return os.path.join(self.static_dir, f'{name}.json')

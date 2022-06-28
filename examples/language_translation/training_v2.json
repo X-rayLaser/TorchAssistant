@@ -85,6 +85,18 @@
         "transform": "examples.language_translation.transforms.DecodeClassesTransform"
       }
     },
+    "composite_datasets": [{
+      "name": "gen_dataset",
+      "original_ds": "noise",
+      "preprocessors": []
+    }, {
+      "name": "fake_dataset",
+      "original_ds": "noise",
+      "preprocessors": ["neural_mapper"]
+    }, {
+      "name": "discriminator_dataset",
+      "merge": ["images", "fake_dataset"]
+    }],
     "pipelines": {
       "encoder_decoder": {
         "train_dataset": "my_split.train",

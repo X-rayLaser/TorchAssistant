@@ -19,11 +19,11 @@ class BatchAdapter:
 
         return {
             "inputs": {
-                "encoder": {
+                "encoder_model": {
                     "x": french_batch,
                     "h": hidden
                 },
-                "decoder": {
+                "decoder_model": {
                     "y_shifted": english_input
                 }
             },
@@ -42,11 +42,11 @@ class InferenceAdapter:
 
         return {
             "inputs": {
-                "encoder": {
+                "encoder_model": {
                     "x": french_batch,
                     "h": hidden
                 },
-                "decoder": {
+                "decoder_model": {
                     "sos": torch.LongTensor([[1]])
                 }
             }

@@ -87,6 +87,36 @@ class Loader:
         return factory.get_instance(session)
 
 
+class MergedDataset:
+    def __init__(self, *datasets):
+        self.datasets = datasets
+
+    def __getitem__(self, idx):
+        return 0
+
+    def __len__(self):
+        return 1
+
+
+class DatasetLoader(Loader):
+    def load(self, session, spec, object_name=None):
+        if 'class' in spec:
+            return Loader().load(session, spec, object_name)
+
+        if 'link' in spec:
+            referred_ds = spec["link"]
+            dataset = get_dataset(session, referred_ds)
+        elif 'merge' in spec:
+            merge_names = spec['merge']
+            merge_datasets = [get_dataset(session, name) for name in merge_names]
+            dataset = MergedDataset(*merge_datasets)
+        else:
+            raise BadSpecificationError(f'Either one of these keys must be present: "class", "link" or "merge"')
+        spec.get("preprocessors")
+        dataset.spec = spec
+        return dataset
+
+
 class SplitLoader(Loader):
     def load(self, session, spec, object_name=None):
         ratio = spec["ratio"]
@@ -102,15 +132,32 @@ class PreProcessorLoader(Loader):
         return instance
 
 
+class NeuralMap:
+    def __init__(self, model):
+        self.model = model
+
+    def process(self, example):
+        return example
+
+
+class NeuralMapLoader(Loader):
+    def load(self, session, spec, object_name=None):
+        model = spec["mapper_model"]
+        instance = NeuralMap(model)
+        instance.spec = spec
+        return instance
+
+
 class OptimizerLoader(Loader):
     def load(self, session, spec_dict, object_name=None):
         # todo: support setting the same optimizer for more than 1 model
         class_name = spec_dict.get("class")
         args = spec_dict.get("args", [])
         kwargs = spec_dict.get("kwargs", {})
+        model_name = spec_dict["model"]
 
         cls = getattr(torch.optim, class_name)
-        model = session.models[object_name]
+        model = session.models[model_name]
         return cls(model.parameters(), *args, **kwargs)
 
 
