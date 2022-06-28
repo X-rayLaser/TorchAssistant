@@ -1,11 +1,10 @@
 from collections import namedtuple
 import inspect
-from random import shuffle
 
 import torch
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity
+from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset
 from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 
@@ -85,17 +84,6 @@ class Loader:
         parser = SpecParser()
         factory = parser.parse(spec)
         return factory.get_instance(session)
-
-
-class MergedDataset:
-    def __init__(self, *datasets):
-        self.datasets = datasets
-
-    def __getitem__(self, idx):
-        return 0
-
-    def __len__(self):
-        return 1
 
 
 class DatasetLoader(Loader):

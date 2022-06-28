@@ -147,7 +147,7 @@
                 "group": "datasets",
                 "name": "discriminator_dataset",
                 "spec": {
-                    "merge": ["my_split.train", "fake_dataset"]
+                    "merge": ["my_split.val", "gen_dataset"]
                 }
             }
         ],
@@ -178,33 +178,6 @@
                 "metric_names": ["CER"],
                 "metric_display_names": ["CER"],
                 "device": "cpu"
-            },
-            "foo": {
-                "train_dataset": "my_split.train",
-                "val_dataset": "my_split.val",
-                "preprocessor_names": ["french_encoder", "english_encoder"],
-                "collator_name": "my_collator",
-                "batch_size": 1,
-                "batch_adapter_name": "adapter",
-                "neural_graph": [
-                    {
-                        "model_name": "encoder_model",
-                        "inputs": ["x", "h"],
-                        "outputs": ["outputs", "h_e"],
-                        "optimizer_name": "encoder_optimizer"
-                    },
-                    {
-                        "model_name": "decoder_model",
-                        "inputs": ["y_shifted", "h_e"],
-                        "outputs": ["y_hat", "h_d"],
-                        "optimizer_name": "decoder_optimizer"
-                    }
-                ],
-                "loss_name": "cross_entropy",
-                "loss_display_name": "foo_loss",
-                "metric_names": ["CER"],
-                "metric_display_names": ["foo_CER"],
-                "device": "cpu"
             }
         }
     },
@@ -225,8 +198,7 @@
             {
                 "mode": "interleave",
                 "pipelines": [
-                    "encoder_decoder",
-                    "foo"
+                    "encoder_decoder"
                 ],
                 "stop_condition": {
                     "class": "scaffolding.stop_conditions.EpochsCompleted",

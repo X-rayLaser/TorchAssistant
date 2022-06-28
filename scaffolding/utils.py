@@ -131,3 +131,35 @@ class WrappedDataset:
 
     def __len__(self):
         return len(self.dataset)
+
+
+class MergedDataset:
+    class SemiInterval:
+        def __init__(self, a, b):
+            self.a = a
+            self.b = b
+
+        def __contains__(self, n):
+            return self.a <= n < self.b
+
+    def __init__(self, *datasets):
+        self.datasets = datasets
+        sizes = [len(ds) for ds in self.datasets]
+
+        s = 0
+        self.intervals = []
+        for size in sizes:
+            self.intervals.append(self.SemiInterval(s, s + size))
+            s += size
+
+    def __getitem__(self, idx):
+        datasets_with_intervals = zip(self.intervals, self.datasets)
+        for ivl, dataset in datasets_with_intervals:
+            if idx in ivl:
+                offset = idx - ivl.a
+                return dataset[offset]
+
+        raise IndexError('dataset index out of range')
+
+    def __len__(self):
+        return sum([len(ds) for ds in self.datasets])
