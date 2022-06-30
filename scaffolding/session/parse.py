@@ -5,6 +5,7 @@ import torch
 import torchmetrics
 
 from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset, WrappedDataset
+from scaffolding.preprocessors import NullProcessor
 from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 
@@ -88,7 +89,7 @@ class Loader:
 
 class DatasetLoader(Loader):
     def load(self, session, spec, object_name=None):
-        if 'class' in spec:
+        if 'class' in spec or 'factory_fn' in spec:
             return Loader().load(session, spec, object_name)
 
         # in that case, we are building a composite dataset
@@ -103,6 +104,8 @@ class DatasetLoader(Loader):
             raise BadSpecificationError(f'Either one of these keys must be present: "class", "link" or "merge"')
 
         preprocessors = spec.get("preprocessors", [])
+        preprocessors = [session.preprocessors.get(name) or session.neural_maps.get(name, NullProcessor())
+                         for name in preprocessors]
         return WrappedDataset(dataset, preprocessors)
 
 
@@ -125,12 +128,20 @@ class NeuralMap:
         self.model = model
 
     def process(self, x):
-        return x
+        with torch.no_grad():
+            res = self.model(x.unsqueeze(0))[0]
+            res = res.squeeze(0)
+
+        return res
+
+    def __call__(self, x):
+        return self.process(x)
 
 
 class NeuralMapLoader(Loader):
     def load(self, session, spec, object_name=None):
-        model = spec["mapper_model"]
+        model_name = spec["mapper_model"]
+        model = session.models[model_name]
         instance = NeuralMap(model)
         return instance
 
@@ -191,7 +202,11 @@ class MetricLoader(Loader):
 class PipelineLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
         train_dataset = get_dataset(session, pipeline_spec["train_dataset"])
-        val_dataset = get_dataset(session, pipeline_spec["val_dataset"])
+        if "val_dataset" in pipeline_spec:
+            val_dataset = get_dataset(session, pipeline_spec["val_dataset"])
+        else:
+            val_dataset = train_dataset
+
         preprocessors = [session.preprocessors[name]
                          for name in pipeline_spec["preprocessor_names"]]
 
@@ -229,8 +244,9 @@ class PipelineLoader(Loader):
         )
 
     def parse_metrics(self, session, pipeline_spec):
-        display_names = pipeline_spec.get("metric_display_names", pipeline_spec["metric_names"])
-        names = zip(pipeline_spec["metric_names"], display_names)
+        metric_names = pipeline_spec.get("metric_names", [])
+        display_names = pipeline_spec.get("metric_display_names", metric_names)
+        names = zip(metric_names, display_names)
         return {display_name: session.metrics[name].rename_and_clone(display_name)
                 for name, display_name in names}
 
@@ -250,7 +266,7 @@ class PipelineLoader(Loader):
 
     def node_from_spec(self, session, node_spec):
         model = session.models[node_spec.model_name]
-        optimizer = session.optimizers[node_spec.optimizer_name]
+        optimizer = session.optimizers.get(node_spec.optimizer_name)
         return Node(name=node_spec.model_name,
                     serializable_model=model, serializable_optimizer=optimizer,
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
@@ -301,7 +317,8 @@ class Node:
         self.outputs = outputs
 
     def get_dependencies(self, batch_inputs, prev_outputs):
-        lookup_table = batch_inputs[self.name].copy()
+        # todo: double check this line
+        lookup_table = batch_inputs.get(self.name, {}).copy()
         lookup_table.update(prev_outputs)
         return [lookup_table[var_name] for var_name in self.inputs]
 

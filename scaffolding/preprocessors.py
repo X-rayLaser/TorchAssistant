@@ -12,3 +12,8 @@ class ValuePreprocessor:
 class ExamplePreprocessor:
     def process(self, values):
         pass
+
+
+class NullProcessor(ValuePreprocessor):
+    def process(self, value):
+        return value

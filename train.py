@@ -29,9 +29,10 @@ if __name__ == '__main__':
     train(session, log_metrics=saver.log_metrics, save_checkpoint=save_checkpoint)
 
 
+# todo: support learning rate decay using torch.optim.lr_scheduler.ExponentialLR
+# todo: support gradient clipping
+# todo: training loops with unequal number of iterations
 # todo: refactor code more (achieve better cohesion, loose coupling)
-# todo: 2 separate passes: 1) create the session and save it to some file; 2) load the session (without using config)
-# todo: session should contain all information including current epoch, checkpoints with losses and metrics etc.
 # todo: session can export best checkpoint according to a criterion
 # todo: separate processing of inputs and targets
 # todo: tests using GPU device

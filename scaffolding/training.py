@@ -6,7 +6,7 @@ from scaffolding.utils import WrappedDataset
 from scaffolding.session import StopTrainingError
 
 
-def train(session, log_metrics, save_checkpoint, stat_ivl=10):
+def train(session, log_metrics, save_checkpoint, stat_ivl=1):
     while True:
         try:
             stage_number = session.progress.get_current_stage_id()
@@ -144,7 +144,9 @@ class TrainingLoop:
 
     def train_on_batch(self, inputs, targets):
         for node in self.prediction_pipeline:
-            node.optimizer.zero_grad()
+            # todo: refactor this if statement here and below
+            if node.optimizer:
+                node.optimizer.zero_grad()
 
         outputs = self.prediction_pipeline(inputs, inference_mode=False)
 
@@ -152,7 +154,8 @@ class TrainingLoop:
         loss.backward()
 
         for node in self.prediction_pipeline:
-            node.optimizer.step()
+            if node.optimizer:
+                node.optimizer.step()
 
         return loss, outputs
 

@@ -244,9 +244,10 @@ class ObjectInstaller:
 
 class PreProcessorInstaller(ObjectInstaller):
     def setup(self, session, instance, spec=None, **kwargs):
-        dataset_name = spec["fit"]
-        dataset = get_dataset(session, dataset_name)
-        instance.fit(dataset)
+        dataset_name = spec.get("fit")
+        if dataset_name:
+            dataset = get_dataset(session, dataset_name)
+            instance.fit(dataset)
 
 
 class SplitterInstaller(ObjectInstaller):
