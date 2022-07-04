@@ -30,7 +30,7 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
     for epoch in range(start_epoch, start_epoch + 1000):
         print_metrics = PrintMetrics(metric_dicts, stat_ivl, epoch, formatter)
 
-        for log_entries in interleave_training(stage.pipelines):
+        for log_entries in interleave_training(session, stage.pipelines):
             print_metrics(log_entries)
 
         # todo: choose which datasets/split slices to use for evaluation and with which metrics
@@ -68,14 +68,16 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
             break
 
 
-def interleave_training(pipelines):
+def interleave_training(session, pipelines):
     training_loops = []
     for pipeline in pipelines:
         train_pipeline = PredictionPipeline(
             pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
         )
         train_loader, _ = get_data_loaders(pipeline)
-        training_loops.append(TrainingLoop(train_loader, train_pipeline, pipeline.loss_fn))
+        training_loops.append(TrainingLoop(
+            train_loader, train_pipeline, pipeline.loss_fn, session.gradient_clippers
+        ))
 
     iterators = [iter(loop) for loop in training_loops]
     while True:
@@ -128,10 +130,11 @@ def update_running_metrics(moving_averages, metrics, outputs, targets):
 
 
 class TrainingLoop:
-    def __init__(self, data_loader, prediction_pipeline, loss_fn):
+    def __init__(self, data_loader, prediction_pipeline, loss_fn, gradient_clippers):
         self.data_loader = data_loader
         self.prediction_pipeline = prediction_pipeline
         self.loss_fn = loss_fn
+        self.gradient_clippers = gradient_clippers
 
     def __iter__(self):
         switch_to_train_mode(self.prediction_pipeline)
@@ -152,6 +155,9 @@ class TrainingLoop:
 
         loss = self.loss_fn(outputs, targets)
         loss.backward()
+
+        for clip_gradients in self.gradient_clippers.values():
+            clip_gradients()
 
         for node in self.prediction_pipeline:
             if node.optimizer:

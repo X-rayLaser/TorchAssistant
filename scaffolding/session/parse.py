@@ -146,6 +146,83 @@ class NeuralMapLoader(Loader):
         return instance
 
 
+class GradientClipper:
+    def __init__(self, model, clip_value=None, clip_norm=None):
+        self.model = model
+        self.clip_value = clip_value
+        self.clip_norm = clip_norm
+
+    def __call__(self):
+        if self.clip_value:
+            torch.nn.utils.clip_grad_value_(self.model.parameters(), self.clip_value)
+
+        if self.clip_norm:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
+
+
+class GradientClipperLoader(Loader):
+    def load(self, session, spec, object_name=None):
+        model_name = spec["model"]
+        clip_value = spec.get("clip_value")
+        clip_norm = spec.get("clip_norm")
+        model = session.models[model_name]
+        return GradientClipper(model, clip_value, clip_norm)
+
+
+class HookInstaller:
+    def __init__(self, model, hook_factory_fn):
+        self.model = model
+        self.hook_factory_fn = hook_factory_fn
+
+    def __call__(self):
+        for name, param in self.model.named_parameters():
+            hook = self.hook_factory_fn(name)
+            self.register_hook(param, hook)
+
+    def register_hook(self, param, hook):
+        raise NotImplementedError
+
+
+class BackwardHookInstaller(HookInstaller):
+    def register_hook(self, param, hook):
+        param.register_hook(hook)
+
+
+class BackwardHookLoader(Loader):
+    hook_installer = BackwardHookInstaller
+
+    def load(self, session, spec, object_name=None):
+        model_name = spec["model"]
+        function_name = spec["factory_fn"]
+
+        model = session.models[model_name]
+        create_hook = import_function(function_name)
+        return self.hook_installer(model, create_hook)
+
+
+class OptimizerWithLearningRateScheduler:
+    def __init__(self, optimizer, lr_scheduler):
+        self.optimizer = optimizer
+        self.scheduler = lr_scheduler
+
+    def state_dict(self):
+        return {
+            'optimizer': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict()
+        }
+
+    def load_state_dict(self, state_dict):
+        self.optimizer.load_state_dict(state_dict['optimizer'])
+        self.scheduler.load_state_dict(state_dict['scheduler'])
+
+    def zero_grad(self):
+        self.optimizer.zero_grad()
+
+    def step(self):
+        self.optimizer.step()
+        self.scheduler.step()
+
+
 class OptimizerLoader(Loader):
     def load(self, session, spec_dict, object_name=None):
         # todo: support setting the same optimizer for more than 1 model
@@ -156,7 +233,16 @@ class OptimizerLoader(Loader):
 
         cls = getattr(torch.optim, class_name)
         model = session.models[model_name]
-        return cls(model.parameters(), *args, **kwargs)
+        optimizer = cls(model.parameters(), *args, **kwargs)
+
+        scheduler_spec = spec_dict.get('lr_scheduler')
+
+        if scheduler_spec:
+            scheduler = instantiate_class(scheduler_spec["class"], optimizer,
+                                          **scheduler_spec.get("kwargs", {}))
+            optimizer = OptimizerWithLearningRateScheduler(optimizer, scheduler)
+
+        return optimizer
 
 
 class LossLoader(Loader):

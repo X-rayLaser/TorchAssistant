@@ -97,6 +97,9 @@ class Session:
         self.preprocessors = {}
         self.collators = {}
         self.models = {}
+        self.gradient_clippers = {}
+        self.forward_hooks = {}
+        self.backward_hooks = {}
         self.neural_maps = {}
         self.optimizers = {}
         self.batch_adapters = {}
@@ -260,6 +263,11 @@ class SplitterInstaller(ObjectInstaller):
         instance.configure(shuffled_indices)
 
 
+class CallableInstaller(ObjectInstaller):
+    def setup(self, session, instance, spec=None, **kwargs):
+        instance()
+
+
 class SessionInitializer:
     group_to_loader = {
         'datasets': parse.DatasetLoader(),
@@ -267,6 +275,9 @@ class SessionInitializer:
         'preprocessors': parse.PreProcessorLoader(),
         'collators': parse.Loader(),
         'models': parse.Loader(),
+        'gradient_clippers': parse.GradientClipperLoader(),
+        #'forward_hooks': parse.ForwardHookLoader(),
+        'backward_hooks': parse.BackwardHookLoader(),
         'neural_maps': parse.NeuralMapLoader(),
         'optimizers': parse.OptimizerLoader(),
         'batch_adapters': parse.Loader(),
@@ -276,6 +287,8 @@ class SessionInitializer:
 
     installers = defaultdict(ObjectInstaller, {
         'preprocessors': PreProcessorInstaller(),
+        #'forward_hooks': CallableInstaller(),
+        'backward_hooks': CallableInstaller(),
         'splits': SplitterInstaller()
     })
 
@@ -326,7 +339,10 @@ class SessionInitializer:
 
 
 class SessionRestorer(SessionInitializer):
-    installers = defaultdict(ObjectInstaller)
+    installers = defaultdict(ObjectInstaller, {
+        #'forward_hooks': CallableInstaller(),
+        'backward_hooks': CallableInstaller()
+    })
 
     def __init__(self, static_dir):
         super().__init__()
