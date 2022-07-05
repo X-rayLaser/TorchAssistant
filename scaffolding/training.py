@@ -1,3 +1,5 @@
+import itertools
+
 import torch
 from .utils import switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
@@ -79,13 +81,19 @@ def interleave_training(session, pipelines):
             train_loader, train_pipeline, pipeline.loss_fn, session.gradient_clippers
         ))
 
-    iterators = [iter(loop) for loop in training_loops]
-    while True:
-        try:
-            log_entries = [next(it) for it in iterators]
-            yield log_entries
-        except StopIteration:
-            break
+    entries_gen = itertools.zip_longest(*training_loops)
+
+    def fill_missing(original_tuple, filler_tuple):
+        if not filler_tuple:
+            return original_tuple
+
+        pairs = zip(original_tuple, filler_tuple)
+        return tuple(value if value else filler for value, filler in pairs)
+
+    entries = None
+    for log_entries in entries_gen:
+        entries = fill_missing(log_entries, entries)
+        yield entries
 
 
 def evaluate_pipeline(pipeline):
