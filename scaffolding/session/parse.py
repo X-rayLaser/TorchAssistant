@@ -8,6 +8,7 @@ from scaffolding.utils import instantiate_class, import_function, import_entity,
 from scaffolding.preprocessors import NullProcessor
 from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
+from scaffolding.output_devices import Printer
 
 
 class Learner:
@@ -285,56 +286,33 @@ class MetricLoader(Loader):
         return Metric(object_name, metric, spec["inputs"], transform_fn, device='cpu')
 
 
-class PipelineLoader(Loader):
+class CommonPipelineeLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
-        train_dataset = get_dataset(session, pipeline_spec["train_dataset"])
+        pipeline = BasePipeline()
+
+        pipeline.train_dataset = get_dataset(session, pipeline_spec["train_dataset"])
+
         if "val_dataset" in pipeline_spec:
             val_dataset = get_dataset(session, pipeline_spec["val_dataset"])
         else:
-            val_dataset = train_dataset
+            val_dataset = pipeline.train_dataset
+        pipeline.val_dataset = val_dataset
 
-        preprocessors = [session.preprocessors[name]
-                         for name in pipeline_spec["preprocessor_names"]]
+        pipeline.preprocessors = [session.preprocessors[name]
+                                  for name in pipeline_spec["preprocessor_names"]]
 
-        collator = session.collators[pipeline_spec["collator_name"]]
-        batch_size = pipeline_spec["batch_size"]
+        pipeline.collator = session.collators[pipeline_spec["collator_name"]]
+        pipeline.batch_size = pipeline_spec["batch_size"]
         if "batch_adapter" in pipeline_spec:
-            batch_adapter = Loader().load(session, pipeline_spec["batch_adapter"])
+            pipeline.batch_adapter = Loader().load(session, pipeline_spec["batch_adapter"])
         else:
-            batch_adapter = session.batch_adapters[pipeline_spec["batch_adapter_name"]]
+            pipeline.batch_adapter = session.batch_adapters[pipeline_spec["batch_adapter_name"]]
 
-        neural_graph = self.parse_neural_graph(session, pipeline_spec['neural_graph'])
+        pipeline.neural_graph = self.parse_neural_graph(session, pipeline_spec['neural_graph'])
 
-        loss_name = pipeline_spec["loss_name"]
-        loss_fn = session.losses[loss_name]
+        pipeline.device = pipeline_spec.get("device", "cpu")
 
-        metric_fns = self.parse_metrics(session, pipeline_spec)
-
-        if 'loss_display_name' in pipeline_spec:
-            loss_display_name = pipeline_spec.get('loss_display_name', loss_name)
-            metric_fns[loss_display_name] = loss_fn.rename_and_clone(loss_display_name)
-
-        device = pipeline_spec.get("device", "cpu")
-
-        return Pipeline(
-            train_dataset=train_dataset,
-            val_dataset=val_dataset,
-            preprocessors=preprocessors,
-            collator=collator,
-            batch_size=batch_size,
-            batch_adapter=batch_adapter,
-            neural_graph=neural_graph,
-            loss_fn=loss_fn,
-            metric_fns=metric_fns,
-            device=device
-        )
-
-    def parse_metrics(self, session, pipeline_spec):
-        metric_names = pipeline_spec.get("metric_names", [])
-        display_names = pipeline_spec.get("metric_display_names", metric_names)
-        names = zip(metric_names, display_names)
-        return {display_name: session.metrics[name].rename_and_clone(display_name)
-                for name, display_name in names}
+        return pipeline
 
     def parse_neural_graph(self, session, graph_spec):
         nodes = []
@@ -358,40 +336,125 @@ class PipelineLoader(Loader):
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
 
 
+class PipelineLoader(CommonPipelineeLoader):
+    def load(self, session, pipeline_spec, object_name=None):
+        base_pipeline = super().load(session, pipeline_spec, object_name)
+
+        loss_name = pipeline_spec["loss_name"]
+        loss_fn = session.losses[loss_name]
+
+        metric_fns = self.parse_metrics(session, pipeline_spec)
+
+        if 'loss_display_name' in pipeline_spec:
+            loss_display_name = pipeline_spec.get('loss_display_name', loss_name)
+            metric_fns[loss_display_name] = loss_fn.rename_and_clone(loss_display_name)
+
+        return Pipeline.from_base_pipeline(
+            base_pipeline, loss_fn=loss_fn, metric_fns=metric_fns
+        )
+
+    def parse_metrics(self, session, pipeline_spec):
+        metric_names = pipeline_spec.get("metric_names", [])
+        display_names = pipeline_spec.get("metric_display_names", metric_names)
+        names = zip(metric_names, display_names)
+        return {display_name: session.metrics[name].rename_and_clone(display_name)
+                for name, display_name in names}
+
+
+class DebugPipelineLoader(CommonPipelineeLoader):
+    def load(self, session, pipeline_spec, object_name=None):
+        base_pipeline = super().load(session, pipeline_spec, object_name)
+
+        num_iterations = pipeline_spec["num_iterations"]
+        interval = pipeline_spec["interval"]
+
+        def default_postprocessor(x):
+            return x
+
+        postprocessor_spec = pipeline_spec.get("postprocessor")
+        if postprocessor_spec:
+            postprocessor = Loader().load(session, postprocessor_spec)
+        else:
+            postprocessor = default_postprocessor
+
+        output_device_spec = pipeline_spec.get("output_device")
+        if output_device_spec:
+            output_device = Loader().load(session, output_device_spec)
+        else:
+            output_device = Printer()
+
+        output_keys = pipeline_spec.get("output_keys", ["y_hat"])
+
+        return DebugPipeline.from_base_pipeline(
+            base_pipeline, num_iterations=num_iterations, interval=interval,
+            output_keys=output_keys, postprocessor=postprocessor, output_device=output_device
+        )
+
+
 class StageLoader(Loader):
     def load(self, session, spec, object_name=None):
         mode = spec.get("mode", "interleave")
-        pipelines = spec["pipelines"]
         stop_condition_dict = spec.get("stop_condition")
 
+        pipelines = spec["pipelines"]
         pipelines = [session.pipelines[name] for name in pipelines]
 
+        debug_pipelines = spec["debug_pipelines"]
+        debug_pipelines = [session.debug_pipelines[name] for name in debug_pipelines]
+
         stop_condition = Loader().load(session, stop_condition_dict)
-        return Stage(mode, pipelines, stop_condition)
+        return Stage(mode, pipelines, debug_pipelines, stop_condition)
 
 
-class Pipeline:
-    def __init__(self, *,
-                 train_dataset,
-                 val_dataset,
-                 preprocessors,
-                 collator,
-                 batch_size,
-                 batch_adapter,
-                 neural_graph,
-                 loss_fn,
-                 metric_fns,
-                 device):
-        self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
-        self.preprocessors = preprocessors
-        self.collator = collator
-        self.batch_size = batch_size
-        self.batch_adapter = batch_adapter
-        self.neural_graph = neural_graph
-        self.loss_fn = loss_fn
-        self.metric_fns = metric_fns
-        self.device = device
+class BasePipeline:
+    def __init__(self):
+        self.train_dataset = None
+        self.val_dataset = None
+        self.preprocessors = None
+        self.collator = None
+        self.batch_size = None
+        self.batch_adapter = None
+        self.neural_graph = None
+        self.device = None
+
+
+class Pipeline(BasePipeline):
+    def __init__(self):
+        super().__init__()
+        self.loss_fn = None
+        self.metric_fns = None
+
+    @classmethod
+    def from_base_pipeline(cls, pipeline, *, loss_fn, metric_fns):
+        result = cls()
+        result.__dict__ = pipeline.__dict__
+
+        result.loss_fn = loss_fn
+        result.metric_fns = metric_fns
+        return result
+
+
+class DebugPipeline(BasePipeline):
+    def __init__(self):
+        super().__init__()
+        self.num_iterations = 1
+        self.interval = 100
+        self.output_keys = []
+        self.postprocessor = None
+        self.output_device = None
+
+    @classmethod
+    def from_base_pipeline(cls, pipeline, *,
+                           num_iterations, interval, output_keys, postprocessor, output_device):
+        result = cls()
+        result.__dict__ = pipeline.__dict__
+
+        result.num_iterations = num_iterations
+        result.interval = interval
+        result.output_keys = output_keys
+        result.postprocessor = postprocessor
+        result.output_device = output_device
+        return result
 
 
 class Node:
@@ -421,9 +484,10 @@ class Node:
 
 
 class Stage:
-    def __init__(self, mode, pipelines, stop_condition):
+    def __init__(self, mode, pipelines, debug_pipelines, stop_condition):
         self.mode = mode
         self.pipelines = pipelines
+        self.debug_pipelines = debug_pipelines
         self.stop_condition = stop_condition
 
 

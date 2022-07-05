@@ -29,11 +29,17 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
     start_epoch = session.progress.epochs_done_total + 1
 
     metric_dicts = [pipeline.metric_fns for pipeline in stage.pipelines]
+
+    debuggers = [Debugger(pipeline) for pipeline in stage.debug_pipelines]
+
     for epoch in range(start_epoch, start_epoch + 1000):
         print_metrics = PrintMetrics(metric_dicts, stat_ivl, epoch, formatter)
 
         for log_entries in interleave_training(session, stage.pipelines):
             print_metrics(log_entries)
+            # run debuggers/visualization code
+            for debug in debuggers:
+                debug(log_entries)
 
         # todo: choose which datasets/split slices to use for evaluation and with which metrics
 
@@ -68,6 +74,39 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
         if should_stop:
             break
+
+
+class Debugger:
+    def __init__(self, pipeline):
+        self.loader, _ = get_data_loaders(pipeline)
+        self.predictor = PredictionPipeline(
+            pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
+        )
+
+        self.postprocessor = pipeline.postprocessor
+        self.output_device = pipeline.output_device
+        self.pipeline = pipeline
+
+    def __call__(self, log_entries):
+        entry = log_entries[0]
+        interval = self.pipeline.interval
+        if entry.iteration % interval == interval - 1:
+            it = iter(self.loader)
+            for _ in range(self.pipeline.num_iterations):
+                batch = next(it)
+                inputs, targets = self.predictor.adapt_batch(batch)
+                self.run_iteration(inputs)
+
+    def run_iteration(self, inputs):
+        with torch.no_grad():
+            outputs = self.predictor(inputs)
+
+            predictions = {k: outputs[k] for k in self.pipeline.output_keys}
+
+            if self.postprocessor:
+                predictions = self.postprocessor(predictions)
+
+            self.output_device(predictions)
 
 
 def interleave_training(session, pipelines):

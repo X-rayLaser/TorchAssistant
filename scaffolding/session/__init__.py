@@ -105,6 +105,8 @@ class Session:
         self.batch_adapters = {}
         self.losses = {}
         self.metrics = {}
+
+        self.debug_pipelines = {}
         self.pipelines = {}
 
         self.stages = []
@@ -300,20 +302,25 @@ class SessionInitializer:
         for d in definitions:
             self.build_object(session, d)
 
-        self.prepare_pipelines(session, init_dict["pipelines"])
+        self.prepare_pipelines(
+            session, init_dict["pipelines"], parse.PipelineLoader(), 'pipelines'
+        )
+
+        self.prepare_pipelines(
+            session, init_dict["debug_pipelines"], parse.DebugPipelineLoader(), 'debug_pipelines'
+        )
 
         self.load_stages(session, spec)
 
         self.initialize_progress(session)
 
-    def prepare_pipelines(self, session, spec):
-        loader = parse.PipelineLoader()
-
+    def prepare_pipelines(self, session, spec, loader, section):
         pipelines = {}
         for name, pipeline_spec in spec.items():
             pipeline = loader.load(session, pipeline_spec)
             pipelines[name] = pipeline
-        session.pipelines = pipelines
+
+        setattr(session, section, pipelines)
 
     def load_stages(self, session, spec):
         stages_spec = spec["train"]["stages"]
