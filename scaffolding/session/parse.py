@@ -139,12 +139,194 @@ class NeuralMap:
         return self.process(x)
 
 
+class DataLoaderParser(Loader):
+    def load(self, session, spec, object_name=None):
+        dataset = session.datasets[spec["dataset"]]
+        collator = session.collators[spec["collator"]]
+
+        kwargs = dict(shuffle=True, num_workers=2)
+        kwargs.update(spec.get("kwargs", {}))
+
+        return torch.utils.data.DataLoader(dataset, collate_fn=collator, **kwargs)
+
+
+class BatchProcessorLoader(Loader):
+    def load(self, session, spec, object_name=None):
+        if "class" in spec or "factory_fn" in spec:
+            return Loader().load(session, spec, object_name)
+
+        input_adapter = Loader().load(session, spec["input_adapter"], object_name)
+        if "output_adapter" in spec:
+            output_adapter = Loader().load(session, spec["output_adapter"], object_name)
+        else:
+            from scaffolding.output_adapters import IdentityAdapter
+            output_adapter = IdentityAdapter()
+
+        graph_spec = spec["neural_graph"]
+        neural_graph = self.parse_neural_graph(session, graph_spec)
+        device = torch.device(spec.get("device", "cpu"))
+        return NeuralBatchProcessor(neural_graph, input_adapter, output_adapter, device)
+
+    def parse_neural_graph(self, session, graph_spec):
+        nodes = []
+        for node_dict in graph_spec:
+            model_name = node_dict['model_name']
+            inputs = node_dict['inputs']
+            outputs = node_dict['outputs']
+            optimizer_name = node_dict['optimizer_name']
+
+            NodeSpec = namedtuple('NodeSpec', ['model_name', 'inputs', 'outputs', 'optimizer_name'])
+            node_spec = NodeSpec(model_name, inputs, outputs, optimizer_name)
+            node = self.node_from_spec(session, node_spec)
+            nodes.append(node)
+        return nodes
+
+    def node_from_spec(self, session, node_spec):
+        model = session.models[node_spec.model_name]
+        optimizer = session.optimizers.get(node_spec.optimizer_name)
+        return Node(name=node_spec.model_name,
+                    serializable_model=model, serializable_optimizer=optimizer,
+                    inputs=node_spec.inputs, outputs=node_spec.outputs)
+
+
+class NeuralBatchProcessor:
+    def __init__(self, neural_graph, input_adapter, output_adapter, device):
+        self.neural_graph = neural_graph
+        self.input_adapter = input_adapter
+        self.output_adapter = output_adapter
+        self.device = device
+
+    def __call__(self, batch, inference_mode=False):
+        inputs = self.input_adapter(batch)
+        self.inputs_to(inputs)
+
+        all_outputs = {}
+        for node in self.neural_graph:
+            outputs = node(inputs, all_outputs, inference_mode)
+            all_outputs.update(
+                dict(zip(node.outputs, outputs))
+            )
+
+        result_dict = dict(batch)
+        result_dict.update(all_outputs)
+        res = self.output_adapter(result_dict)
+        return res
+
+    def inputs_to(self, inputs):
+        for k, mapping in inputs.items():
+            for tensor_name, value in mapping.items():
+                if hasattr(value, 'device') and value.device != self.device:
+                    mapping[tensor_name] = value.to(self.device)
+
+    def prepare(self):
+        for model in self.neural_graph:
+            if model.optimizer:
+                model.optimizer.zero_grad()
+
+    def update(self):
+        for node in self.neural_graph:
+            if node.optimizer:
+                node.optimizer.step()
+
+
 class NeuralMapLoader(Loader):
     def load(self, session, spec, object_name=None):
         model_name = spec["mapper_model"]
         model = session.models[model_name]
         instance = NeuralMap(model)
         return instance
+
+
+class BatchPipelineLoader(Loader):
+    def load(self, session, spec, object_name=None):
+        if "mix" in spec:
+            mixed_pipelines = [session.batch_pipelines[name] for name in spec["mix"]]
+            batch_generator = BatchPipelineMixer(mixed_pipelines)
+
+        else:
+            batch_generator = session.data_loaders[spec["data_loader"]]
+        object_names = spec.get("batch_processors", [])
+        batch_processors = [session.batch_processors[name] for name in object_names]
+        variable_names = spec.get("variable_names", [])
+        return BatchPipeline(batch_generator, batch_processors, variable_names)
+
+
+class BatchPipeline:
+    def __init__(self, batch_generator, batch_processors, variable_names):
+        self.batch_generator = batch_generator
+        self.batch_processors = batch_processors
+        self.variable_names = variable_names
+
+    def __iter__(self):
+        for batch in self.batch_generator:
+            batch = self.batch_to_dict(batch)
+            processors = list(reversed(self.batch_processors))
+
+            while processors:
+                batch_processor = processors.pop()
+                batch_processor.prepare()
+                batch = batch_processor(batch)
+
+            yield batch
+
+    def __len__(self):
+        return len(self.batch_generator)
+
+    def batch_to_dict(self, batch):
+        if isinstance(batch, dict):
+            return batch
+        return dict(zip(self.variable_names, batch))
+
+    def update(self):
+        for processor in self.batch_processors:
+            processor.update()
+
+
+class BatchPipelineMixer:
+    def __init__(self, batch_pipelines):
+        self.batch_pipelines = batch_pipelines
+
+    def __iter__(self):
+        for batches in zip(*self.batch_pipelines):
+            batch = self.mix(batches)
+            yield batch
+
+    def __len__(self):
+        return min(len(pipeline) for pipeline in self.batch_pipelines)
+
+    def mix(self, batches):
+        # todo: randomly shuffle rows
+        any_batch = batches[0]
+        result = {}
+        for k in any_batch.keys():
+            tensors = [batch[k] for batch in batches]
+            concatenation = torch.cat(tensors)
+            result[k] = concatenation
+        return result
+
+
+class ActualTrainingPipelineLoader(Loader):
+    def load(self, session, spec, object_name=None):
+        batch_pipeline = session.batch_pipelines[spec["batch_pipeline"]]
+
+        loss_name = spec["loss_name"]
+        loss_fn = session.losses[loss_name]
+
+        metric_fns = self.parse_metrics(session, spec)
+
+        if 'loss_display_name' in spec:
+            loss_display_name = spec.get('loss_display_name', loss_name)
+            metric_fns[loss_display_name] = loss_fn.rename_and_clone(loss_display_name)
+
+        return None
+        #ActualTrainer(batch_pipeline, )
+
+    def parse_metrics(self, session, pipeline_spec):
+        metric_names = pipeline_spec.get("metric_names", [])
+        display_names = pipeline_spec.get("metric_display_names", metric_names)
+        names = zip(metric_names, display_names)
+        return {display_name: session.metrics[name].rename_and_clone(display_name)
+                for name, display_name in names}
 
 
 class GradientClipper:
@@ -286,7 +468,7 @@ class MetricLoader(Loader):
         return Metric(object_name, metric, spec["inputs"], transform_fn, device='cpu')
 
 
-class CommonPipelineeLoader(Loader):
+class CommonPipelineLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
         pipeline = BasePipeline()
 
@@ -336,7 +518,7 @@ class CommonPipelineeLoader(Loader):
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
 
 
-class PipelineLoader(CommonPipelineeLoader):
+class PipelineLoader(CommonPipelineLoader):
     def load(self, session, pipeline_spec, object_name=None):
         base_pipeline = super().load(session, pipeline_spec, object_name)
 
@@ -361,7 +543,7 @@ class PipelineLoader(CommonPipelineeLoader):
                 for name, display_name in names}
 
 
-class DebugPipelineLoader(CommonPipelineeLoader):
+class DebugPipelineLoader(CommonPipelineLoader):
     def load(self, session, pipeline_spec, object_name=None):
         base_pipeline = super().load(session, pipeline_spec, object_name)
 

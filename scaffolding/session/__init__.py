@@ -96,6 +96,7 @@ class Session:
         self.splits = {}
         self.preprocessors = {}
         self.collators = {}
+        self.data_loaders = {}
         self.models = {}
         self.gradient_clippers = {}
         self.forward_hooks = {}
@@ -103,9 +104,12 @@ class Session:
         self.neural_maps = {}
         self.optimizers = {}
         self.batch_adapters = {}
+        self.batch_processors = {}
+        self.batch_pipelines = {}
         self.losses = {}
         self.metrics = {}
 
+        self.training_pipelines = {}
         self.debug_pipelines = {}
         self.pipelines = {}
 
@@ -276,6 +280,8 @@ class SessionInitializer:
         'splits': parse.SplitLoader(),
         'preprocessors': parse.PreProcessorLoader(),
         'collators': parse.Loader(),
+        'data_loaders': parse.DataLoaderParser(),
+        'batch_processors': parse.BatchProcessorLoader(),
         'models': parse.Loader(),
         'gradient_clippers': parse.GradientClipperLoader(),
         #'forward_hooks': parse.ForwardHookLoader(),
@@ -283,6 +289,8 @@ class SessionInitializer:
         'neural_maps': parse.NeuralMapLoader(),
         'optimizers': parse.OptimizerLoader(),
         'batch_adapters': parse.Loader(),
+        'batch_pipelines': parse.BatchPipelineLoader(),
+        'training_pipelines': parse.ActualTrainingPipelineLoader(),
         'losses': parse.LossLoader(),
         'metrics': parse.MetricLoader()
     }

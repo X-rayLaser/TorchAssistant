@@ -37,7 +37,7 @@ class Metric:
     def rename_and_clone(self, new_name):
         return self.__class__(new_name, self.metric_fn, self.metric_args, self.transform_fn, self.device)
 
-    def __call__(self, outputs, targets):
+    def __call__(self, *args):
         """
 
         :param outputs: a dictionary of all outputs from prediction pipeline
@@ -47,8 +47,12 @@ class Metric:
         :return: a metric scalar
         :rtype: degenerate tensor of shape ()
         """
-        lookup_table = targets.copy()
-        lookup_table.update(outputs)
+        if len(args) == 2:
+            outputs, targets = args
+            lookup_table = targets.copy()
+            lookup_table.update(outputs)
+        else:
+            lookup_table = args[0]
 
         tensors = [lookup_table[arg] for arg in self.metric_args]
 

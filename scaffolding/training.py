@@ -23,6 +23,17 @@ def train(session, log_metrics, save_checkpoint, stat_ivl=1):
 
 def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10):
     stage = session.stages[stage_number]
+
+    # todo: remove this later
+    ####
+    from collections import namedtuple
+    TrainingPipeline = namedtuple('TrainingPipeline', ["batch_pipeline", "loss_fn"])
+    scored_batches = session.batch_pipelines["scored_batches"]
+    mixed_batches = session.batch_pipelines["mixed_batches"]
+    stage.training_pipelines = [TrainingPipeline(batch_pipeline=scored_batches, loss_fn=stage.pipelines[0].loss_fn),
+                                TrainingPipeline(batch_pipeline=mixed_batches, loss_fn=stage.pipelines[1].loss_fn)]
+    ####
+
     stop_condition = stage.stop_condition
 
     formatter = Formatter()
@@ -35,7 +46,9 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
     for epoch in range(start_epoch, start_epoch + 1000):
         print_metrics = PrintMetrics(metric_dicts, stat_ivl, epoch, formatter)
 
-        for log_entries in interleave_training(session, stage.pipelines):
+        #training_pipelines = stage.pipelines
+        training_pipelines = stage.training_pipelines
+        for log_entries in interleave_training(session, training_pipelines):
             print_metrics(log_entries)
             # run debuggers/visualization code
             for debug in debuggers:
@@ -110,15 +123,8 @@ class Debugger:
 
 
 def interleave_training(session, pipelines):
-    training_loops = []
-    for pipeline in pipelines:
-        train_pipeline = PredictionPipeline(
-            pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
-        )
-        train_loader, _ = get_data_loaders(pipeline)
-        training_loops.append(TrainingLoop(
-            train_loader, train_pipeline, pipeline.loss_fn, session.gradient_clippers
-        ))
+    #training_loops = prepare_trainers(session, pipelines)
+    training_loops = prepare_trainers_new(session, pipelines)
 
     entries_gen = itertools.zip_longest(*training_loops)
 
@@ -133,6 +139,30 @@ def interleave_training(session, pipelines):
     for log_entries in entries_gen:
         entries = fill_missing(log_entries, entries)
         yield entries
+
+
+def prepare_trainers_new(session, pipelines):
+    trainers = []
+    for pipeline in pipelines:
+        trainers.append(
+            ActualTrainer(batch_pipeline=pipeline.batch_pipeline,
+                          loss_fn=pipeline.loss_fn,
+                          gradient_clippers=session.gradient_clippers)
+        )
+    return trainers
+
+
+def prepare_trainers(session, pipelines):
+    training_loops = []
+    for pipeline in pipelines:
+        train_pipeline = PredictionPipeline(
+            pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
+        )
+        train_loader, _ = get_data_loaders(pipeline)
+        training_loops.append(TrainingLoop(
+            train_loader, train_pipeline, pipeline.loss_fn, session.gradient_clippers
+        ))
+    return training_loops
 
 
 def evaluate_pipeline(pipeline):
@@ -314,3 +344,43 @@ class PredictionPipeline:
             for tensor_name, value in mapping.items():
                 if hasattr(value, 'device') and value.device != self.device:
                     mapping[tensor_name] = value.to(self.device)
+
+
+class ActualTrainer:
+    def __init__(self, batch_pipeline, loss_fn, gradient_clippers):
+        self.batch_pipeline = batch_pipeline
+        self.loss_fn = loss_fn
+        self.gradient_clippers = gradient_clippers
+        #self.output_vars = output_vars
+        #self.target_vars = target_vars
+
+    def __iter__(self):
+        #switch_to_train_mode(self.prediction_pipeline)
+        num_iterations = len(self.batch_pipeline)
+
+        for i, results_batch in enumerate(self.batch_pipeline):
+            #outputs = self.get_tensors(batch, self.output_vars)
+            #targets = self.get_tensors(batch, self.target_vars)
+
+            loss = self.train_on_batch(results_batch)
+
+            # todo: retrieve somehow
+            inputs = []
+
+            # todo: this hack should work for now, but fix this later
+            outputs = results_batch
+            targets = results_batch
+            yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, loss)
+
+    def get_tensors(self, batch, var_names):
+        return {var_name: batch[var_name] for var_name in var_names}
+
+    def train_on_batch(self, batch):
+        loss = self.loss_fn(batch)
+        loss.backward()
+
+        for clip_gradients in self.gradient_clippers.values():
+            clip_gradients()
+
+        self.batch_pipeline.update()
+        return loss
