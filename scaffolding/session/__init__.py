@@ -8,6 +8,7 @@ import torch
 
 from . import parse
 from .parse import get_dataset
+from .registry import group_to_loader
 
 
 def create_session(spec):
@@ -275,28 +276,8 @@ class CallableInstaller(ObjectInstaller):
 
 
 class SessionInitializer:
-    group_to_loader = {
-        'datasets': parse.DatasetLoader(),
-        'splits': parse.SplitLoader(),
-        'preprocessors': parse.PreProcessorLoader(),
-        'collators': parse.Loader(),
-        'data_loaders': parse.DataLoaderParser(),
-        'batch_processors': parse.BatchProcessorLoader(),
-        'models': parse.Loader(),
-        'gradient_clippers': parse.GradientClipperLoader(),
-        #'forward_hooks': parse.ForwardHookLoader(),
-        'backward_hooks': parse.BackwardHookLoader(),
-        'neural_maps': parse.NeuralMapLoader(),
-        'optimizers': parse.OptimizerLoader(),
-        'batch_adapters': parse.Loader(),
-        'batch_pipelines': parse.BatchPipelineLoader(),
-        'losses': parse.LossLoader(),
-        'metrics': parse.MetricLoader()
-    }
-
     installers = defaultdict(ObjectInstaller, {
         'preprocessors': PreProcessorInstaller(),
-        #'forward_hooks': CallableInstaller(),
         'backward_hooks': CallableInstaller(),
         'splits': SplitterInstaller()
     })
@@ -340,11 +321,11 @@ class SessionInitializer:
 
     def build_object(self, session, definition):
         group = definition["group"]
-        loader = self.group_to_loader[group]
+        loader = group_to_loader.get(group, parse.Loader())
         installer = self.installers[group]
         name = definition["name"]
         spec = definition["spec"]
-        instance = loader.load(session, spec, name)
+        instance = loader(session, spec, name)
         installer.setup(session, instance, spec)
 
         section = getattr(session, group)
@@ -354,7 +335,6 @@ class SessionInitializer:
 
 class SessionRestorer(SessionInitializer):
     installers = defaultdict(ObjectInstaller, {
-        #'forward_hooks': CallableInstaller(),
         'backward_hooks': CallableInstaller()
     })
 

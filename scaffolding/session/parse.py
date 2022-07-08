@@ -2,6 +2,7 @@ from collections import namedtuple
 import inspect
 
 import torch
+from torch import nn
 import torchmetrics
 
 from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset, WrappedDataset
@@ -9,12 +10,8 @@ from scaffolding.preprocessors import NullProcessor
 from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 from scaffolding.output_devices import Printer
-
-
-class Learner:
-    def __init__(self, preprocessor_name, dataset_name):
-        self.preprocessor_name = preprocessor_name
-        self.dataset_name = dataset_name
+from scaffolding.output_adapters import IdentityAdapter
+from .registry import definition
 
 
 class SpecParser:
@@ -87,41 +84,44 @@ class Loader:
         factory = parser.parse(spec)
         return factory.get_instance(session)
 
-
-class DatasetLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        if 'class' in spec or 'factory_fn' in spec:
-            return Loader().load(session, spec, object_name)
-
-        # in that case, we are building a composite dataset
-        if 'link' in spec:
-            referred_ds = spec["link"]
-            dataset = get_dataset(session, referred_ds)
-        elif 'merge' in spec:
-            merge_names = spec['merge']
-            merge_datasets = [get_dataset(session, name) for name in merge_names]
-            dataset = MergedDataset(*merge_datasets)
-        else:
-            raise BadSpecificationError(f'Either one of these keys must be present: "class", "link" or "merge"')
-
-        preprocessors = spec.get("preprocessors", [])
-        preprocessors = [session.preprocessors.get(name) or session.neural_maps.get(name, NullProcessor())
-                         for name in preprocessors]
-        return WrappedDataset(dataset, preprocessors)
+    def __call__(self, session, spec, object_name=None):
+        return self.load(session, spec, object_name)
 
 
-class SplitLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        dataset_name = spec["dataset_name"]
-        ratio = spec["ratio"]
-        splitter = MultiSplitter(dataset_name, ratio)
-        return splitter
+@definition("datasets")
+def load_dataset(session, spec, object_name=None):
+    if 'class' in spec or 'factory_fn' in spec:
+        return Loader().load(session, spec, object_name)
+
+    # in that case, we are building a composite dataset
+    if 'link' in spec:
+        referred_ds = spec["link"]
+        dataset = get_dataset(session, referred_ds)
+    elif 'merge' in spec:
+        merge_names = spec['merge']
+        merge_datasets = [get_dataset(session, name) for name in merge_names]
+        dataset = MergedDataset(*merge_datasets)
+    else:
+        raise BadSpecificationError(f'Either one of these keys must be present: "class", "link" or "merge"')
+
+    preprocessors = spec.get("preprocessors", [])
+    preprocessors = [session.preprocessors.get(name) or session.neural_maps.get(name, NullProcessor())
+                     for name in preprocessors]
+    return WrappedDataset(dataset, preprocessors)
 
 
-class PreProcessorLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        instance = super().load(session, spec, object_name)
-        return instance
+@definition("splits")
+def load_data_split(session, spec, object_name=None):
+    dataset_name = spec["dataset_name"]
+    ratio = spec["ratio"]
+    splitter = MultiSplitter(dataset_name, ratio)
+    return splitter
+
+
+@definition("preprocessors")
+def load_preprocessor(session, spec, object_name=None):
+    instance = Loader().load(session, spec, object_name)
+    return instance
 
 
 class NeuralMap:
@@ -139,15 +139,15 @@ class NeuralMap:
         return self.process(x)
 
 
-class DataLoaderParser(Loader):
-    def load(self, session, spec, object_name=None):
-        dataset = session.datasets[spec["dataset"]]
-        collator = session.collators[spec["collator"]]
+@definition("data_loaders")
+def load_data_loader(session, spec, object_name=None):
+    dataset = session.datasets[spec["dataset"]]
+    collator = session.collators[spec["collator"]]
 
-        kwargs = dict(shuffle=True, num_workers=2)
-        kwargs.update(spec.get("kwargs", {}))
+    kwargs = dict(shuffle=True, num_workers=2)
+    kwargs.update(spec.get("kwargs", {}))
 
-        return torch.utils.data.DataLoader(dataset, collate_fn=collator, **kwargs)
+    return torch.utils.data.DataLoader(dataset, collate_fn=collator, **kwargs)
 
 
 class BatchProcessorLoader(Loader):
@@ -159,7 +159,6 @@ class BatchProcessorLoader(Loader):
         if "output_adapter" in spec:
             output_adapter = Loader().load(session, spec["output_adapter"], object_name)
         else:
-            from scaffolding.output_adapters import IdentityAdapter
             output_adapter = IdentityAdapter()
 
         graph_spec = spec["neural_graph"]
@@ -187,6 +186,11 @@ class BatchProcessorLoader(Loader):
         return Node(name=node_spec.model_name,
                     serializable_model=model, serializable_optimizer=optimizer,
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
+
+
+@definition("batch_processors")
+def load_batch_processor(session, spec, object_name=None):
+    return BatchProcessorLoader().load(session, spec, object_name)
 
 
 class NeuralBatchProcessor:
@@ -229,26 +233,25 @@ class NeuralBatchProcessor:
                 node.optimizer.step()
 
 
-class NeuralMapLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        model_name = spec["mapper_model"]
-        model = session.models[model_name]
-        instance = NeuralMap(model)
-        return instance
+@definition("neural_maps")
+def load_neural_map(session, spec, object_name=None):
+    model_name = spec["mapper_model"]
+    model = session.models[model_name]
+    instance = NeuralMap(model)
+    return instance
 
 
-class BatchPipelineLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        if "mix" in spec:
-            mixed_pipelines = [session.batch_pipelines[name] for name in spec["mix"]]
-            batch_generator = BatchPipelineMixer(mixed_pipelines)
-
-        else:
-            batch_generator = session.data_loaders[spec["data_loader"]]
-        object_names = spec.get("batch_processors", [])
-        batch_processors = [session.batch_processors[name] for name in object_names]
-        variable_names = spec.get("variable_names", [])
-        return BatchPipeline(batch_generator, batch_processors, variable_names)
+@definition("batch_pipelines")
+def load_batch_pipeline(session, spec, object_name=None):
+    if "mix" in spec:
+        mixed_pipelines = [session.batch_pipelines[name] for name in spec["mix"]]
+        batch_generator = BatchPipelineMixer(mixed_pipelines)
+    else:
+        batch_generator = session.data_loaders[spec["data_loader"]]
+    object_names = spec.get("batch_processors", [])
+    batch_processors = [session.batch_processors[name] for name in object_names]
+    variable_names = spec.get("variable_names", [])
+    return BatchPipeline(batch_generator, batch_processors, variable_names)
 
 
 class BatchPipeline:
@@ -343,13 +346,13 @@ class GradientClipper:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
 
 
-class GradientClipperLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        model_name = spec["model"]
-        clip_value = spec.get("clip_value")
-        clip_norm = spec.get("clip_norm")
-        model = session.models[model_name]
-        return GradientClipper(model, clip_value, clip_norm)
+@definition("gradient_clippers")
+def load_clipper(session, spec, object_name=None):
+    model_name = spec["model"]
+    clip_value = spec.get("clip_value")
+    clip_norm = spec.get("clip_norm")
+    model = session.models[model_name]
+    return GradientClipper(model, clip_value, clip_norm)
 
 
 class HookInstaller:
@@ -383,6 +386,11 @@ class BackwardHookLoader(Loader):
         return self.hook_installer(model, create_hook)
 
 
+@definition("backward_hooks")
+def load_backward_hook(session, spec, object_name=None):
+    return BackwardHookLoader().load(session, spec, object_name)
+
+
 class OptimizerWithLearningRateScheduler:
     def __init__(self, optimizer, lr_scheduler):
         self.optimizer = optimizer
@@ -406,141 +414,65 @@ class OptimizerWithLearningRateScheduler:
         self.scheduler.step()
 
 
-class OptimizerLoader(Loader):
-    def load(self, session, spec_dict, object_name=None):
-        # todo: support setting the same optimizer for more than 1 model
-        class_name = spec_dict.get("class")
-        args = spec_dict.get("args", [])
-        kwargs = spec_dict.get("kwargs", {})
-        model_name = spec_dict["model"]
+@definition("optimizers")
+def load_optimizer(session, spec_dict, object_name=None):
+    # todo: support setting the same optimizer for more than 1 model
+    class_name = spec_dict.get("class")
+    args = spec_dict.get("args", [])
+    kwargs = spec_dict.get("kwargs", {})
+    model_name = spec_dict["model"]
 
-        cls = getattr(torch.optim, class_name)
-        model = session.models[model_name]
-        optimizer = cls(model.parameters(), *args, **kwargs)
+    cls = getattr(torch.optim, class_name)
+    model = session.models[model_name]
+    optimizer = cls(model.parameters(), *args, **kwargs)
 
-        scheduler_spec = spec_dict.get('lr_scheduler')
+    scheduler_spec = spec_dict.get('lr_scheduler')
 
-        if scheduler_spec:
-            scheduler = instantiate_class(scheduler_spec["class"], optimizer,
-                                          **scheduler_spec.get("kwargs", {}))
-            optimizer = OptimizerWithLearningRateScheduler(optimizer, scheduler)
+    if scheduler_spec:
+        scheduler = instantiate_class(scheduler_spec["class"], optimizer,
+                                      **scheduler_spec.get("kwargs", {}))
+        optimizer = OptimizerWithLearningRateScheduler(optimizer, scheduler)
 
-        return optimizer
-
-
-class LossLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        from torch import nn
-        loss_class_name = spec["class"]
-
-        if "transform" in spec:
-            transform_fn = import_function(spec["transform"])
-            if inspect.isclass(transform_fn):
-                transform_fn = transform_fn(session)
-        else:
-            transform_fn = lambda *fn_args: fn_args
-
-        criterion_class = getattr(nn, loss_class_name)
-        args = spec.get("args", [])
-        kwargs = spec.get("kwargs", {})
-
-        # todo: set device later
-        return Metric('loss', criterion_class(*args, **kwargs), spec["inputs"], transform_fn, 'cpu')
+    return optimizer
 
 
-class MetricLoader(Loader):
-    def load(self, session, spec, object_name=None):
-        if "transform" in spec:
-            transform_fn = import_entity(spec["transform"])
-            if inspect.isclass(transform_fn):
-                transform_fn = transform_fn(session)
-        else:
-            def transform_fn(*fn_args):
-                return fn_args
+@definition("losses")
+def load_loss(session, spec, object_name=None):
+    loss_class_name = spec["class"]
 
-        metric_class = spec["class"]
-        if hasattr(torchmetrics, metric_class):
-            metric = instantiate_class(f'torchmetrics.{metric_class}')
-        else:
-            metric = metric_functions[metric_class]
+    if "transform" in spec:
+        transform_fn = import_function(spec["transform"])
+        if inspect.isclass(transform_fn):
+            transform_fn = transform_fn(session)
+    else:
+        transform_fn = lambda *fn_args: fn_args
 
-        # todo: set device later
-        return Metric(object_name, metric, spec["inputs"], transform_fn, device='cpu')
+    criterion_class = getattr(nn, loss_class_name)
+    args = spec.get("args", [])
+    kwargs = spec.get("kwargs", {})
 
-
-class CommonPipelineLoader(Loader):
-    def load(self, session, pipeline_spec, object_name=None):
-        pipeline = BasePipeline()
-
-        pipeline.train_dataset = get_dataset(session, pipeline_spec["train_dataset"])
-
-        if "val_dataset" in pipeline_spec:
-            val_dataset = get_dataset(session, pipeline_spec["val_dataset"])
-        else:
-            val_dataset = pipeline.train_dataset
-        pipeline.val_dataset = val_dataset
-
-        pipeline.preprocessors = [session.preprocessors[name]
-                                  for name in pipeline_spec["preprocessor_names"]]
-
-        pipeline.collator = session.collators[pipeline_spec["collator_name"]]
-        pipeline.batch_size = pipeline_spec["batch_size"]
-        if "batch_adapter" in pipeline_spec:
-            pipeline.batch_adapter = Loader().load(session, pipeline_spec["batch_adapter"])
-        else:
-            pipeline.batch_adapter = session.batch_adapters[pipeline_spec["batch_adapter_name"]]
-
-        pipeline.neural_graph = self.parse_neural_graph(session, pipeline_spec['neural_graph'])
-
-        pipeline.device = pipeline_spec.get("device", "cpu")
-
-        return pipeline
-
-    def parse_neural_graph(self, session, graph_spec):
-        nodes = []
-        for node_dict in graph_spec:
-            model_name = node_dict['model_name']
-            inputs = node_dict['inputs']
-            outputs = node_dict['outputs']
-            optimizer_name = node_dict['optimizer_name']
-
-            NodeSpec = namedtuple('NodeSpec', ['model_name', 'inputs', 'outputs', 'optimizer_name'])
-            node_spec = NodeSpec(model_name, inputs, outputs, optimizer_name)
-            node = self.node_from_spec(session, node_spec)
-            nodes.append(node)
-        return nodes
-
-    def node_from_spec(self, session, node_spec):
-        model = session.models[node_spec.model_name]
-        optimizer = session.optimizers.get(node_spec.optimizer_name)
-        return Node(name=node_spec.model_name,
-                    serializable_model=model, serializable_optimizer=optimizer,
-                    inputs=node_spec.inputs, outputs=node_spec.outputs)
+    # todo: set device later
+    return Metric('loss', criterion_class(*args, **kwargs), spec["inputs"], transform_fn, 'cpu')
 
 
-class PipelineLoader(Loader):
-    def load(self, session, pipeline_spec, object_name=None):
-        base_pipeline = super().load(session, pipeline_spec, object_name)
+@definition("metrics")
+def load_metric(session, spec, object_name=None):
+    if "transform" in spec:
+        transform_fn = import_entity(spec["transform"])
+        if inspect.isclass(transform_fn):
+            transform_fn = transform_fn(session)
+    else:
+        def transform_fn(*fn_args):
+            return fn_args
 
-        loss_name = pipeline_spec["loss_name"]
-        loss_fn = session.losses[loss_name]
+    metric_class = spec["class"]
+    if hasattr(torchmetrics, metric_class):
+        metric = instantiate_class(f'torchmetrics.{metric_class}')
+    else:
+        metric = metric_functions[metric_class]
 
-        metric_fns = self.parse_metrics(session, pipeline_spec)
-
-        if 'loss_display_name' in pipeline_spec:
-            loss_display_name = pipeline_spec.get('loss_display_name', loss_name)
-            metric_fns[loss_display_name] = loss_fn.rename_and_clone(loss_display_name)
-
-        return Pipeline.from_base_pipeline(
-            base_pipeline, loss_fn=loss_fn, metric_fns=metric_fns
-        )
-
-    def parse_metrics(self, session, pipeline_spec):
-        metric_names = pipeline_spec.get("metric_names", [])
-        display_names = pipeline_spec.get("metric_display_names", metric_names)
-        names = zip(metric_names, display_names)
-        return {display_name: session.metrics[name].rename_and_clone(display_name)
-                for name, display_name in names}
+    # todo: set device later
+    return Metric(object_name, metric, spec["inputs"], transform_fn, device='cpu')
 
 
 class DebugPipelineLoader(Loader):
@@ -565,7 +497,7 @@ class DebugPipelineLoader(Loader):
             output_device = Printer()
 
         output_keys = pipeline_spec.get("output_keys", ["y_hat"])
-        print('parsed debug pipeline')
+
         return DebugPipeline(
             batch_pipeline=batch_pipeline, num_iterations=num_iterations, interval=interval,
             output_keys=output_keys, postprocessor=postprocessor, output_device=output_device
@@ -588,34 +520,6 @@ class StageLoader(Loader):
 
         stop_condition = Loader().load(session, stop_condition_dict)
         return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines, stop_condition)
-
-
-class BasePipeline:
-    def __init__(self):
-        self.train_dataset = None
-        self.val_dataset = None
-        self.preprocessors = None
-        self.collator = None
-        self.batch_size = None
-        self.batch_adapter = None
-        self.neural_graph = None
-        self.device = None
-
-
-class Pipeline(BasePipeline):
-    def __init__(self):
-        super().__init__()
-        self.loss_fn = None
-        self.metric_fns = None
-
-    @classmethod
-    def from_base_pipeline(cls, pipeline, *, loss_fn, metric_fns):
-        result = cls()
-        result.__dict__ = pipeline.__dict__
-
-        result.loss_fn = loss_fn
-        result.metric_fns = metric_fns
-        return result
 
 
 class DebugPipeline:
