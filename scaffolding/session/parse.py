@@ -5,7 +5,8 @@ import torch
 from torch import nn
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset, WrappedDataset
+from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset, \
+    WrappedDataset, switch_to_train_mode, switch_to_evaluation_mode, change_model_device
 from scaffolding.preprocessors import NullProcessor
 from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
@@ -186,6 +187,7 @@ class NeuralBatchProcessor:
 
     def __call__(self, batch, inference_mode=False):
         inputs = self.input_adapter(batch)
+        change_model_device(self.neural_graph, self.device)
         self.inputs_to(inputs)
 
         all_outputs = {}
@@ -215,6 +217,12 @@ class NeuralBatchProcessor:
         for node in self.neural_graph:
             if node.optimizer:
                 node.optimizer.step()
+
+    def train_mode(self):
+        switch_to_train_mode(self.neural_graph)
+
+    def eval_mode(self):
+        switch_to_evaluation_mode(self.neural_graph)
 
 
 @register("batch_pipelines")
@@ -260,6 +268,14 @@ class BatchPipeline:
         for processor in self.batch_processors:
             processor.update()
 
+    def train_mode(self):
+        for processor in self.batch_processors:
+            processor.train_mode()
+
+    def eval_mode(self):
+        for processor in self.batch_processors:
+            processor.eval_mode()
+
 
 class BatchPipelineMixer:
     def __init__(self, batch_pipelines):
@@ -282,6 +298,14 @@ class BatchPipelineMixer:
             concatenation = torch.cat(tensors)
             result[k] = concatenation
         return result
+
+    def train_mode(self):
+        for pipeline in self.batch_pipelines:
+            pipeline.train_mode()
+
+    def eval_mode(self):
+        for pipeline in self.batch_pipelines:
+            pipeline.eval_mode()
 
 
 class ActualTrainingPipelineLoader(Loader):

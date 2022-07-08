@@ -48,7 +48,7 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
         all_train_metrics = {}
         for pipeline in stage.validation_pipelines:
-            train_metrics = evaluate_pipeline_new(pipeline)
+            train_metrics = evaluate_pipeline(pipeline)
             all_train_metrics.update(train_metrics)
 
         final_metrics_string = formatter.format_metrics(all_train_metrics, validation=False)
@@ -133,10 +133,10 @@ def prepare_trainers(session, pipelines):
     return trainers
 
 
-def evaluate_pipeline_new(pipeline, num_batches=10):
+def evaluate_pipeline(pipeline, num_batches=10):
     batch_pipeline = pipeline.batch_pipeline
     metrics = pipeline.metric_fns
-    #switch_to_evaluation_mode(pipeline)
+    batch_pipeline.eval_mode()
 
     moving_averages = {metric.name: MovingAverage() for _, metric in metrics.items()}
 
@@ -155,43 +155,6 @@ def evaluate_pipeline_new(pipeline, num_batches=10):
 def update_running_metrics(moving_averages, metrics, outputs, targets):
     for metric_name, metric in metrics.items():
         moving_averages[metric.name].update(metric(outputs, targets))
-
-
-class TrainingLoop:
-    def __init__(self, data_loader, prediction_pipeline, loss_fn, gradient_clippers):
-        self.data_loader = data_loader
-        self.prediction_pipeline = prediction_pipeline
-        self.loss_fn = loss_fn
-        self.gradient_clippers = gradient_clippers
-
-    def __iter__(self):
-        switch_to_train_mode(self.prediction_pipeline)
-        num_iterations = len(self.data_loader)
-
-        for i, batch in enumerate(self.data_loader):
-            inputs, targets = self.prediction_pipeline.adapt_batch(batch)
-            loss, outputs = self.train_on_batch(inputs, targets)
-            yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, loss)
-
-    def train_on_batch(self, inputs, targets):
-        for node in self.prediction_pipeline:
-            # todo: refactor this if statement here and below
-            if node.optimizer:
-                node.optimizer.zero_grad()
-
-        outputs = self.prediction_pipeline(inputs, inference_mode=False)
-
-        loss = self.loss_fn(outputs, targets)
-        loss.backward()
-
-        for clip_gradients in self.gradient_clippers.values():
-            clip_gradients()
-
-        for node in self.prediction_pipeline:
-            if node.optimizer:
-                node.optimizer.step()
-
-        return loss, outputs
 
 
 def get_data_loaders(pipeline):
@@ -302,17 +265,12 @@ class ActualTrainer:
         self.batch_pipeline = batch_pipeline
         self.loss_fn = loss_fn
         self.gradient_clippers = gradient_clippers
-        #self.output_vars = output_vars
-        #self.target_vars = target_vars
 
     def __iter__(self):
-        #switch_to_train_mode(self.prediction_pipeline)
+        self.batch_pipeline.train_mode()
         num_iterations = len(self.batch_pipeline)
 
         for i, results_batch in enumerate(self.batch_pipeline):
-            #outputs = self.get_tensors(batch, self.output_vars)
-            #targets = self.get_tensors(batch, self.target_vars)
-
             loss = self.train_on_batch(results_batch)
 
             # todo: retrieve somehow
