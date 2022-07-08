@@ -11,7 +11,7 @@ from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 from scaffolding.output_devices import Printer
 from scaffolding.output_adapters import IdentityAdapter
-from .registry import definition
+from .registry import register
 
 
 class SpecParser:
@@ -88,7 +88,7 @@ class Loader:
         return self.load(session, spec, object_name)
 
 
-@definition("datasets")
+@register("datasets")
 def load_dataset(session, spec, object_name=None):
     if 'class' in spec or 'factory_fn' in spec:
         return Loader().load(session, spec, object_name)
@@ -105,12 +105,11 @@ def load_dataset(session, spec, object_name=None):
         raise BadSpecificationError(f'Either one of these keys must be present: "class", "link" or "merge"')
 
     preprocessors = spec.get("preprocessors", [])
-    preprocessors = [session.preprocessors.get(name) or session.neural_maps.get(name, NullProcessor())
-                     for name in preprocessors]
+    preprocessors = [session.preprocessors.get(name, NullProcessor()) for name in preprocessors]
     return WrappedDataset(dataset, preprocessors)
 
 
-@definition("splits")
+@register("splits")
 def load_data_split(session, spec, object_name=None):
     dataset_name = spec["dataset_name"]
     ratio = spec["ratio"]
@@ -118,28 +117,13 @@ def load_data_split(session, spec, object_name=None):
     return splitter
 
 
-@definition("preprocessors")
+@register("preprocessors")
 def load_preprocessor(session, spec, object_name=None):
     instance = Loader().load(session, spec, object_name)
     return instance
 
 
-class NeuralMap:
-    def __init__(self, model):
-        self.model = model
-
-    def process(self, x):
-        with torch.no_grad():
-            res = self.model(x.unsqueeze(0))[0]
-            res = res.squeeze(0)
-
-        return res
-
-    def __call__(self, x):
-        return self.process(x)
-
-
-@definition("data_loaders")
+@register("data_loaders")
 def load_data_loader(session, spec, object_name=None):
     dataset = session.datasets[spec["dataset"]]
     collator = session.collators[spec["collator"]]
@@ -184,11 +168,11 @@ class BatchProcessorLoader(Loader):
         model = session.models[node_spec.model_name]
         optimizer = session.optimizers.get(node_spec.optimizer_name)
         return Node(name=node_spec.model_name,
-                    serializable_model=model, serializable_optimizer=optimizer,
+                    model=model, optimizer=optimizer,
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
 
 
-@definition("batch_processors")
+@register("batch_processors")
 def load_batch_processor(session, spec, object_name=None):
     return BatchProcessorLoader().load(session, spec, object_name)
 
@@ -233,15 +217,7 @@ class NeuralBatchProcessor:
                 node.optimizer.step()
 
 
-@definition("neural_maps")
-def load_neural_map(session, spec, object_name=None):
-    model_name = spec["mapper_model"]
-    model = session.models[model_name]
-    instance = NeuralMap(model)
-    return instance
-
-
-@definition("batch_pipelines")
+@register("batch_pipelines")
 def load_batch_pipeline(session, spec, object_name=None):
     if "mix" in spec:
         mixed_pipelines = [session.batch_pipelines[name] for name in spec["mix"]]
@@ -346,7 +322,7 @@ class GradientClipper:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
 
 
-@definition("gradient_clippers")
+@register("gradient_clippers")
 def load_clipper(session, spec, object_name=None):
     model_name = spec["model"]
     clip_value = spec.get("clip_value")
@@ -386,7 +362,7 @@ class BackwardHookLoader(Loader):
         return self.hook_installer(model, create_hook)
 
 
-@definition("backward_hooks")
+@register("backward_hooks")
 def load_backward_hook(session, spec, object_name=None):
     return BackwardHookLoader().load(session, spec, object_name)
 
@@ -414,7 +390,7 @@ class OptimizerWithLearningRateScheduler:
         self.scheduler.step()
 
 
-@definition("optimizers")
+@register("optimizers")
 def load_optimizer(session, spec_dict, object_name=None):
     # todo: support setting the same optimizer for more than 1 model
     class_name = spec_dict.get("class")
@@ -436,7 +412,7 @@ def load_optimizer(session, spec_dict, object_name=None):
     return optimizer
 
 
-@definition("losses")
+@register("losses")
 def load_loss(session, spec, object_name=None):
     loss_class_name = spec["class"]
 
@@ -455,7 +431,7 @@ def load_loss(session, spec, object_name=None):
     return Metric('loss', criterion_class(*args, **kwargs), spec["inputs"], transform_fn, 'cpu')
 
 
-@definition("metrics")
+@register("metrics")
 def load_metric(session, spec, object_name=None):
     if "transform" in spec:
         transform_fn = import_entity(spec["transform"])
@@ -534,10 +510,10 @@ class DebugPipeline:
 
 
 class Node:
-    def __init__(self, name, serializable_model, serializable_optimizer, inputs, outputs):
+    def __init__(self, name, model, optimizer, inputs, outputs):
         self.name = name
-        self.net = serializable_model
-        self.optimizer = serializable_optimizer
+        self.net = model
+        self.optimizer = optimizer
         self.inputs = inputs
         self.outputs = outputs
 
@@ -578,6 +554,3 @@ def get_dataset(session, dataset_name):
     else:
         dataset = session.datasets[dataset_name]
     return dataset
-
-
-# todo: introduce Action and Definition abstractions and new syntax (list of actions and definitions)

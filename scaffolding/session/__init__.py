@@ -102,7 +102,6 @@ class Session:
         self.gradient_clippers = {}
         self.forward_hooks = {}
         self.backward_hooks = {}
-        self.neural_maps = {}
         self.optimizers = {}
         self.batch_adapters = {}
         self.batch_processors = {}

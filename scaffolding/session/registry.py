@@ -1,7 +1,7 @@
 group_to_loader = {}
 
 
-def definition(group):
+def register(group):
     def wrapper(f):
         group_to_loader[group] = f
         return f
