@@ -318,8 +318,8 @@ class ActualTrainingPipelineLoader(Loader):
             loss_display_name = spec.get('loss_display_name', loss_name)
             metric_fns[loss_display_name] = loss_fn.rename_and_clone(loss_display_name)
 
-        return None
-        #ActualTrainer(batch_pipeline, )
+        TrainingPipeline = namedtuple('TrainingPipeline', ["batch_pipeline", "loss_fn", "metric_fns"])
+        return TrainingPipeline(batch_pipeline, loss_fn, metric_fns)
 
     def parse_metrics(self, session, pipeline_spec):
         metric_names = pipeline_spec.get("metric_names", [])
@@ -518,7 +518,7 @@ class CommonPipelineLoader(Loader):
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
 
 
-class PipelineLoader(CommonPipelineLoader):
+class PipelineLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
         base_pipeline = super().load(session, pipeline_spec, object_name)
 
@@ -543,10 +543,9 @@ class PipelineLoader(CommonPipelineLoader):
                 for name, display_name in names}
 
 
-class DebugPipelineLoader(CommonPipelineLoader):
+class DebugPipelineLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
-        base_pipeline = super().load(session, pipeline_spec, object_name)
-
+        batch_pipeline = session.batch_pipelines[pipeline_spec["batch_pipeline"]]
         num_iterations = pipeline_spec["num_iterations"]
         interval = pipeline_spec["interval"]
 
@@ -566,9 +565,9 @@ class DebugPipelineLoader(CommonPipelineLoader):
             output_device = Printer()
 
         output_keys = pipeline_spec.get("output_keys", ["y_hat"])
-
-        return DebugPipeline.from_base_pipeline(
-            base_pipeline, num_iterations=num_iterations, interval=interval,
+        print('parsed debug pipeline')
+        return DebugPipeline(
+            batch_pipeline=batch_pipeline, num_iterations=num_iterations, interval=interval,
             output_keys=output_keys, postprocessor=postprocessor, output_device=output_device
         )
 
@@ -578,14 +577,17 @@ class StageLoader(Loader):
         mode = spec.get("mode", "interleave")
         stop_condition_dict = spec.get("stop_condition")
 
-        pipelines = spec["pipelines"]
-        pipelines = [session.pipelines[name] for name in pipelines]
+        training_pipelines = spec["training_pipelines"]
+        training_pipelines = [session.pipelines[name] for name in training_pipelines]
+
+        validation_pipelines = spec["validation_pipelines"]
+        validation_pipelines = [session.pipelines[name] for name in validation_pipelines]
 
         debug_pipelines = spec["debug_pipelines"]
         debug_pipelines = [session.debug_pipelines[name] for name in debug_pipelines]
 
         stop_condition = Loader().load(session, stop_condition_dict)
-        return Stage(mode, pipelines, debug_pipelines, stop_condition)
+        return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines, stop_condition)
 
 
 class BasePipeline:
@@ -616,27 +618,15 @@ class Pipeline(BasePipeline):
         return result
 
 
-class DebugPipeline(BasePipeline):
-    def __init__(self):
-        super().__init__()
-        self.num_iterations = 1
-        self.interval = 100
-        self.output_keys = []
-        self.postprocessor = None
-        self.output_device = None
-
-    @classmethod
-    def from_base_pipeline(cls, pipeline, *,
-                           num_iterations, interval, output_keys, postprocessor, output_device):
-        result = cls()
-        result.__dict__ = pipeline.__dict__
-
-        result.num_iterations = num_iterations
-        result.interval = interval
-        result.output_keys = output_keys
-        result.postprocessor = postprocessor
-        result.output_device = output_device
-        return result
+class DebugPipeline:
+    def __init__(self, *, batch_pipeline, num_iterations, interval,
+                 output_keys, postprocessor, output_device):
+        self.batch_pipeline = batch_pipeline
+        self.num_iterations = num_iterations
+        self.interval = interval
+        self.output_keys = output_keys
+        self.postprocessor = postprocessor
+        self.output_device = output_device
 
 
 class Node:
@@ -666,9 +656,11 @@ class Node:
 
 
 class Stage:
-    def __init__(self, mode, pipelines, debug_pipelines, stop_condition):
+    def __init__(self, mode, training_pipelines,
+                 validation_pipelines, debug_pipelines, stop_condition):
         self.mode = mode
-        self.pipelines = pipelines
+        self.training_pipelines = training_pipelines
+        self.validation_pipelines = validation_pipelines
         self.debug_pipelines = debug_pipelines
         self.stop_condition = stop_condition
 

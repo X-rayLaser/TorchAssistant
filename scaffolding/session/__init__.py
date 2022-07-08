@@ -204,24 +204,24 @@ class SessionSaver:
 
         session.progress.from_list(checkpoint["progress"])
 
-    def log_metrics(self, stage_number, epoch, train_metrics, val_metrics):
+    def log_metrics(self, stage_number, epoch, train_metrics):
         # todo: log metrics to csv file
         history_path = os.path.join(self.history_dir, f'{stage_number}.csv')
         history = TrainingHistory(history_path)
-        history.add_entry(epoch, train_metrics, val_metrics)
+        history.add_entry(epoch, train_metrics)
 
 
 class TrainingHistory:
     def __init__(self, file_path):
         self.file_path = file_path
 
-    def add_entry(self, epoch, train_metrics, val_metrics):
+    def add_entry(self, epoch, train_metrics):
         # todo: make sure the ordering is right
-        val_metrics = {f'val {k}': v for k, v in val_metrics.items()}
+        #val_metrics = {f'val {k}': v for k, v in val_metrics.items()}
 
         all_metrics = {}
         all_metrics.update(train_metrics)
-        all_metrics.update(val_metrics)
+        #all_metrics.update(val_metrics)
 
         row_dict = {'epoch': epoch}
         row_dict.update({k: self.scalar(v) for k, v in all_metrics.items()})
@@ -290,7 +290,6 @@ class SessionInitializer:
         'optimizers': parse.OptimizerLoader(),
         'batch_adapters': parse.Loader(),
         'batch_pipelines': parse.BatchPipelineLoader(),
-        'training_pipelines': parse.ActualTrainingPipelineLoader(),
         'losses': parse.LossLoader(),
         'metrics': parse.MetricLoader()
     }
@@ -311,7 +310,7 @@ class SessionInitializer:
             self.build_object(session, d)
 
         self.prepare_pipelines(
-            session, init_dict["pipelines"], parse.PipelineLoader(), 'pipelines'
+            session, init_dict["pipelines"], parse.ActualTrainingPipelineLoader(), 'pipelines'
         )
 
         self.prepare_pipelines(

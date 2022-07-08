@@ -24,30 +24,20 @@ def train(session, log_metrics, save_checkpoint, stat_ivl=1):
 def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10):
     stage = session.stages[stage_number]
 
-    # todo: remove this later
-    ####
-    from collections import namedtuple
-    TrainingPipeline = namedtuple('TrainingPipeline', ["batch_pipeline", "loss_fn"])
-    scored_batches = session.batch_pipelines["scored_batches"]
-    mixed_batches = session.batch_pipelines["mixed_batches"]
-    stage.training_pipelines = [TrainingPipeline(batch_pipeline=scored_batches, loss_fn=stage.pipelines[0].loss_fn),
-                                TrainingPipeline(batch_pipeline=mixed_batches, loss_fn=stage.pipelines[1].loss_fn)]
-    ####
-
     stop_condition = stage.stop_condition
 
     formatter = Formatter()
     start_epoch = session.progress.epochs_done_total + 1
 
-    metric_dicts = [pipeline.metric_fns for pipeline in stage.pipelines]
+    training_pipelines = stage.training_pipelines
+
+    metric_dicts = [pipeline.metric_fns for pipeline in training_pipelines]
 
     debuggers = [Debugger(pipeline) for pipeline in stage.debug_pipelines]
-
+    print(debuggers)
     for epoch in range(start_epoch, start_epoch + 1000):
         print_metrics = PrintMetrics(metric_dicts, stat_ivl, epoch, formatter)
 
-        #training_pipelines = stage.pipelines
-        training_pipelines = stage.training_pipelines
         for log_entries in interleave_training(session, training_pipelines):
             print_metrics(log_entries)
             # run debuggers/visualization code
@@ -56,24 +46,20 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
         # todo: choose which datasets/split slices to use for evaluation and with which metrics
 
-        metric_strings = []
         all_train_metrics = {}
-        all_val_metrics = {}
-        for pipeline in stage.pipelines:
-            train_metrics, val_metrics = evaluate_pipeline(pipeline)
+        for pipeline in stage.validation_pipelines:
+            train_metrics = evaluate_pipeline_new(pipeline)
             all_train_metrics.update(train_metrics)
-            all_val_metrics.update(val_metrics)
-            train_metric_string = formatter.format_metrics(train_metrics, validation=False)
-            val_metric_string = formatter.format_metrics(val_metrics, validation=True)
-            metric_string = f'{train_metric_string}; {val_metric_string}'
-            metric_strings.append(metric_string)
+
+        final_metrics_string = formatter.format_metrics(all_train_metrics, validation=False)
 
         epoch_str = formatter.format_epoch(epoch)
 
-        final_metrics_string = '  |  '.join(metric_strings)
+        whitespaces = ' ' * 150
+        print(f'\r{whitespaces}')
         print(f'\r{epoch_str} {final_metrics_string}')
 
-        log_metrics(stage_number, epoch, all_train_metrics, all_val_metrics)
+        log_metrics(stage_number, epoch, all_train_metrics)
 
         session.progress.increment_progress()
 
@@ -91,11 +77,7 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
 class Debugger:
     def __init__(self, pipeline):
-        self.loader, _ = get_data_loaders(pipeline)
-        self.predictor = PredictionPipeline(
-            pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
-        )
-
+        self.batch_pipeline = pipeline.batch_pipeline
         self.postprocessor = pipeline.postprocessor
         self.output_device = pipeline.output_device
         self.pipeline = pipeline
@@ -103,18 +85,18 @@ class Debugger:
     def __call__(self, log_entries):
         entry = log_entries[0]
         interval = self.pipeline.interval
+        print('called debugger')
         if entry.iteration % interval == interval - 1:
-            it = iter(self.loader)
-            for _ in range(self.pipeline.num_iterations):
-                batch = next(it)
-                inputs, targets = self.predictor.adapt_batch(batch)
-                self.run_iteration(inputs)
+            with torch.no_grad():
+                self.debug()
 
-    def run_iteration(self, inputs):
-        with torch.no_grad():
-            outputs = self.predictor(inputs)
-
-            predictions = {k: outputs[k] for k in self.pipeline.output_keys}
+    def debug(self):
+        it = iter(self.batch_pipeline)
+        print('start debugging')
+        for _ in range(self.pipeline.num_iterations):
+            print('iteration')
+            batch = next(it)
+            predictions = {k: batch[k] for k in self.pipeline.output_keys}
 
             if self.postprocessor:
                 predictions = self.postprocessor(predictions)
@@ -123,8 +105,7 @@ class Debugger:
 
 
 def interleave_training(session, pipelines):
-    #training_loops = prepare_trainers(session, pipelines)
-    training_loops = prepare_trainers_new(session, pipelines)
+    training_loops = prepare_trainers(session, pipelines)
 
     entries_gen = itertools.zip_longest(*training_loops)
 
@@ -141,7 +122,7 @@ def interleave_training(session, pipelines):
         yield entries
 
 
-def prepare_trainers_new(session, pipelines):
+def prepare_trainers(session, pipelines):
     trainers = []
     for pipeline in pipelines:
         trainers.append(
@@ -152,50 +133,20 @@ def prepare_trainers_new(session, pipelines):
     return trainers
 
 
-def prepare_trainers(session, pipelines):
-    training_loops = []
-    for pipeline in pipelines:
-        train_pipeline = PredictionPipeline(
-            pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
-        )
-        train_loader, _ = get_data_loaders(pipeline)
-        training_loops.append(TrainingLoop(
-            train_loader, train_pipeline, pipeline.loss_fn, session.gradient_clippers
-        ))
-    return training_loops
-
-
-def evaluate_pipeline(pipeline):
-    train_loader, test_loader = get_data_loaders(pipeline)
-    train_pipeline = PredictionPipeline(
-        pipeline.neural_graph, pipeline.device, pipeline.batch_adapter
-    )
-
+def evaluate_pipeline_new(pipeline, num_batches=10):
+    batch_pipeline = pipeline.batch_pipeline
     metrics = pipeline.metric_fns
+    #switch_to_evaluation_mode(pipeline)
 
-    switch_to_evaluation_mode(train_pipeline)
-
-    train_metrics, val_metrics = compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics)
-
-    return train_metrics, val_metrics
-
-
-def compute_epoch_metrics(train_pipeline, train_loader, test_loader, metrics):
-    train_metrics = evaluate(train_pipeline, train_loader, metrics, num_batches=32)
-    val_metrics = evaluate(train_pipeline, test_loader, metrics, num_batches=32)
-    return train_metrics, val_metrics
-
-
-def evaluate(val_pipeline, dataloader, metrics, num_batches):
     moving_averages = {metric.name: MovingAverage() for _, metric in metrics.items()}
 
     with torch.no_grad():
-        for i, batch in enumerate(dataloader):
+        for i, results_batch in enumerate(batch_pipeline):
             if i >= num_batches:
                 break
 
-            inputs, targets = val_pipeline.adapt_batch(batch)
-            all_outputs = val_pipeline(inputs, inference_mode=False)
+            all_outputs = results_batch
+            targets = results_batch
             update_running_metrics(moving_averages, metrics, all_outputs, targets)
 
     return {metric_name: avg.value for metric_name, avg in moving_averages.items()}

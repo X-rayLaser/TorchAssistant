@@ -47,6 +47,8 @@ class Metric:
         :return: a metric scalar
         :rtype: degenerate tensor of shape ()
         """
+
+        # todo: get rid of this (make it work with single argument)
         if len(args) == 2:
             outputs, targets = args
             lookup_table = targets.copy()
