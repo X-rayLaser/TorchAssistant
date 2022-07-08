@@ -294,7 +294,7 @@ class BatchPipelineMixer:
         any_batch = batches[0]
         result = {}
         for k in any_batch.keys():
-            tensors = [batch[k] for batch in batches]
+            tensors = [batch[k].to(torch.device("cpu")) for batch in batches]
             concatenation = torch.cat(tensors)
             result[k] = concatenation
         return result

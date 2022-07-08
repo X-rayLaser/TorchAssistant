@@ -6,3 +6,4 @@ examples/language_translation/dataset
 examples/language_translation/data
 examples/gan
 pretrained/
+image_samples/

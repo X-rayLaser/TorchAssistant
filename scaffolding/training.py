@@ -85,16 +85,16 @@ class Debugger:
     def __call__(self, log_entries):
         entry = log_entries[0]
         interval = self.pipeline.interval
-        print('called debugger')
+
         if entry.iteration % interval == interval - 1:
             with torch.no_grad():
                 self.debug()
 
     def debug(self):
         it = iter(self.batch_pipeline)
-        print('start debugging')
+
         for _ in range(self.pipeline.num_iterations):
-            print('iteration')
+
             batch = next(it)
             predictions = {k: batch[k] for k in self.pipeline.output_keys}
 
