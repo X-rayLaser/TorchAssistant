@@ -290,7 +290,7 @@ class SessionInitializer:
             self.build_object(session, d)
 
         self.prepare_pipelines(
-            session, init_dict["pipelines"], parse.ActualTrainingPipelineLoader(), 'pipelines'
+            session, init_dict["pipelines"], parse.PipelineLoader(), 'pipelines'
         )
 
         self.prepare_pipelines(

@@ -308,7 +308,7 @@ class BatchPipelineMixer:
             pipeline.eval_mode()
 
 
-class ActualTrainingPipelineLoader(Loader):
+class PipelineLoader(Loader):
     def load(self, session, spec, object_name=None):
         batch_pipeline = session.batch_pipelines[spec["batch_pipeline"]]
 

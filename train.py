@@ -29,9 +29,7 @@ if __name__ == '__main__':
     train(session, log_metrics=saver.log_metrics, save_checkpoint=save_checkpoint)
 
 
-# todo: support registration of forward hooks and backward hooks (specify model, layer name and hook function)
-# todo: support learning rate decay using torch.optim.lr_scheduler.ExponentialLR
-# todo: support gradient clipping
+# todo: support registration of forward hooks (specify model, layer name and hook function)
 # todo: training loops with unequal number of iterations
 # todo: refactor code more (achieve better cohesion, loose coupling)
 # todo: session can export best checkpoint according to a criterion
