@@ -3,6 +3,12 @@ from scaffolding.utils import change_model_device, switch_to_train_mode, switch_
 
 
 class BatchProcessor:
+    def prepare(self):
+        pass
+
+    def update(self):
+        pass
+
     def __call__(self, batch):
         return batch
 
@@ -90,6 +96,14 @@ class BatchProcessingGraph:
         self.outgoing_edges = {}
         self.cache = {}
 
+    def prepare(self):
+        for _, node in self.nodes.items():
+            node.prepare()
+
+    def update(self):
+        for _, node in self.nodes.items():
+            node.update()
+
     def make_edge(self, source: str, dest: str):
         self.ingoing_edges.setdefault(dest, []).append(source)
         self.outgoing_edges.setdefault(source, []).append(dest)
@@ -102,7 +116,7 @@ class BatchProcessingGraph:
         """Propagate given number of batches through the graph and compute results.
 
         :param batches: mapping from batch name to their value which is itself a mapping variable name -> tensor
-        :return: results of batch processing as a name -> batch mapping
+        :return: outputs of leaf nodes as a name -> batch mapping
         """
         self.invalidate_cache()
         return {leaf: self.backtrace(leaf, batches) for leaf in self.leaves}
@@ -128,3 +142,51 @@ class BatchProcessingGraph:
         result = merge(ingoing_batches)
         self.cache[name] = result
         return result
+
+
+class Trainer:
+    def __init__(self, graph, inputs_loaders: dict, losses: dict, gradient_clippers):
+        self.graph = graph
+        self.inputs_loaders = inputs_loaders
+        self.losses = losses
+        self.gradient_clippers = gradient_clippers
+
+    def __iter__(self):
+        batch_names = []
+        iterators = []
+        for name, loader in self.inputs_loaders.items():
+            batch_names.append(name)
+            iterators.append(iter(loader))
+
+        for batches in zip(*iterators):
+            losses = self.train_one_iteration(batch_names, batches)
+
+            # todo: fix this (may get rid of inputs and targets)
+            # todo: change code for computing metrics in training.py
+            yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, losses)
+
+    def train_one_iteration(self, batch_names, batches):
+        d = dict(zip(batch_names, batches))
+        results = self.graph(d)
+
+        losses = []
+        for node_name, loss_fn in self.losses.items():
+            batch = results[node_name]
+            loss = loss_fn(batch, batch)
+
+            # invoke zero_grad for each neural network
+            self.graph.prepare()
+            loss.backward()
+
+            for clip_gradients in self.gradient_clippers.values():
+                clip_gradients()
+
+            # invoke optimizer.step() for every neural network if there is one
+            self.graph.update()
+
+            losses.append(loss)
+
+        return losses
+
+
+# todo: parse and instantiate these objects from spec
