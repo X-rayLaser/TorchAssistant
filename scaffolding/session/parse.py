@@ -6,13 +6,14 @@ from torch import nn
 import torchmetrics
 
 from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset, \
-    WrappedDataset, switch_to_train_mode, switch_to_evaluation_mode, change_model_device
+    WrappedDataset
 from scaffolding.preprocessors import NullProcessor
 from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 from scaffolding.output_devices import Printer
 from scaffolding.output_adapters import IdentityAdapter
 from .registry import register
+from ..processing_graph import NeuralBatchProcessor
 
 
 class SpecParser:
@@ -176,53 +177,6 @@ class BatchProcessorLoader(Loader):
 @register("batch_processors")
 def load_batch_processor(session, spec, object_name=None):
     return BatchProcessorLoader().load(session, spec, object_name)
-
-
-class NeuralBatchProcessor:
-    def __init__(self, neural_graph, input_adapter, output_adapter, device):
-        self.neural_graph = neural_graph
-        self.input_adapter = input_adapter
-        self.output_adapter = output_adapter
-        self.device = device
-
-    def __call__(self, batch, inference_mode=False):
-        inputs = self.input_adapter(batch)
-        change_model_device(self.neural_graph, self.device)
-        self.inputs_to(inputs)
-
-        all_outputs = {}
-        for node in self.neural_graph:
-            outputs = node(inputs, all_outputs, inference_mode)
-            all_outputs.update(
-                dict(zip(node.outputs, outputs))
-            )
-
-        result_dict = dict(batch)
-        result_dict.update(all_outputs)
-        res = self.output_adapter(result_dict)
-        return res
-
-    def inputs_to(self, inputs):
-        for k, mapping in inputs.items():
-            for tensor_name, value in mapping.items():
-                if hasattr(value, 'device') and value.device != self.device:
-                    mapping[tensor_name] = value.to(self.device)
-
-    def prepare(self):
-        for model in self.neural_graph:
-            if model.optimizer:
-                model.optimizer.zero_grad()
-
-    def update(self):
-        for node in self.neural_graph:
-            if node.optimizer:
-                node.optimizer.step()
-
-    def train_mode(self):
-        switch_to_train_mode(self.neural_graph)
-
-    def eval_mode(self):
-        switch_to_evaluation_mode(self.neural_graph)
 
 
 @register("batch_pipelines")
