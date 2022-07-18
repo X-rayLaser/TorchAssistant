@@ -49,6 +49,7 @@ class NeuralBatchProcessor(BatchProcessor):
     def __call__(self, batch):
         inputs = self.input_adapter(batch)
         change_model_device(self.neural_graph, self.device)
+
         self.inputs_to(inputs)
 
         all_outputs = {}
@@ -139,9 +140,23 @@ class BatchProcessingGraph:
             return node(ingoing_batches[0])
 
         merge = BatchMerger()
-        result = merge(ingoing_batches)
+        merged_batch = merge(ingoing_batches)
+        result = node(merged_batch)
         self.cache[name] = result
         return result
+
+
+class BatchLoader:
+    def __init__(self, data_loader, var_names):
+        self.data_loader = data_loader
+        self.var_names = var_names
+
+    def __iter__(self):
+        for batch in self.data_loader:
+            yield dict(zip(self.var_names, batch))
+
+    def __len__(self):
+        return len(self.data_loader)
 
 
 class Trainer:
@@ -152,25 +167,33 @@ class Trainer:
         self.gradient_clippers = gradient_clippers
 
     def __iter__(self):
-        batch_names = []
-        iterators = []
-        for name, loader in self.inputs_loaders.items():
-            batch_names.append(name)
-            iterators.append(iter(loader))
+        from .training import IterationLogEntry
 
-        for batches in zip(*iterators):
-            losses = self.train_one_iteration(batch_names, batches)
+        batch_names = [input_loader.input_alias for input_loader in self.inputs_loaders]
 
+        batch_loaders = []
+        for input_loader in self.inputs_loaders:
+            var_names = input_loader.variable_names
+            data_loader = input_loader.data_loader
+            batch_loaders.append(BatchLoader(data_loader, var_names))
+
+        num_iterations = min(map(len, batch_loaders))
+        iterators = [iter(loader) for loader in batch_loaders]
+
+        inputs = []
+        for i, batches in enumerate(zip(*iterators)):
+            losses, results = self.train_one_iteration(batch_names, batches)
+            outputs = results
+            targets = results
             # todo: fix this (may get rid of inputs and targets)
-            # todo: change code for computing metrics in training.py
             yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, losses)
 
     def train_one_iteration(self, batch_names, batches):
         d = dict(zip(batch_names, batches))
         results = self.graph(d)
 
-        losses = []
-        for node_name, loss_fn in self.losses.items():
+        losses = {}
+        for name, (node_name, loss_fn) in self.losses.items():
             batch = results[node_name]
             loss = loss_fn(batch, batch)
 
@@ -184,9 +207,9 @@ class Trainer:
             # invoke optimizer.step() for every neural network if there is one
             self.graph.update()
 
-            losses.append(loss)
+            losses[node_name] = loss
 
-        return losses
+        return losses, results
 
 
 # todo: parse and instantiate these objects from spec

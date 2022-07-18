@@ -13,7 +13,7 @@ class Formatter:
         s = ', '.join(metric_strings)
         return f'[{s}]'
 
-    def __call__(self, epoch, iteration, num_iterations, metrics, running_metrics):
+    def __call__(self, epoch, iteration, num_iterations, running_metrics):
         computed_metrics = {name: avg.value for name, avg in running_metrics.items()}
 
         metrics_str = self.format_metrics(computed_metrics)

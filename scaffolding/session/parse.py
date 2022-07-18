@@ -142,6 +142,7 @@ class BatchProcessorLoader(Loader):
             return Loader().load(session, spec, object_name)
 
         input_adapter = Loader().load(session, spec["input_adapter"], object_name)
+
         if "output_adapter" in spec:
             output_adapter = Loader().load(session, spec["output_adapter"], object_name)
         else:
@@ -262,28 +263,61 @@ class BatchPipelineMixer:
             pipeline.eval_mode()
 
 
+@register("batch_graphs")
+def load_batch_processing_graph(session, spec, object_name=None):
+    from ..processing_graph import BatchProcessingGraph
+    nodes = {}
+    for node_name in spec["nodes"]:
+        nodes[node_name] = session.batch_processors[node_name]
+
+    batch_input_names = spec["input_aliases"]
+    graph = BatchProcessingGraph(batch_input_names, **nodes)
+    for destination, sources in spec["ingoing_edges"].items():
+        for src in sources:
+            graph.make_edge(src, destination)
+    return graph
+
+
+InputLoader = namedtuple("InputLoader", ["input_alias", "data_loader", "variable_names"])
+
+
 class PipelineLoader(Loader):
     def load(self, session, spec, object_name=None):
-        batch_pipeline = session.batch_pipelines[spec["batch_pipeline"]]
-
-        loss_name = spec["loss_name"]
-        loss_fn = session.losses[loss_name]
+        graph = session.batch_graphs[spec["graph"]]
+        input_loaders = []
+        for d in spec["input_loaders"]:
+            kwargs = dict(d)
+            kwargs["data_loader"] = session.data_loaders[kwargs["data_loader"]]
+            input_loaders.append(InputLoader(**kwargs))
 
         metric_fns = self.parse_metrics(session, spec)
 
-        if 'loss_display_name' in spec:
-            loss_display_name = spec.get('loss_display_name', loss_name)
-            metric_fns[loss_display_name] = loss_fn.rename_and_clone(loss_display_name)
+        loss_fns = {}
+        for loss_spec in spec["losses"]:
+            loss_name = loss_spec["loss_name"]
+            node_name = loss_spec["node_name"]
 
-        TrainingPipeline = namedtuple('TrainingPipeline', ["batch_pipeline", "loss_fn", "metric_fns"])
-        return TrainingPipeline(batch_pipeline, loss_fn, metric_fns)
+            loss_fn = (node_name, session.losses[loss_name])
+            loss_fns[loss_name] = loss_fn
+
+            if 'loss_display_name' in spec:
+                loss_display_name = spec.get('loss_display_name', loss_name)
+                renamed_loss_fn = loss_fn[1].rename_and_clone(loss_display_name)
+                metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
+
+        TrainingPipeline = namedtuple('TrainingPipeline', ["graph", "input_loaders", "loss_fns", "metric_fns"])
+        return TrainingPipeline(graph, input_loaders, loss_fns, metric_fns)
 
     def parse_metrics(self, session, pipeline_spec):
-        metric_names = pipeline_spec.get("metric_names", [])
-        display_names = pipeline_spec.get("metric_display_names", metric_names)
-        names = zip(metric_names, display_names)
-        return {display_name: session.metrics[name].rename_and_clone(display_name)
-                for name, display_name in names}
+        metrics = {}
+        for spec in pipeline_spec.get("metrics", []):
+            name = spec["metric_name"]
+            display_name = spec["display_name"]
+            node_name = spec["node_name"]
+            metric = session.metrics[name].rename_and_clone(display_name)
+            metrics[display_name] = (node_name, metric)
+
+        return metrics
 
 
 class GradientClipper:
@@ -431,7 +465,13 @@ def load_metric(session, spec, object_name=None):
 
 class DebugPipelineLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
-        batch_pipeline = session.batch_pipelines[pipeline_spec["batch_pipeline"]]
+        graph = session.batch_graphs[pipeline_spec["graph"]]
+        input_loaders = []
+        for d in pipeline_spec["input_loaders"]:
+            kwargs = dict(d)
+            kwargs["data_loader"] = session.data_loaders[kwargs["data_loader"]]
+            input_loaders.append(InputLoader(**kwargs))
+
         num_iterations = pipeline_spec["num_iterations"]
         interval = pipeline_spec["interval"]
 
@@ -453,8 +493,9 @@ class DebugPipelineLoader(Loader):
         output_keys = pipeline_spec.get("output_keys", ["y_hat"])
 
         return DebugPipeline(
-            batch_pipeline=batch_pipeline, num_iterations=num_iterations, interval=interval,
-            output_keys=output_keys, postprocessor=postprocessor, output_device=output_device
+            graph=graph, input_loaders=input_loaders, num_iterations=num_iterations,
+            interval=interval, output_keys=output_keys, postprocessor=postprocessor,
+            output_device=output_device
         )
 
 
@@ -477,9 +518,10 @@ class StageLoader(Loader):
 
 
 class DebugPipeline:
-    def __init__(self, *, batch_pipeline, num_iterations, interval,
+    def __init__(self, *, graph, input_loaders, num_iterations, interval,
                  output_keys, postprocessor, output_device):
-        self.batch_pipeline = batch_pipeline
+        self.graph = graph
+        self.input_loaders = input_loaders
         self.num_iterations = num_iterations
         self.interval = interval
         self.output_keys = output_keys

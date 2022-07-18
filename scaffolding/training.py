@@ -36,10 +36,20 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
     debuggers = [Debugger(pipeline) for pipeline in stage.debug_pipelines]
     print(debuggers)
     for epoch in range(start_epoch, start_epoch + 1000):
-        print_metrics = PrintMetrics(metric_dicts, stat_ivl, epoch, formatter)
+        calculators = [MetricsSetCalculator(metrics, stat_ivl) for metrics in metric_dicts]
 
         for log_entries in interleave_training(session, training_pipelines):
-            print_metrics(log_entries)
+            all_running_metrics = {}
+            for i, log in enumerate(log_entries):
+                all_running_metrics.update(calculators[i](log))
+
+            an_entry = log_entries[0]
+            stats = formatter(
+                epoch, an_entry.iteration,
+                an_entry.num_iterations, all_running_metrics
+            )
+            print(f'\r{stats}', end='')
+
             # run debuggers/visualization code
             for debug in debuggers:
                 debug(log_entries)
@@ -105,7 +115,7 @@ class Debugger:
 
 
 def interleave_training(session, pipelines):
-    training_loops = prepare_trainers(session, pipelines)
+    training_loops = prepare_trainers_v2(session, pipelines)
 
     entries_gen = itertools.zip_longest(*training_loops)
 
@@ -129,6 +139,16 @@ def prepare_trainers(session, pipelines):
             ActualTrainer(batch_pipeline=pipeline.batch_pipeline,
                           loss_fn=pipeline.loss_fn,
                           gradient_clippers=session.gradient_clippers)
+        )
+    return trainers
+
+
+def prepare_trainers_v2(session, pipelines):
+    from .processing_graph import Trainer
+    trainers = []
+    for pipeline in pipelines:
+        trainers.append(
+            Trainer(pipeline.graph, pipeline.input_loaders, pipeline.loss_fns, session.gradient_clippers)
         )
     return trainers
 
@@ -211,7 +231,31 @@ class RunningMetricsSetFormatter:
                                    iteration_log.outputs, iteration_log.targets)
 
         return self.format_fn(self.epoch, iteration + 1, iteration_log.num_iterations,
-                              self.metrics, self.running_metrics)
+                              self.running_metrics)
+
+    def reset(self):
+        for metric_avg in self.running_metrics.values():
+            metric_avg.reset()
+
+
+class MetricsSetCalculator:
+    def __init__(self, metrics, interval):
+        """
+        :param metrics: {'name': ('graph_leaf', Metric())}
+        """
+        self.metrics = metrics
+        self.interval = interval
+        self.running_metrics = {name: MovingAverage() for name in metrics}
+
+    def __call__(self, iteration_log):
+        if iteration_log.iteration % self.interval == 0:
+            self.reset()
+
+        with torch.no_grad():
+            for name, (leaf_name, metric_fn) in self.metrics.items():
+                outputs = iteration_log.outputs[leaf_name]
+                self.running_metrics[name].update(metric_fn(outputs, outputs))
+        return self.running_metrics
 
     def reset(self):
         for metric_avg in self.running_metrics.values():
@@ -293,3 +337,6 @@ class ActualTrainer:
 
         self.batch_pipeline.update()
         return loss
+
+
+# todo: remove dead code, make evaluation scripts work

@@ -106,6 +106,7 @@ class Session:
         self.batch_adapters = {}
         self.batch_processors = {}
         self.batch_pipelines = {}
+        self.batch_graphs = {}
         self.losses = {}
         self.metrics = {}
 
