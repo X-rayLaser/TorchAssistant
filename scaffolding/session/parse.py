@@ -300,8 +300,8 @@ class PipelineLoader(Loader):
             loss_fn = (node_name, session.losses[loss_name])
             loss_fns[loss_name] = loss_fn
 
-            if 'loss_display_name' in spec:
-                loss_display_name = spec.get('loss_display_name', loss_name)
+            if 'loss_display_name' in loss_spec:
+                loss_display_name = loss_spec.get('loss_display_name', loss_name)
                 renamed_loss_fn = loss_fn[1].rename_and_clone(loss_display_name)
                 metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
 

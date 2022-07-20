@@ -6,6 +6,7 @@ from .metrics import MovingAverage
 from .formatters import Formatter
 from scaffolding.utils import WrappedDataset
 from scaffolding.session import StopTrainingError
+from .processing_graph import Trainer
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=1):
@@ -45,7 +46,7 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
             an_entry = log_entries[0]
             stats = formatter(
-                epoch, an_entry.iteration,
+                epoch, an_entry.iteration + 1,
                 an_entry.num_iterations, all_running_metrics
             )
             print(f'\r{stats}', end='')
@@ -87,7 +88,7 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
 class Debugger:
     def __init__(self, pipeline):
-        self.batch_pipeline = pipeline.batch_pipeline
+        self.graph = pipeline.graph
         self.postprocessor = pipeline.postprocessor
         self.output_device = pipeline.output_device
         self.pipeline = pipeline
@@ -101,12 +102,17 @@ class Debugger:
                 self.debug()
 
     def debug(self):
-        it = iter(self.batch_pipeline)
+        from .processing_graph import DataGenerator
+
+        it = iter(DataGenerator(self.pipeline.input_loaders))
 
         for _ in range(self.pipeline.num_iterations):
 
-            batch = next(it)
-            predictions = {k: batch[k] for k in self.pipeline.output_keys}
+            graph_inputs = next(it)
+            results = self.graph(graph_inputs)
+            all_results = {k: v for batches in results.values() for k, v in batches.items()}
+
+            predictions = {k: all_results[k] for k in self.pipeline.output_keys}
 
             if self.postprocessor:
                 predictions = self.postprocessor(predictions)
@@ -115,7 +121,7 @@ class Debugger:
 
 
 def interleave_training(session, pipelines):
-    training_loops = prepare_trainers_v2(session, pipelines)
+    training_loops = prepare_trainers(session, pipelines)
 
     entries_gen = itertools.zip_longest(*training_loops)
 
@@ -136,38 +142,35 @@ def prepare_trainers(session, pipelines):
     trainers = []
     for pipeline in pipelines:
         trainers.append(
-            ActualTrainer(batch_pipeline=pipeline.batch_pipeline,
-                          loss_fn=pipeline.loss_fn,
-                          gradient_clippers=session.gradient_clippers)
-        )
-    return trainers
-
-
-def prepare_trainers_v2(session, pipelines):
-    from .processing_graph import Trainer
-    trainers = []
-    for pipeline in pipelines:
-        trainers.append(
             Trainer(pipeline.graph, pipeline.input_loaders, pipeline.loss_fns, session.gradient_clippers)
         )
     return trainers
 
 
 def evaluate_pipeline(pipeline, num_batches=10):
-    batch_pipeline = pipeline.batch_pipeline
+    from .processing_graph import DataGenerator
+    graph = pipeline.graph
     metrics = pipeline.metric_fns
-    batch_pipeline.eval_mode()
 
-    moving_averages = {metric.name: MovingAverage() for _, metric in metrics.items()}
+    graph.eval_mode()
+
+    #batch_pipeline.eval_mode()
+
+    data_generator = DataGenerator(pipeline.input_loaders)
+
+    moving_averages = {name: MovingAverage() for name in metrics}
 
     with torch.no_grad():
-        for i, results_batch in enumerate(batch_pipeline):
+        for i, graph_inputs in enumerate(data_generator):
             if i >= num_batches:
                 break
 
-            all_outputs = results_batch
-            targets = results_batch
-            update_running_metrics(moving_averages, metrics, all_outputs, targets)
+            results_batch = graph(graph_inputs)
+
+            for name, (leaf_name, metric_fn) in metrics.items():
+                outputs = results_batch[leaf_name]
+                moving_averages[name].update(metric_fn(outputs, outputs))
+            #update_running_metrics(moving_averages, metrics, all_outputs, targets)
 
     return {metric_name: avg.value for metric_name, avg in moving_averages.items()}
 
@@ -175,67 +178,6 @@ def evaluate_pipeline(pipeline, num_batches=10):
 def update_running_metrics(moving_averages, metrics, outputs, targets):
     for metric_name, metric in metrics.items():
         moving_averages[metric.name].update(metric(outputs, targets))
-
-
-def get_data_loaders(pipeline):
-    train_set, test_set = pipeline.train_dataset, pipeline.val_dataset
-
-    if pipeline.preprocessors:
-        train_set = WrappedDataset(train_set, pipeline.preprocessors)
-        test_set = WrappedDataset(test_set, pipeline.preprocessors)
-
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=pipeline.batch_size,
-                                               shuffle=True, num_workers=2, collate_fn=pipeline.collator)
-
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=pipeline.batch_size,
-                                              shuffle=False, num_workers=2, collate_fn=pipeline.collator)
-
-    return train_loader, test_loader
-
-
-class PrintMetrics:
-    def __init__(self, metric_dicts, ivl, epoch, format_fn):
-        self.interval = ivl
-        self.formatters = []
-        for metrics in metric_dicts:
-            self.formatters.append(
-                RunningMetricsSetFormatter(metrics, ivl, epoch, format_fn)
-            )
-
-    def __call__(self, log_entries):
-        columns = [self.formatters[i](entry) for i, entry in enumerate(log_entries)]
-
-        iteration = log_entries[0].iteration
-
-        if iteration % self.interval == self.interval - 1:
-            s = '  |  '.join(columns)
-            print(f'\r{s}', end='')
-            for formatter in self.formatters:
-                formatter.reset()
-
-
-class RunningMetricsSetFormatter:
-    def __init__(self, metrics, ivl, epoch, format_fn):
-        self.metrics = metrics
-        self.interval = ivl
-        self.epoch = epoch
-        self.format_fn = format_fn
-
-        self.running_metrics = {name: MovingAverage() for name in metrics}
-
-    def __call__(self, iteration_log):
-        iteration = iteration_log.iteration
-
-        with torch.no_grad():
-            update_running_metrics(self.running_metrics, self.metrics,
-                                   iteration_log.outputs, iteration_log.targets)
-
-        return self.format_fn(self.epoch, iteration + 1, iteration_log.num_iterations,
-                              self.running_metrics)
-
-    def reset(self):
-        for metric_avg in self.running_metrics.values():
-            metric_avg.reset()
 
 
 class MetricsSetCalculator:
@@ -302,41 +244,6 @@ class PredictionPipeline:
             for tensor_name, value in mapping.items():
                 if hasattr(value, 'device') and value.device != self.device:
                     mapping[tensor_name] = value.to(self.device)
-
-
-class ActualTrainer:
-    def __init__(self, batch_pipeline, loss_fn, gradient_clippers):
-        self.batch_pipeline = batch_pipeline
-        self.loss_fn = loss_fn
-        self.gradient_clippers = gradient_clippers
-
-    def __iter__(self):
-        self.batch_pipeline.train_mode()
-        num_iterations = len(self.batch_pipeline)
-
-        for i, results_batch in enumerate(self.batch_pipeline):
-            loss = self.train_on_batch(results_batch)
-
-            # todo: retrieve somehow
-            inputs = []
-
-            # todo: this hack should work for now, but fix this later
-            outputs = results_batch
-            targets = results_batch
-            yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, loss)
-
-    def get_tensors(self, batch, var_names):
-        return {var_name: batch[var_name] for var_name in var_names}
-
-    def train_on_batch(self, batch):
-        loss = self.loss_fn(batch)
-        loss.backward()
-
-        for clip_gradients in self.gradient_clippers.values():
-            clip_gradients()
-
-        self.batch_pipeline.update()
-        return loss
 
 
 # todo: remove dead code, make evaluation scripts work

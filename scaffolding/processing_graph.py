@@ -12,19 +12,16 @@ class BatchProcessor:
     def __call__(self, batch):
         return batch
 
+    def train_mode(self):
+        pass
+
+    def eval_mode(self):
+        pass
+
 
 class DetachBatch(BatchProcessor):
     def __call__(self, batch):
         return {name: tensor.detach() for name, tensor in batch.items()}
-
-
-# todo: unnecessary, remove it
-class Cloner(BatchProcessor):
-    def __init__(self, num_copies):
-        self.num_copies = num_copies
-
-    def __call__(self, batch):
-        return tuple(batch for _ in range(self.num_copies))
 
 
 class BatchMerger:
@@ -96,6 +93,14 @@ class BatchProcessingGraph:
         self.ingoing_edges = {}
         self.outgoing_edges = {}
         self.cache = {}
+
+    def train_mode(self):
+        for node in self.nodes.values():
+            node.train_mode()
+
+    def eval_mode(self):
+        for node in self.nodes.values():
+            node.eval_mode()
 
     def prepare(self):
         for _, node in self.nodes.items():
@@ -169,28 +174,19 @@ class Trainer:
     def __iter__(self):
         from .training import IterationLogEntry
 
-        batch_names = [input_loader.input_alias for input_loader in self.inputs_loaders]
-
-        batch_loaders = []
-        for input_loader in self.inputs_loaders:
-            var_names = input_loader.variable_names
-            data_loader = input_loader.data_loader
-            batch_loaders.append(BatchLoader(data_loader, var_names))
-
-        num_iterations = min(map(len, batch_loaders))
-        iterators = [iter(loader) for loader in batch_loaders]
+        data_gen = DataGenerator(self.inputs_loaders)
+        num_iterations = len(data_gen)
 
         inputs = []
-        for i, batches in enumerate(zip(*iterators)):
-            losses, results = self.train_one_iteration(batch_names, batches)
+        for i, batches in enumerate(data_gen):
+            losses, results = self.train_one_iteration(batches)
             outputs = results
             targets = results
             # todo: fix this (may get rid of inputs and targets)
             yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, losses)
 
-    def train_one_iteration(self, batch_names, batches):
-        d = dict(zip(batch_names, batches))
-        results = self.graph(d)
+    def train_one_iteration(self, graph_inputs):
+        results = self.graph(graph_inputs)
 
         losses = {}
         for name, (node_name, loss_fn) in self.losses.items():
@@ -210,6 +206,31 @@ class Trainer:
             losses[node_name] = loss
 
         return losses, results
+
+
+class DataGenerator:
+    def __init__(self, inputs_loaders):
+        self.inputs_loaders = inputs_loaders
+
+        batch_names = [input_loader.input_alias for input_loader in self.inputs_loaders]
+
+        batch_loaders = []
+        for input_loader in self.inputs_loaders:
+            var_names = input_loader.variable_names
+            data_loader = input_loader.data_loader
+            batch_loaders.append(BatchLoader(data_loader, var_names))
+
+        self.batch_names = batch_names
+        self.batch_loaders = batch_loaders
+
+    def __len__(self):
+        return min(map(len, self.batch_loaders))
+
+    def __iter__(self):
+        iterators = [iter(loader) for loader in self.batch_loaders]
+        for i, batches in enumerate(zip(*iterators)):
+            named_batches = dict(zip(self.batch_names, batches))
+            yield named_batches
 
 
 # todo: parse and instantiate these objects from spec
