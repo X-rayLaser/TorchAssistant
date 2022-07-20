@@ -295,7 +295,8 @@ class SessionInitializer:
         )
 
         self.prepare_pipelines(
-            session, init_dict["debug_pipelines"], parse.DebugPipelineLoader(), 'debug_pipelines'
+            session, init_dict.get("debug_pipelines", {}),
+            parse.DebugPipelineLoader(), 'debug_pipelines'
         )
 
         self.load_stages(session, spec)

@@ -1,0 +1,282 @@
+{
+    "session_dir": "pretrained",
+    "initialize": {
+        "definitions": [
+            {
+                "group": "datasets",
+                "name": "translation_ds",
+                "spec": {
+                    "class": "examples.language_translation.datasets.FrenchToEnglishDataset",
+                    "kwargs": {
+                        "path": "examples/language_translation/dataset/eng-fra.txt"
+                    }
+                }
+            },
+            {
+                "group": "splits",
+                "name": "my_split",
+                "spec": {
+                    "dataset_name": "translation_ds",
+                    "ratio": [0.8, 0.2]
+                }
+            },
+            {
+                "group": "preprocessors",
+                "name": "french_encoder",
+                "spec": {
+                    "class": "examples.language_translation.preprocessors.FrenchEncoder",
+                    "fit": "my_split.train"
+                }
+            },
+            {
+                "group": "preprocessors",
+                "name": "english_encoder",
+                "spec": {
+                    "class": "examples.language_translation.preprocessors.EnglishEncoder",
+                    "fit": "my_split.train"
+                }
+            },
+            {
+                "group": "datasets",
+                "name": "training_ds",
+                "spec": {
+                    "link": "my_split.train",
+                    "preprocessors": ["french_encoder", "english_encoder"]
+                }
+            },
+            {
+                "group": "datasets",
+                "name": "validation_ds",
+                "spec": {
+                    "link": "my_split.val",
+                    "preprocessors": ["french_encoder", "english_encoder"]
+                }
+            },
+            {
+                "group": "collators",
+                "name": "my_collator",
+                "spec": {
+                    "factory_fn": "examples.language_translation.collators.build_collator"
+                }
+            },
+            {
+                "group": "data_loaders",
+                "name": "training_loader",
+                "spec": {
+                    "dataset": "training_ds",
+                    "collator": "my_collator",
+                    "kwargs": {
+                        "batch_size": 1,
+                        "num_workers": 2
+                    }
+                }
+            },
+            {
+                "group": "data_loaders",
+                "name": "validation_loader",
+                "spec": {
+                    "dataset": "validation_ds",
+                    "collator": "my_collator",
+                    "kwargs": {
+                        "batch_size": 1,
+                        "num_workers": 2
+                    }
+                }
+            },
+            {
+                "group": "models",
+                "name": "encoder_model",
+                "spec": {
+                    "factory_fn": "examples.language_translation.models.build_encoder",
+                    "args": [],
+                    "kwargs": {
+                        "hidden_size": 32
+                    }
+                }
+            },
+            {
+                "group": "models",
+                "name": "decoder_model",
+                "spec": {
+                    "factory_fn": "examples.language_translation.models.build_decoder",
+                    "args": [],
+                    "kwargs": {
+                        "hidden_size": 32
+                    }
+                }
+            },
+            {
+                "group": "batch_adapters",
+                "name": "adapter",
+                "spec": {
+                    "class": "examples.language_translation.adapters.BatchAdapter",
+                    "kwargs": {
+                        "hidden_size": 32
+                    }
+                }
+            },
+            {
+                "group": "optimizers",
+                "name": "encoder_optimizer",
+                "spec": {
+                    "class": "SGD",
+                    "kwargs": {
+                        "lr": 0.001,
+                        "momentum": 0.9
+                    },
+                    "model": "encoder_model"
+                }
+            },
+            {
+                "group": "optimizers",
+                "name": "decoder_optimizer",
+                "spec": {
+                    "class": "SGD",
+                    "kwargs": {
+                        "lr": 0.001,
+                        "momentum": 0.9
+                    },
+                    "model": "decoder_model"
+                }
+            },
+            {
+                "group": "losses",
+                "name": "cross_entropy",
+                "spec": {
+                    "class": "CrossEntropyLoss",
+                    "kwargs": {
+                        "reduction": "sum"
+                    },
+                    "inputs": ["y_hat", "y"],
+                    "transform": "examples.language_translation.transforms.transform"
+                }
+            },
+            {
+                "group": "metrics",
+                "name": "CER",
+                "spec": {
+                    "class": "CharErrorRate",
+                    "inputs": ["y_hat", "y"],
+                    "transform": "examples.language_translation.transforms.DecodeClassesTransform"
+                }
+            },
+            {
+                "group": "batch_processors",
+                "name": "neural_translator",
+                "spec": {
+                    "input_adapter": {
+                        "class": "examples.language_translation.adapters.BatchAdapter",
+                        "kwargs": {
+                            "hidden_size": 32
+                        }
+                    },
+                    "neural_graph": [
+                        {
+                            "model_name": "encoder_model",
+                            "inputs": ["x", "h"],
+                            "outputs": ["outputs", "h_e"],
+                            "optimizer_name": "encoder_optimizer"
+                        },
+                        {
+                            "model_name": "decoder_model",
+                            "inputs": ["y_shifted", "h_e"],
+                            "outputs": ["y_hat", "h_d"],
+                            "optimizer_name": "decoder_optimizer"
+                        }
+                    ],
+                    "output_adapter": {
+                        "class": "examples.language_translation.adapters.OutputAdapter"
+                    },
+                    "device": "cpu"
+                }
+            },
+            {
+                "group": "batch_graphs",
+                "name": "batch_processing_graph",
+                "spec": {
+                    "nodes": ["neural_translator"],
+                    "input_aliases": ["input_batch"],
+                    "ingoing_edges": {
+                        "neural_translator": ["input_batch"]
+                    }
+                }
+            }
+        ],
+        "pipelines": {
+            "train": {
+                "graph": "batch_processing_graph",
+                "input_loaders": [
+                    {
+                        "input_alias": "input_batch",
+                        "variable_names": ["french_batch", "english_batch"],
+                        "data_loader": "training_loader"
+                    }
+                ],
+                "losses": [
+                    {
+                        "node_name": "neural_translator",
+                        "loss_name": "cross_entropy",
+                        "loss_display_name": "ed_loss"
+                    }
+                ],
+                "metrics": [
+                    {
+                        "node_name": "neural_translator",
+                        "metric_name": "CER",
+                        "display_name": "CER"
+                    }
+                ]
+            },
+            "evaluate": {
+                "graph": "batch_processing_graph",
+                "input_loaders": [
+                    {
+                        "input_alias": "input_batch",
+                        "variable_names": ["french_batch", "english_batch"],
+                        "data_loader": "validation_loader"
+                    }
+                ],
+                "losses": [
+                    {
+                        "node_name": "neural_translator",
+                        "loss_name": "cross_entropy",
+                        "loss_display_name": "val ed_loss"
+                    }
+                ],
+                "metrics": [
+                    {
+                        "node_name": "neural_translator",
+                        "metric_name": "CER",
+                        "display_name": "val CER"
+                    }
+                ]
+            }
+        }
+    },
+    "train": {
+        "stages": [
+            {
+                "mode": "interleave",
+                "training_pipelines": ["train"],
+                "validation_pipelines": ["train"],
+                "stop_condition": {
+                    "class": "scaffolding.stop_conditions.EpochsCompleted",
+                    "kwargs": {
+                        "num_epochs": 100
+                    }
+                }
+            },
+            {
+                "mode": "interleave",
+                "training_pipelines": ["train"],
+                "validation_pipelines": ["train"],
+                "stop_condition": {
+                    "class": "scaffolding.stop_conditions.EpochsCompleted",
+                    "kwargs": {
+                        "num_epochs": 100
+                    }
+                }
+            }
+        ]
+    }
+}

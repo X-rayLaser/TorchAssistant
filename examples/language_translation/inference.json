@@ -3,6 +3,7 @@
   "input_adapter": {
     "class": "examples.language_translation.adapters.InputAdapter"
   },
+  "data_loaders": {},
   "pipelines": {
     "encoder_decoder": {
       "batch_adapter": {

@@ -507,10 +507,10 @@ class StageLoader(Loader):
         training_pipelines = spec["training_pipelines"]
         training_pipelines = [session.pipelines[name] for name in training_pipelines]
 
-        validation_pipelines = spec["validation_pipelines"]
+        validation_pipelines = spec.get("validation_pipelines", [])
         validation_pipelines = [session.pipelines[name] for name in validation_pipelines]
 
-        debug_pipelines = spec["debug_pipelines"]
+        debug_pipelines = spec.get("debug_pipelines", [])
         debug_pipelines = [session.debug_pipelines[name] for name in debug_pipelines]
 
         stop_condition = Loader().load(session, stop_condition_dict)

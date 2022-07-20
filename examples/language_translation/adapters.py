@@ -11,26 +11,30 @@ class BatchAdapter:
     def __init__(self, hidden_size):
         self.hidden_size = hidden_size
 
-    def adapt(self, french_batch, english_batch):
+    def __call__(self, batch: dict) -> dict:
+        french_batch = batch["french_batch"]
+        english_batch = batch["english_batch"]
+
         english_input = english_batch[:, :-1]
-        english_target = english_batch[:, 1:]
 
         hidden = torch.zeros(1, 1, self.hidden_size, device="cpu")
 
         return {
-            "inputs": {
-                "encoder_model": {
-                    "x": french_batch,
-                    "h": hidden
-                },
-                "decoder_model": {
-                    "y_shifted": english_input
-                }
+            "encoder_model": {
+                "x": french_batch,
+                "h": hidden
             },
-            "targets": {
-                "y": english_target
+            "decoder_model": {
+                "y_shifted": english_input
             }
         }
+
+
+class OutputAdapter:
+    def __call__(self, batch):
+        english_batch = batch["english_batch"]
+        batch["y"] = english_batch[:, 1:]
+        return batch
 
 
 class InferenceAdapter:

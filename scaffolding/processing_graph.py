@@ -233,4 +233,52 @@ class DataGenerator:
             yield named_batches
 
 
+class DataBlueprint:
+    def __init__(self, input_loaders):
+        self.input_loaders = input_loaders
+
+        batch_names = [input_loader.input_alias for input_loader in self.input_loaders]
+        self.batch_names = batch_names
+        self.batch_loaders = self.refresh_batch_loaders(self.input_loaders)
+
+    def override_datasets(self, new_datasets: dict):
+        for input_loader in self.input_loaders:
+            dataset = new_datasets[input_loader.input_alias]
+            input_loader.loader_factory.dataset = dataset
+
+        self.refresh_batch_loaders(self.input_loaders)
+
+    def refresh_batch_loaders(self, input_loaders):
+        batch_loaders = []
+        for input_loader in input_loaders:
+            var_names = input_loader.variable_names
+            loader_factory = input_loader.loader_factory
+            data_loader = loader_factory.build()
+            batch_loaders.append(BatchLoader(data_loader, var_names))
+        return batch_loaders
+
+    def __len__(self):
+        return min(map(len, self.batch_loaders))
+
+    def __iter__(self):
+        iterators = [iter(loader) for loader in self.batch_loaders]
+        for i, batches in enumerate(zip(*iterators)):
+            named_batches = dict(zip(self.batch_names, batches))
+            yield named_batches
+
+
+class LoaderFactory:
+    def __init__(self, dataset, collator, **kwargs):
+        self.dataset = dataset
+        self.collator = collator
+        self.kwargs = kwargs
+
+    def build(self):
+        return torch.utils.data.DataLoader(
+            self.dataset, collate_fn=self.collator, **self.kwargs
+        )
+
+    def override_dataset(self, dataset):
+        self.dataset = dataset
+
 # todo: parse and instantiate these objects from spec
