@@ -9,6 +9,7 @@ import torch
 from . import parse
 from .parse import get_dataset
 from .registry import group_to_loader
+from ..utils import override_spec
 
 
 def create_session(spec):
@@ -98,6 +99,7 @@ class Session:
         self.preprocessors = {}
         self.collators = {}
         self.data_loaders = {}
+        self.loader_factories = {}
         self.models = {}
         self.gradient_clippers = {}
         self.forward_hooks = {}
@@ -146,8 +148,12 @@ class SessionSaver:
         self._save_static(session)
         self.save_checkpoint(session)
 
-    def load_from_latest_checkpoint(self):
+    def load_from_latest_checkpoint(self, new_spec=None):
+        # todo: add optional parameter override_spec
         spec = load_json(self.spec_path)
+        if new_spec:
+            keyring = {'definitions': ['group', 'name'], 'neural_graph': ['model_name']}
+            spec = override_spec(spec, new_spec, keyring=keyring)
 
         session = Session()
         restorer = SessionRestorer(self.static_dir)
@@ -326,6 +332,7 @@ class SessionInitializer:
         installer = self.installers[group]
         name = definition["name"]
         spec = definition["spec"]
+
         instance = loader(session, spec, name)
         installer.setup(session, instance, spec)
 

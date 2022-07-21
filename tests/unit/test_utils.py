@@ -1,8 +1,33 @@
 import unittest
 from scaffolding.data_splitters import MultiSplitter, BadSplitError
+from scaffolding.utils import override_spec
 
 
-class MultiSplitterTests(unittest.TestCase):
+class OverridingSpecTests(unittest.TestCase):
+    def test(self):
+        self.assertEqual({}, override_spec({}, {}, keyring={}))
+        d = {'a': 1, 'b': 2}
+        self.assertEqual(dict(d), override_spec(d, {}, keyring={}))
+        self.assertEqual(dict(d), override_spec({}, d, keyring={}))
+
+        d1 = {'a': 1, 'b': 2}
+        d2 = {'a': 10, 'c': 15}
+        self.assertEqual(dict(a=10, b=2, c=15), override_spec(d1, d2, keyring={}))
+
+        d1 = {'a': 1, 'b': 2, 'nested_dict': {'x': 0, 'y': 1}}
+        d2 = {'a': 10, 'nested_dict': {'x': 100, 't': 50}}
+        expected = dict(a=10, b=2, nested_dict={'x': 100, 'y': 1, 't': 50})
+        self.assertEqual(expected, override_spec(d1, d2, keyring={}))
+
+        d1 = {'a': 1, 'b': 2, 'alist': [{'id': 12, 'x': 0}, {'id': 15, 'y': 10}]}
+        d2 = {'a': 10, 'alist': [{'id': 12, 'x': 40}, {'id': 100, 'c': 128}]}
+        expected = dict(
+            a=10, b=2, alist=[{'id': 12, 'x': 40}, {'id': 15, 'y': 10}, {'id': 100, 'c': 128}]
+        )
+        self.assertEqual(expected, override_spec(d1, d2, keyring={'alist': ['id']}))
+
+
+class MultiSplitterTests:
     def test_cannot_create_instance_with_empty_ratio(self):
         self.assertRaises(BadSplitError, lambda: MultiSplitter(ratio=[]))
 

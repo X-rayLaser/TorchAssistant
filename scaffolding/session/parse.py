@@ -136,6 +136,18 @@ def load_data_loader(session, spec, object_name=None):
     return torch.utils.data.DataLoader(dataset, collate_fn=collator, **kwargs)
 
 
+@register("loader_factories")
+def load_data_factory(session, spec, object_name=None):
+    dataset = session.datasets[spec["dataset"]]
+    collator = session.collators[spec["collator"]]
+
+    kwargs = dict(shuffle=True, num_workers=2)
+    kwargs.update(spec.get("kwargs", {}))
+    from ..processing_graph import LoaderFactory
+
+    return LoaderFactory(dataset, collator, **kwargs)
+
+
 class BatchProcessorLoader(Loader):
     def load(self, session, spec, object_name=None):
         if "class" in spec or "factory_fn" in spec:
@@ -278,22 +290,22 @@ def load_batch_processing_graph(session, spec, object_name=None):
     return graph
 
 
-InputLoader = namedtuple("InputLoader", ["input_alias", "data_loader", "variable_names"])
+InputLoader = namedtuple("InputLoader", ["input_alias", "loader_factory", "variable_names"])
 
 
 class PipelineLoader(Loader):
     def load(self, session, spec, object_name=None):
         graph = session.batch_graphs[spec["graph"]]
         input_loaders = []
-        for d in spec["input_loaders"]:
+        for d in spec["input_factories"]:
             kwargs = dict(d)
-            kwargs["data_loader"] = session.data_loaders[kwargs["data_loader"]]
+            kwargs["loader_factory"] = session.loader_factories[kwargs["loader_factory"]]
             input_loaders.append(InputLoader(**kwargs))
 
         metric_fns = self.parse_metrics(session, spec)
 
         loss_fns = {}
-        for loss_spec in spec["losses"]:
+        for loss_spec in spec.get("losses", []):
             loss_name = loss_spec["loss_name"]
             node_name = loss_spec["node_name"]
 
@@ -467,9 +479,9 @@ class DebugPipelineLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
         graph = session.batch_graphs[pipeline_spec["graph"]]
         input_loaders = []
-        for d in pipeline_spec["input_loaders"]:
+        for d in pipeline_spec["input_factories"]:
             kwargs = dict(d)
-            kwargs["data_loader"] = session.data_loaders[kwargs["data_loader"]]
+            kwargs["loader_factory"] = session.loader_factory[kwargs["loader_factory"]]
             input_loaders.append(InputLoader(**kwargs))
 
         num_iterations = pipeline_spec["num_iterations"]

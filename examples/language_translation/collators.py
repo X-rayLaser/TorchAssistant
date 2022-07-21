@@ -1,14 +1,17 @@
 import torch
-from scaffolding.collators import BaseCollator
+from scaffolding.collators import BaseCollator, BatchDivide
 
 
-class MyCollator(BaseCollator):
+class MyCollator(BatchDivide):
     """Simple collator that only works with batch size = 1"""
     def __init__(self, num_french_words, num_english_words):
         self.num_french_words = num_french_words
         self.num_english_words = num_english_words
 
     def __call__(self, batch):
+        batch = super().__call__(batch)
+        print(batch)
+        return [torch.LongTensor(inputs) for inputs in batch]
         inputs = [x for x, y in batch]
         targets = [y for x, y in batch]
 

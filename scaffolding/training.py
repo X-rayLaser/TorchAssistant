@@ -139,16 +139,18 @@ def interleave_training(session, pipelines):
 
 
 def prepare_trainers(session, pipelines):
+    from .processing_graph import DataBlueprint
     trainers = []
     for pipeline in pipelines:
+        data_generator = DataBlueprint(pipeline.input_loaders)
         trainers.append(
-            Trainer(pipeline.graph, pipeline.input_loaders, pipeline.loss_fns, session.gradient_clippers)
+            Trainer(pipeline.graph, data_generator, pipeline.loss_fns, session.gradient_clippers)
         )
     return trainers
 
 
 def evaluate_pipeline(pipeline, num_batches=10):
-    from .processing_graph import DataGenerator
+    from .processing_graph import DataBlueprint
     graph = pipeline.graph
     metrics = pipeline.metric_fns
 
@@ -156,7 +158,7 @@ def evaluate_pipeline(pipeline, num_batches=10):
 
     #batch_pipeline.eval_mode()
 
-    data_generator = DataGenerator(pipeline.input_loaders)
+    data_generator = DataBlueprint(pipeline.input_loaders)
 
     moving_averages = {name: MovingAverage() for name in metrics}
 

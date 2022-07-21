@@ -84,6 +84,30 @@
                 }
             },
             {
+                "group": "loader_factories",
+                "name": "training_factory",
+                "spec": {
+                    "dataset": "training_ds",
+                    "collator": "my_collator",
+                    "kwargs": {
+                        "batch_size": 1,
+                        "num_workers": 2
+                    }
+                }
+            },
+            {
+                "group": "loader_factories",
+                "name": "validation_factory",
+                "spec": {
+                    "dataset": "validation_ds",
+                    "collator": "my_collator",
+                    "kwargs": {
+                        "batch_size": 1,
+                        "num_workers": 2
+                    }
+                }
+            },
+            {
                 "group": "models",
                 "name": "encoder_model",
                 "spec": {
@@ -205,11 +229,11 @@
         "pipelines": {
             "train": {
                 "graph": "batch_processing_graph",
-                "input_loaders": [
+                "input_factories": [
                     {
                         "input_alias": "input_batch",
                         "variable_names": ["french_batch", "english_batch"],
-                        "data_loader": "training_loader"
+                        "loader_factory": "training_factory"
                     }
                 ],
                 "losses": [
@@ -229,11 +253,11 @@
             },
             "evaluate": {
                 "graph": "batch_processing_graph",
-                "input_loaders": [
+                "input_factories": [
                     {
                         "input_alias": "input_batch",
                         "variable_names": ["french_batch", "english_batch"],
-                        "data_loader": "validation_loader"
+                        "loader_factory": "validation_factory"
                     }
                 ],
                 "losses": [
@@ -258,11 +282,11 @@
             {
                 "mode": "interleave",
                 "training_pipelines": ["train"],
-                "validation_pipelines": ["train"],
+                "validation_pipelines": ["train", "evaluate"],
                 "stop_condition": {
                     "class": "scaffolding.stop_conditions.EpochsCompleted",
                     "kwargs": {
-                        "num_epochs": 100
+                        "num_epochs": 10
                     }
                 }
             },
@@ -273,7 +297,7 @@
                 "stop_condition": {
                     "class": "scaffolding.stop_conditions.EpochsCompleted",
                     "kwargs": {
-                        "num_epochs": 100
+                        "num_epochs": 10
                     }
                 }
             }

@@ -165,20 +165,19 @@ class BatchLoader:
 
 
 class Trainer:
-    def __init__(self, graph, inputs_loaders: dict, losses: dict, gradient_clippers):
+    def __init__(self, graph, data_generator, losses: dict, gradient_clippers):
         self.graph = graph
-        self.inputs_loaders = inputs_loaders
+        self.data_generator = data_generator
         self.losses = losses
         self.gradient_clippers = gradient_clippers
 
     def __iter__(self):
         from .training import IterationLogEntry
 
-        data_gen = DataGenerator(self.inputs_loaders)
-        num_iterations = len(data_gen)
+        num_iterations = len(self.data_generator)
 
         inputs = []
-        for i, batches in enumerate(data_gen):
+        for i, batches in enumerate(self.data_generator):
             losses, results = self.train_one_iteration(batches)
             outputs = results
             targets = results
@@ -246,7 +245,7 @@ class DataBlueprint:
             dataset = new_datasets[input_loader.input_alias]
             input_loader.loader_factory.dataset = dataset
 
-        self.refresh_batch_loaders(self.input_loaders)
+        self.batch_loaders = self.refresh_batch_loaders(self.input_loaders)
 
     def refresh_batch_loaders(self, input_loaders):
         batch_loaders = []

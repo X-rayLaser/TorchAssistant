@@ -164,3 +164,76 @@ class MergedDataset:
 
     def __len__(self):
         return sum([len(ds) for ds in self.datasets])
+
+
+def override_spec(old_spec: dict, new_spec: dict, keyring: dict) -> dict:
+    old_spec = dict(old_spec)
+    new_spec = dict(new_spec)
+
+    for k, v in new_spec.items():
+        old_value = old_spec.get(k)
+        if not old_value:
+            old_spec[k] = v
+        else:
+            both_dicts = isinstance(old_value, dict) and isinstance(v, dict)
+            both_lists = isinstance(old_value, list) and isinstance(v, list)
+            if both_dicts:
+                old_spec[k] = override_spec(old_spec[k], v, keyring)
+            elif both_lists:
+                old_spec[k] = override_list(old_value, v, lookup_key=k, keyring=keyring)
+            else:
+                old_spec[k] = v
+
+    return old_spec
+
+
+def override_list(old_list: list, new_list: list, lookup_key, keyring: dict) -> list:
+    old_list = list(old_list)
+    new_list = list(new_list)
+
+    for new_item in new_list:
+        if isinstance(new_item, dict):
+            key_set = keyring[lookup_key]
+            idx = find_first_dict_index(old_list, new_item, key_set)
+            if idx is not None:
+                old_list[idx] = override_spec(old_list[idx], new_item, keyring)
+            else:
+                old_list.append(new_item)
+        else:
+            # todo: check this
+            return new_list
+    return old_list
+
+
+def find_first_dict_index(items: list, d: dict, key_set):
+    item_indices = [i for i, item in enumerate(items)
+                    if dicts_equal(item, d, key_set)]
+
+    if len(item_indices) > 1:
+        raise InvalidNumberOfMatchesError()
+    return item_indices[0] if len(item_indices) > 0 else None
+
+
+class InvalidNumberOfMatchesError(Exception):
+    pass
+
+
+def dicts_equal(d1: dict, d2: dict, key_set):
+    if not isinstance(d1, dict):
+        raise NotDictError(f'Expects d1 to be dictionary. Got {type(d1)}')
+
+    if not isinstance(d2, dict):
+        raise NotDictError(f'Expects d2 to be dictionary. Got {type(d2)}')
+
+    try:
+        for key in key_set:
+            if d1[key] != d2[key]:
+                return False
+    except KeyError:
+        return False
+
+    return True
+
+
+class NotDictError(Exception):
+    pass

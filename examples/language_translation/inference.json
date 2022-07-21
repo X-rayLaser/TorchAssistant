@@ -3,26 +3,61 @@
   "input_adapter": {
     "class": "examples.language_translation.adapters.InputAdapter"
   },
-  "data_loaders": {},
-  "pipelines": {
-    "encoder_decoder": {
-      "batch_adapter": {
-        "class": "examples.language_translation.adapters.InferenceAdapter",
-        "kwargs": {"hidden_size": 32}
-      },
-      "neural_graph": [{
-        "model_name": "encoder",
-        "inputs": ["x", "h"],
-        "outputs": ["outputs", "h_e"],
-        "optimizer_name": "encoder"
-      },{
-        "model_name": "decoder",
-        "inputs": ["sos", "h_e"],
-        "outputs": ["y_hat"],
-        "optimizer_name": "decoder"
-      }]
+  "initialize": {
+    "definitions": [
+      {
+        "group": "batch_processors",
+        "name": "neural_translator",
+        "spec": {
+            "input_adapter": {
+                "class": "examples.language_translation.adapters.BatchInferenceAdapter",
+                "kwargs": {
+                    "hidden_size": 32
+                }
+            },
+            "neural_graph": [
+                {
+                    "model_name": "encoder_model",
+                    "inputs": ["x", "h"],
+                    "outputs": ["outputs", "h_e"],
+                    "optimizer_name": "encoder_optimizer"
+                },
+                {
+                    "model_name": "decoder_model",
+                    "inputs": ["sos", "h_e"],
+                    "outputs": ["y_hat"],
+                    "optimizer_name": "decoder_optimizer"
+                }
+            ],
+            "output_adapter": {
+                "class": "examples.language_translation.adapters.NullAdapter"
+            },
+            "device": "cpu"
+        }
+      }
+    ],
+    "pipelines": {
+      "inference": {
+        "graph": "batch_processing_graph",
+        "input_factories": [
+            {
+                "input_alias": "input_batch",
+                "variable_names": ["french_batch"],
+                "loader_factory": "training_factory"
+            }
+        ]
+      }
     }
   },
+  "inference_pipeline": "inference",
+    "preprocessors": ["english_encoder", "english_encoder"],
+  "inputs_meta": [{
+      "input_alias": "input_batch",
+      "input_adapter": {
+        "class": "examples.language_translation.adapters.InputAdapter"
+      }
+    }
+  ],
   "results": ["y_hat"],
   "post_processor": {
     "class": "examples.language_translation.postprocessors.PostProcessor"
