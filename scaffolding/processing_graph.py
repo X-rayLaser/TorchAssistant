@@ -207,6 +207,7 @@ class Trainer:
         return losses, results
 
 
+# todo: remove this class if it is not used
 class DataGenerator:
     def __init__(self, inputs_loaders):
         self.inputs_loaders = inputs_loaders
@@ -279,5 +280,3 @@ class LoaderFactory:
 
     def override_dataset(self, dataset):
         self.dataset = dataset
-
-# todo: parse and instantiate these objects from spec

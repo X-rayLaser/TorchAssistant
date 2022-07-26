@@ -99,7 +99,6 @@ def change_batch_device(batch, device):
             targets_dict[tensor_name] = value.to(device)
 
 
-# todo: implement a proper pseudo random yet deterministic splitter class based on seed
 class AdaptedCollator:
     def __init__(self, collator, batch_adapter):
         self.collator = collator

@@ -246,6 +246,3 @@ class PredictionPipeline:
             for tensor_name, value in mapping.items():
                 if hasattr(value, 'device') and value.device != self.device:
                     mapping[tensor_name] = value.to(self.device)
-
-
-# todo: remove dead code, make evaluation scripts work

@@ -149,7 +149,6 @@ class SessionSaver:
         self.save_checkpoint(session)
 
     def load_from_latest_checkpoint(self, new_spec=None):
-        # todo: add optional parameter override_spec
         spec = load_json(self.spec_path)
         if new_spec:
             keyring = {'definitions': ['group', 'name'], 'neural_graph': ['model_name']}

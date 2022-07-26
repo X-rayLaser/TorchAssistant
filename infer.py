@@ -17,7 +17,7 @@ def parse_input_adapter(config_dict):
 
 def parse_post_processor(session, config_dict):
     post_processor_dict = config_dict["post_processor"]
-    # todo: consider to pass dynamic_kwargs instead of data pipeline instance
+
     post_processor_args = [session] + post_processor_dict.get("args", [])
     return instantiate_class(post_processor_dict["class"],
                              *post_processor_args,
