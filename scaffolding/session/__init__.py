@@ -151,8 +151,7 @@ class SessionSaver:
     def load_from_latest_checkpoint(self, new_spec=None):
         spec = load_json(self.spec_path)
         if new_spec:
-            keyring = {'definitions': ['group', 'name'], 'neural_graph': ['model_name']}
-            spec = override_spec(spec, new_spec, keyring=keyring)
+            spec = override_spec(spec, new_spec)
 
         session = Session()
         restorer = SessionRestorer(self.static_dir)

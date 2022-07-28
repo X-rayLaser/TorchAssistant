@@ -168,7 +168,20 @@ class MergedDataset:
 
 def override_spec(old_spec: dict, new_spec: dict) -> dict:
     new_spec = parse_object(new_spec)
-    return override_dict(old_spec, new_spec)
+    d = override_dict(old_spec, new_spec)
+    return remove_meta_data(d)
+
+
+def remove_meta_data(obj):
+    """Recursively traverse the data structure, convert every instance of MetaDict to dict,
+    convert every instance of MetaList to list"""
+    if isinstance(obj, dict) or isinstance(obj, MetaDict):
+        return {k: remove_meta_data(v) for k, v in obj.items()}
+
+    if isinstance(obj, list) or isinstance(obj, MetaList):
+        return [remove_meta_data(v) for v in obj]
+
+    return obj
 
 
 class MetaDict(UserDict):
@@ -180,13 +193,24 @@ class MetaList(UserList):
 
 
 def parse_object(obj):
+    """Recursively parse deep nested dict or list structure into override specification.
+
+    Resulting object will contain original entries + some metadata at every level
+    of depth/nesting (this will be used to control overriding behavior by override_dict
+    and override_list functions).
+
+    dict -> MetaDict
+    dict with metadata -> MetaDict or MetaList
+    list -> MetaList
+    values of other types are kept unchanged
+    """
     if isinstance(obj, list):
         alist = MetaList([parse_object(item) for item in obj])
         alist.replace_strategy = "replace"
         return alist
     elif isinstance(obj, dict) and "options" not in obj:
         adict = MetaDict({k: parse_object(v) for k, v in obj.items()})
-        adict.replace_strategy = "replace"
+        adict.replace_strategy = "override"
         return adict
     elif isinstance(obj, dict):
         strategy = obj.get("replace_strategy", "replace")
@@ -202,6 +226,9 @@ def parse_object(obj):
 
 
 def override_dict(old_spec: dict, new_spec) -> dict:
+    if new_spec.replace_strategy == "replace":
+        return dict(new_spec)
+
     old_spec = dict(old_spec)
     new_spec = dict(new_spec)
 
@@ -214,7 +241,7 @@ def override_dict(old_spec: dict, new_spec) -> dict:
             both_lists = isinstance(old_value, list) and isinstance(v, MetaList)
 
             if both_dicts:
-                old_spec[k] = override_spec(old_spec[k], v)
+                old_spec[k] = override_dict(old_spec[k], v)
             elif both_lists:
                 old_spec[k] = override_list(old_value, v)
             else:
@@ -224,6 +251,8 @@ def override_dict(old_spec: dict, new_spec) -> dict:
 
 
 def override_list(old_list: list, new_list) -> list:
+    if new_list.replace_strategy == 'replace':
+        return list(new_list)
 
     key_set = new_list.override_key
     old_list = list(old_list)
@@ -233,11 +262,11 @@ def override_list(old_list: list, new_list) -> list:
         if isinstance(new_item, dict) or isinstance(new_item, MetaDict):
             idx = find_first_dict_index(old_list, new_item, key_set)
             if idx is not None:
-                old_list[idx] = override_spec(old_list[idx], new_item)
+                old_list[idx] = override_dict(old_list[idx], new_item)
             else:
                 old_list.append(new_item)
         else:
-            # todo: check this
+            # there is no way to override, replace the whole list with a new one
             return new_list
 
     return old_list
