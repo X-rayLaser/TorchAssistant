@@ -1,12 +1,10 @@
 import itertools
 
 import torch
-from .utils import switch_to_train_mode, switch_to_evaluation_mode
 from .metrics import MovingAverage
 from .formatters import Formatter
-from scaffolding.utils import WrappedDataset
 from scaffolding.session import StopTrainingError
-from .processing_graph import Trainer
+from .processing_graph import Trainer, DataBlueprint
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=1):
@@ -23,6 +21,7 @@ def train(session, log_metrics, save_checkpoint, stat_ivl=1):
 
 
 def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10):
+    # todo: refactor this function, it is too long
     stage = session.stages[stage_number]
 
     stop_condition = stage.stop_condition
@@ -102,6 +101,7 @@ class Debugger:
                 self.debug()
 
     def debug(self):
+        # todo: replace with DataBlueprint
         from .processing_graph import DataGenerator
 
         it = iter(DataGenerator(self.pipeline.input_loaders))
@@ -139,7 +139,6 @@ def interleave_training(session, pipelines):
 
 
 def prepare_trainers(session, pipelines):
-    from .processing_graph import DataBlueprint
     trainers = []
     for pipeline in pipelines:
         data_generator = DataBlueprint(pipeline.input_loaders)
@@ -150,13 +149,10 @@ def prepare_trainers(session, pipelines):
 
 
 def evaluate_pipeline(pipeline, num_batches=10):
-    from .processing_graph import DataBlueprint
     graph = pipeline.graph
     metrics = pipeline.metric_fns
 
     graph.eval_mode()
-
-    #batch_pipeline.eval_mode()
 
     data_generator = DataBlueprint(pipeline.input_loaders)
 

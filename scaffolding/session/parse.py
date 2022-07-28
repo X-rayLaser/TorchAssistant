@@ -205,6 +205,7 @@ def load_batch_pipeline(session, spec, object_name=None):
     return BatchPipeline(batch_generator, batch_processors, variable_names)
 
 
+# todo: remove this class if it is not used and remove its loader function too
 class BatchPipeline:
     def __init__(self, batch_generator, batch_processors, variable_names):
         self.batch_generator = batch_generator

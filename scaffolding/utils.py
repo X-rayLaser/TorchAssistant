@@ -1,5 +1,6 @@
 import importlib
 from itertools import zip_longest
+from collections import UserDict, UserList
 
 from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
 
@@ -165,7 +166,42 @@ class MergedDataset:
         return sum([len(ds) for ds in self.datasets])
 
 
-def override_spec(old_spec: dict, new_spec: dict, keyring: dict) -> dict:
+def override_spec(old_spec: dict, new_spec: dict) -> dict:
+    new_spec = parse_object(new_spec)
+    return override_dict(old_spec, new_spec)
+
+
+class MetaDict(UserDict):
+    pass
+
+
+class MetaList(UserList):
+    pass
+
+
+def parse_object(obj):
+    if isinstance(obj, list):
+        alist = MetaList([parse_object(item) for item in obj])
+        alist.replace_strategy = "replace"
+        return alist
+    elif isinstance(obj, dict) and "options" not in obj:
+        adict = MetaDict({k: parse_object(v) for k, v in obj.items()})
+        adict.replace_strategy = "replace"
+        return adict
+    elif isinstance(obj, dict):
+        strategy = obj.get("replace_strategy", "replace")
+        options = obj["options"]
+
+        items = parse_object(options)
+        items.replace_strategy = strategy
+        if isinstance(options, list):
+            items.override_key = obj["override_key"]
+        return items
+    else:
+        return obj
+
+
+def override_dict(old_spec: dict, new_spec) -> dict:
     old_spec = dict(old_spec)
     new_spec = dict(new_spec)
 
@@ -174,33 +210,36 @@ def override_spec(old_spec: dict, new_spec: dict, keyring: dict) -> dict:
         if not old_value:
             old_spec[k] = v
         else:
-            both_dicts = isinstance(old_value, dict) and isinstance(v, dict)
-            both_lists = isinstance(old_value, list) and isinstance(v, list)
+            both_dicts = isinstance(old_value, dict) and isinstance(v, MetaDict)
+            both_lists = isinstance(old_value, list) and isinstance(v, MetaList)
+
             if both_dicts:
-                old_spec[k] = override_spec(old_spec[k], v, keyring)
+                old_spec[k] = override_spec(old_spec[k], v)
             elif both_lists:
-                old_spec[k] = override_list(old_value, v, lookup_key=k, keyring=keyring)
+                old_spec[k] = override_list(old_value, v)
             else:
                 old_spec[k] = v
 
     return old_spec
 
 
-def override_list(old_list: list, new_list: list, lookup_key, keyring: dict) -> list:
+def override_list(old_list: list, new_list) -> list:
+
+    key_set = new_list.override_key
     old_list = list(old_list)
     new_list = list(new_list)
 
     for new_item in new_list:
-        if isinstance(new_item, dict):
-            key_set = keyring[lookup_key]
+        if isinstance(new_item, dict) or isinstance(new_item, MetaDict):
             idx = find_first_dict_index(old_list, new_item, key_set)
             if idx is not None:
-                old_list[idx] = override_spec(old_list[idx], new_item, keyring)
+                old_list[idx] = override_spec(old_list[idx], new_item)
             else:
                 old_list.append(new_item)
         else:
             # todo: check this
             return new_list
+
     return old_list
 
 
@@ -221,7 +260,7 @@ def dicts_equal(d1: dict, d2: dict, key_set):
     if not isinstance(d1, dict):
         raise NotDictError(f'Expects d1 to be dictionary. Got {type(d1)}')
 
-    if not isinstance(d2, dict):
+    if not (isinstance(d2, dict) or isinstance(d2, MetaDict)):
         raise NotDictError(f'Expects d2 to be dictionary. Got {type(d2)}')
 
     try:

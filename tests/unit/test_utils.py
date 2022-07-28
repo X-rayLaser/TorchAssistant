@@ -1,30 +1,53 @@
 import unittest
 from scaffolding.data_splitters import MultiSplitter, BadSplitError
-from scaffolding.utils import override_spec
+from scaffolding.utils import override_spec, override_list, MetaList, MetaDict
+
+
+class OverrideHelpFunctionsTests(unittest.TestCase):
+    def test_override_list(self):
+        l1 = [{'id': 12, 'x': 0}, {'id': 15, 'y': 10}]
+
+        l2 = MetaList([{'id': 15, 'y': 34}])
+        l2.replace_strategy = 'override'
+        l2.override_key = ['id']
+
+        expected = [{'id': 12, 'x': 0}, {'id': 15, 'y': 34}]
+
+        self.assertEqual(expected, override_list(l1, l2))
 
 
 class OverridingSpecTests(unittest.TestCase):
-    def test(self):
-        self.assertEqual({}, override_spec({}, {}, keyring={}))
+    def test_1_level_depth(self):
+        self.assertEqual({}, override_spec({}, {}))
         d = {'a': 1, 'b': 2}
-        self.assertEqual(dict(d), override_spec(d, {}, keyring={}))
-        self.assertEqual(dict(d), override_spec({}, d, keyring={}))
+        self.assertEqual(dict(d), override_spec(d, {}))
+        self.assertEqual(dict(d), override_spec({}, d))
 
         d1 = {'a': 1, 'b': 2}
         d2 = {'a': 10, 'c': 15}
-        self.assertEqual(dict(a=10, b=2, c=15), override_spec(d1, d2, keyring={}))
+        self.assertEqual(dict(a=10, b=2, c=15), override_spec(d1, d2))
 
+    def test_nested_dict(self):
         d1 = {'a': 1, 'b': 2, 'nested_dict': {'x': 0, 'y': 1}}
-        d2 = {'a': 10, 'nested_dict': {'x': 100, 't': 50}}
+        d2 = {'a': 10, 'nested_dict': {'replace_strategy': 'override', 'options': {'x': 100, 't': 50}}}
         expected = dict(a=10, b=2, nested_dict={'x': 100, 'y': 1, 't': 50})
-        self.assertEqual(expected, override_spec(d1, d2, keyring={}))
+        self.assertEqual(expected, override_spec(d1, d2))
 
+    def test_override_list_item(self):
+        d1 = dict(alist=[{'id': 12, 'x': 0}, {'id': 15, 'y': 10}])
+        d2 = dict(alist={'replace_strategy': 'override', 'override_key': ['id'], 'options': [{'id': 15, 'y': 34}]})
+        expected = dict(alist=[{'id': 12, 'x': 0}, {'id': 15, 'y': 34}])
+        self.assertEqual(expected, override_spec(d1, d2))
+
+    def test_when_dicts_contain_lists(self):
         d1 = {'a': 1, 'b': 2, 'alist': [{'id': 12, 'x': 0}, {'id': 15, 'y': 10}]}
-        d2 = {'a': 10, 'alist': [{'id': 12, 'x': 40}, {'id': 100, 'c': 128}]}
+        alist = {'replace_strategy': 'override', 'override_key': ['id'],
+                 'options': [{'id': 12, 'x': 40}, {'id': 100, 'c': 128}]}
+        d2 = {'a': 10, 'alist': alist}
         expected = dict(
             a=10, b=2, alist=[{'id': 12, 'x': 40}, {'id': 15, 'y': 10}, {'id': 100, 'c': 128}]
         )
-        self.assertEqual(expected, override_spec(d1, d2, keyring={'alist': ['id']}))
+        self.assertEqual(expected, override_spec(d1, d2))
 
 
 class MultiSplitterTests:
