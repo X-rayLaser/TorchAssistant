@@ -50,7 +50,7 @@ if __name__ == '__main__':
     cmd_args = parser.parse_args()
     path = cmd_args.config
     input_strings = cmd_args.input_strings
-    print(input_strings)
+
     config = load_config(path)
 
     session_dir = config["session_dir"]

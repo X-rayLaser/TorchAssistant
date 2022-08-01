@@ -286,7 +286,7 @@
                 "stop_condition": {
                     "class": "scaffolding.stop_conditions.EpochsCompleted",
                     "kwargs": {
-                        "num_epochs": 150
+                        "num_epochs": 20
                     }
                 }
             },
@@ -297,7 +297,7 @@
                 "stop_condition": {
                     "class": "scaffolding.stop_conditions.EpochsCompleted",
                     "kwargs": {
-                        "num_epochs": 150
+                        "num_epochs": 20
                     }
                 }
             }
