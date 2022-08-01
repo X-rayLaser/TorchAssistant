@@ -1,15 +1,63 @@
 {
-  "session_dir": "pretrained",
-  "pipelines": {
-    "encoder_decoder": {
-      "train_dataset": "my_split.train",
-      "val_dataset": "my_split.val",
-      "batch_adapter_name": "adapter",
-      "loss_name": "cross_entropy",
-      "loss_display_name": "encoder_decoder_loss",
-      "metric_names": ["CER"],
-      "metric_display_names": ["encoder_decoder_CER"],
-      "device": "cpu"
-    }
-  }
+    "session_dir": "pretrained",
+    "initialize": {
+        "definitions": {
+            "replace_strategy": "override",
+            "override_key": ["name"],
+            "options": [{
+                "group": "metrics",
+                "name": "WER",
+                "spec": {
+                    "class": "WordErrorRate",
+                    "inputs": ["y_hat", "y"],
+                    "transform": "examples.language_translation.transforms.DecodeClassesTransform"
+                }
+            }]
+        },
+        "pipelines": {
+            "train": {
+                "losses": [
+                    {
+                        "node_name": "neural_translator",
+                        "loss_name": "cross_entropy",
+                        "loss_display_name": "ed_loss"
+                    }
+                ],
+                "metrics": [
+                    {
+                        "node_name": "neural_translator",
+                        "metric_name": "CER",
+                        "display_name": "CER"
+                    },
+                    {
+                        "node_name": "neural_translator",
+                        "metric_name": "WER",
+                        "display_name": "WER"
+                    }
+                ]
+            },
+            "evaluate": {
+                "losses": [
+                    {
+                        "node_name": "neural_translator",
+                        "loss_name": "cross_entropy",
+                        "loss_display_name": "val ed_loss"
+                    }
+                ],
+                "metrics": [
+                    {
+                        "node_name": "neural_translator",
+                        "metric_name": "CER",
+                        "display_name": "val CER"
+                    },
+                    {
+                        "node_name": "neural_translator",
+                        "metric_name": "WER",
+                        "display_name": "val WER"
+                    }
+                ]
+            }
+        }
+    },
+    "validation_pipelines": ["train", "evaluate"]
 }

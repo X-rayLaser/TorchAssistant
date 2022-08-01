@@ -2,8 +2,7 @@ import argparse
 import json
 
 from scaffolding.training import evaluate_pipeline
-from scaffolding.session import SessionSaver, load_json
-from scaffolding.session.parse import PipelineLoader
+from scaffolding.session import SessionSaver
 from scaffolding.formatters import Formatter
 
 
@@ -12,18 +11,6 @@ def load_config(path):
         s = f.read()
 
     return json.loads(s)
-
-
-def override_pipelines(session, old_spec, new_pipelines_spec):
-    pipeline_loader = PipelineLoader()
-
-    pipeline_spec = old_spec["initialize"]["pipelines"]
-
-    for name, override_options in new_pipelines_spec.items():
-        pipeline_spec.setdefault(name, {}).update(override_options)
-
-    return {name: pipeline_loader.load(session, options)
-            for name, options in pipeline_spec.items()}
 
 
 if __name__ == '__main__':
@@ -40,15 +27,13 @@ if __name__ == '__main__':
     session_dir = config["session_dir"]
 
     saver = SessionSaver(session_dir)
-    session = saver.load_from_latest_checkpoint()
-    old_spec = load_json(saver.spec_path)
+    session = saver.load_from_latest_checkpoint(new_spec=config)
 
     new_pipelines_spec = config.get("pipelines", {})
-    pipelines = override_pipelines(session, old_spec, new_pipelines_spec)
 
     metrics = {}
     for name in config["validation_pipelines"]:
-        pipeline = pipelines[name]
+        pipeline = session.pipelines[name]
         metrics.update(evaluate_pipeline(pipeline))
 
     formatter = Formatter()
