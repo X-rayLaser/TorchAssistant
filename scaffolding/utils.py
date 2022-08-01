@@ -110,7 +110,18 @@ class AdaptedCollator:
         return self.adapter.adapt(*batch)
 
 
-class WrappedDataset:
+class BaseDataset:
+    def __getitem__(self, idx):
+        raise NotImplementedError
+
+    def __len__(self):
+        raise NotImplementedError
+
+    def get_preprocessors(self):
+        raise NotImplementedError
+
+
+class WrappedDataset(BaseDataset):
     def __init__(self, dataset, preprocessors):
         self.dataset = dataset
         self.preprocessors = preprocessors
@@ -133,8 +144,18 @@ class WrappedDataset:
     def __len__(self):
         return len(self.dataset)
 
+    def get_preprocessors(self):
+        wrapped_preprocessors = []
 
-class MergedDataset:
+        if self.dataset.get_preprocessors() and self.preprocessors:
+            for old_one, new_one in zip(self.dataset.get_preprocessors(), self.preprocessors):
+                wrapped_preprocessors.append(new_one.wrap_preprocessor(old_one))
+        else:
+            wrapped_preprocessors = self.dataset.get_preprocessors() or self.preprocessors
+        return wrapped_preprocessors
+
+
+class MergedDataset(BaseDataset):
     class SemiInterval:
         def __init__(self, a, b):
             self.a = a
@@ -164,6 +185,9 @@ class MergedDataset:
 
     def __len__(self):
         return sum([len(ds) for ds in self.datasets])
+
+    def get_preprocessors(self):
+        return self.datasets[0].get_preprocessors()
 
 
 def override_spec(old_spec: dict, new_spec: dict) -> dict:

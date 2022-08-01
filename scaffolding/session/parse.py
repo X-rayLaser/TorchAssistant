@@ -93,10 +93,9 @@ class Loader:
 @register("datasets")
 def load_dataset(session, spec, object_name=None):
     if 'class' in spec or 'factory_fn' in spec:
-        return Loader().load(session, spec, object_name)
-
-    # in that case, we are building a composite dataset
-    if 'link' in spec:
+        dataset = Loader().load(session, spec, object_name)
+    elif 'link' in spec:
+        # in that case, we are building a composite dataset
         referred_ds = spec["link"]
         dataset = get_dataset(session, referred_ds)
     elif 'merge' in spec:

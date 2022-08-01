@@ -46,7 +46,6 @@
         }
     },
     "inference_pipeline": "inference",
-    "preprocessors": ["english_encoder", "english_encoder"],
     "inputs_meta": [
         {
             "input_alias": "input_batch",

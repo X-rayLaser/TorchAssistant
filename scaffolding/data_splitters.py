@@ -155,3 +155,6 @@ class DatasetSlice(Dataset):
 
     def __len__(self):
         return self.index_to - self.index_from
+
+    def get_preprocessors(self):
+        return []

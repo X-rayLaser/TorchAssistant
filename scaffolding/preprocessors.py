@@ -8,6 +8,17 @@ class ValuePreprocessor:
     def __call__(self, value):
         return self.process(value)
 
+    def wrap_preprocessor(self, preprocessor):
+        """Wraps a given preprocessor with self.
+
+        Order of preprocessing: pass a value through a new preprocessor,
+        then preprocess the result with self
+
+        :param preprocessor: preprocessor to wrap
+        :return: A callable
+        """
+        return lambda value: self.process(preprocessor(value))
+
 
 class ExamplePreprocessor:
     def process(self, values):

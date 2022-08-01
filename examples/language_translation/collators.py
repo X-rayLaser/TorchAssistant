@@ -10,12 +10,7 @@ class MyCollator(BatchDivide):
 
     def __call__(self, batch):
         batch = super().__call__(batch)
-        print(batch)
         return [torch.LongTensor(inputs) for inputs in batch]
-        inputs = [x for x, y in batch]
-        targets = [y for x, y in batch]
-
-        return torch.LongTensor(inputs), torch.LongTensor(targets)
 
     def collate_inputs(self, *inputs):
         return torch.LongTensor(inputs)

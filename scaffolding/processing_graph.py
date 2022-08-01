@@ -218,7 +218,7 @@ class DataBlueprint:
     def override_datasets(self, new_datasets: dict):
         for input_loader in self.input_loaders:
             dataset = new_datasets[input_loader.input_alias]
-            input_loader.loader_factory.dataset = dataset
+            input_loader.loader_factory.swap_dataset(dataset)
 
         self.batch_loaders = self.refresh_batch_loaders(self.input_loaders)
 
@@ -252,5 +252,7 @@ class LoaderFactory:
             self.dataset, collate_fn=self.collator, **self.kwargs
         )
 
-    def override_dataset(self, dataset):
+    def swap_dataset(self, dataset):
+        preprocessors = self.dataset.get_preprocessors()
         self.dataset = dataset
+        self.dataset.preprocessors = preprocessors

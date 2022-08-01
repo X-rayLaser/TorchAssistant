@@ -50,7 +50,7 @@ if __name__ == '__main__':
     cmd_args = parser.parse_args()
     path = cmd_args.config
     input_strings = cmd_args.input_strings
-
+    print(input_strings)
     config = load_config(path)
 
     session_dir = config["session_dir"]
@@ -68,12 +68,10 @@ if __name__ == '__main__':
 
     new_datasets = {}
 
-    # todo: automatically extract necessary preprocessors
-    preprocessors = [session.preprocessors[name] for name in config["preprocessors"]]
     for s, meta in zip(input_strings, inputs_meta):
         input_adapter = parse_input_adapter(meta)
         input_alias = meta["input_alias"]
-        new_datasets[input_alias] = WrappedDataset([input_adapter(s)], preprocessors)
+        new_datasets[input_alias] = WrappedDataset([input_adapter(s)], [])
 
     data_generator.override_datasets(new_datasets)
 
