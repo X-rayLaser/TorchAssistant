@@ -207,32 +207,6 @@ class Trainer:
         return losses, results
 
 
-# todo: remove this class if it is not used
-class DataGenerator:
-    def __init__(self, inputs_loaders):
-        self.inputs_loaders = inputs_loaders
-
-        batch_names = [input_loader.input_alias for input_loader in self.inputs_loaders]
-
-        batch_loaders = []
-        for input_loader in self.inputs_loaders:
-            var_names = input_loader.variable_names
-            data_loader = input_loader.data_loader
-            batch_loaders.append(BatchLoader(data_loader, var_names))
-
-        self.batch_names = batch_names
-        self.batch_loaders = batch_loaders
-
-    def __len__(self):
-        return min(map(len, self.batch_loaders))
-
-    def __iter__(self):
-        iterators = [iter(loader) for loader in self.batch_loaders]
-        for i, batches in enumerate(zip(*iterators)):
-            named_batches = dict(zip(self.batch_names, batches))
-            yield named_batches
-
-
 class DataBlueprint:
     def __init__(self, input_loaders):
         self.input_loaders = input_loaders

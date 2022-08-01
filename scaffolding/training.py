@@ -101,10 +101,7 @@ class Debugger:
                 self.debug()
 
     def debug(self):
-        # todo: replace with DataBlueprint
-        from .processing_graph import DataGenerator
-
-        it = iter(DataGenerator(self.pipeline.input_loaders))
+        it = iter(DataBlueprint(self.pipeline.input_loaders))
 
         for _ in range(self.pipeline.num_iterations):
 
@@ -210,35 +207,3 @@ class IterationLogEntry:
         self.outputs = outputs
         self.targets = targets
         self.loss = loss
-
-
-class PredictionPipeline:
-    def __init__(self, model, device, batch_adapter):
-        self.model = model
-        self.device = device
-        self.batch_adapter = batch_adapter
-
-    def adapt_batch(self, batch):
-        batch = self.batch_adapter.adapt(*batch)
-        return batch["inputs"], batch.get("targets")
-
-    def __iter__(self):
-        return iter(self.model)
-
-    def __call__(self, inputs, inference_mode=False):
-        self.inputs_to(inputs)
-
-        all_outputs = {}
-        for node in self.model:
-            outputs = node(inputs, all_outputs, inference_mode)
-            all_outputs.update(
-                dict(zip(node.outputs, outputs))
-            )
-
-        return all_outputs
-
-    def inputs_to(self, inputs):
-        for k, mapping in inputs.items():
-            for tensor_name, value in mapping.items():
-                if hasattr(value, 'device') and value.device != self.device:
-                    mapping[tensor_name] = value.to(self.device)
