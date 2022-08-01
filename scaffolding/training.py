@@ -66,8 +66,7 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
         epoch_str = formatter.format_epoch(epoch)
 
         whitespaces = ' ' * 150
-        print(f'\r{whitespaces}')
-        print(f'\r{epoch_str} {final_metrics_string}')
+        print(f'\r{whitespaces}\r{epoch_str} {final_metrics_string}')
 
         log_metrics(stage_number, epoch, all_train_metrics)
 
