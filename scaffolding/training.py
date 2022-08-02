@@ -4,7 +4,7 @@ import torch
 from .metrics import MovingAverage
 from .formatters import Formatter
 from scaffolding.session import StopTrainingError
-from .processing_graph import DataBlueprint
+from .data import DataBlueprint
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=1):

@@ -6,7 +6,7 @@ from torch import nn
 import torchmetrics
 
 from scaffolding.utils import instantiate_class, import_function, import_entity
-from ..data import WrappedDataset, MergedDataset, MultiSplitter
+from ..data import WrappedDataset, MergedDataset, MultiSplitter, LoaderFactory
 from scaffolding.preprocessors import NullProcessor
 from scaffolding.metrics import metric_functions, Metric
 from scaffolding.output_devices import Printer
@@ -141,7 +141,6 @@ def load_data_factory(session, spec, object_name=None):
 
     kwargs = dict(shuffle=True, num_workers=2)
     kwargs.update(spec.get("kwargs", {}))
-    from ..processing_graph import LoaderFactory
 
     return LoaderFactory(dataset, collator, **kwargs)
 
