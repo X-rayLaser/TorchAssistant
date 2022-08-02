@@ -7,9 +7,9 @@ import csv
 import torch
 
 from . import parse
+from .override_spec import override_spec
 from .parse import get_dataset
 from .registry import group_to_loader
-from ..utils import override_spec
 
 
 def create_session(spec):

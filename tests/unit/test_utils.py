@@ -1,7 +1,8 @@
 import unittest
 from scaffolding.data import MultiSplitter, BadSplitError
-from scaffolding.utils import override_spec, parse_object, override_dict, override_list,\
-    MetaList, MetaDict, InvalidNumberOfMatchesError
+from scaffolding.session import override_spec
+from scaffolding.session.override_spec import MetaDict, MetaList, parse_object, override_dict, override_list, \
+    InvalidNumberOfMatchesError
 
 
 class ParseObjectTests(unittest.TestCase):
