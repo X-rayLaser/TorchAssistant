@@ -36,8 +36,8 @@ class BatchMerger:
 
 
 class NeuralBatchProcessor(BatchProcessor):
-    def __init__(self, neural_graph, input_adapter, output_adapter, device, inference_mode=False):
-        self.neural_graph = neural_graph
+    def __init__(self, neural_nodes, input_adapter, output_adapter, device, inference_mode=False):
+        self.neural_nodes = neural_nodes
         self.input_adapter = input_adapter
         self.output_adapter = output_adapter
         self.device = device
@@ -45,12 +45,12 @@ class NeuralBatchProcessor(BatchProcessor):
 
     def __call__(self, batch):
         inputs = self.input_adapter(batch)
-        change_model_device(self.neural_graph, self.device)
+        change_model_device(self.neural_nodes, self.device)
 
         self.inputs_to(inputs)
 
         all_outputs = {}
-        for node in self.neural_graph:
+        for node in self.neural_nodes:
             outputs = node(inputs, all_outputs, self.inference_mode)
             all_outputs.update(
                 dict(zip(node.outputs, outputs))
@@ -68,20 +68,20 @@ class NeuralBatchProcessor(BatchProcessor):
                     mapping[tensor_name] = value.to(self.device)
 
     def prepare(self):
-        for model in self.neural_graph:
+        for model in self.neural_nodes:
             if model.optimizer:
                 model.optimizer.zero_grad()
 
     def update(self):
-        for node in self.neural_graph:
+        for node in self.neural_nodes:
             if node.optimizer:
                 node.optimizer.step()
 
     def train_mode(self):
-        switch_to_train_mode(self.neural_graph)
+        switch_to_train_mode(self.neural_nodes)
 
     def eval_mode(self):
-        switch_to_evaluation_mode(self.neural_graph)
+        switch_to_evaluation_mode(self.neural_nodes)
 
 
 class BatchProcessingGraph:
@@ -149,3 +149,29 @@ class BatchProcessingGraph:
         result = node(merged_batch)
         self.cache[name] = result
         return result
+
+
+class Node:
+    def __init__(self, name, model, optimizer, inputs, outputs):
+        self.name = name
+        self.net = model
+        self.optimizer = optimizer
+        self.inputs = inputs
+        self.outputs = outputs
+
+    def get_dependencies(self, batch_inputs, prev_outputs):
+        # todo: double check this line
+        lookup_table = batch_inputs.get(self.name, {}).copy()
+        lookup_table.update(prev_outputs)
+        return [lookup_table[var_name] for var_name in self.inputs]
+
+    def predict(self, *args, inference_mode=False):
+        # todo: consider to change args device here (need to store device as attribute)
+        if inference_mode:
+            return self.net.run_inference(*args)
+        else:
+            return self.net(*args)
+
+    def __call__(self, batch_inputs, prev_outputs, inference_mode=False):
+        args = self.get_dependencies(batch_inputs, prev_outputs)
+        return self.predict(*args, inference_mode=inference_mode)

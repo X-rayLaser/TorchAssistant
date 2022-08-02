@@ -1,5 +1,7 @@
 import importlib
 
+import torch
+
 from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
 
 
@@ -106,3 +108,17 @@ class AdaptedCollator:
     def __call__(self, *args):
         batch = self.collator(*args)
         return self.adapter.adapt(*batch)
+
+
+class GradientClipper:
+    def __init__(self, model, clip_value=None, clip_norm=None):
+        self.model = model
+        self.clip_value = clip_value
+        self.clip_norm = clip_norm
+
+    def __call__(self):
+        if self.clip_value:
+            torch.nn.utils.clip_grad_value_(self.model.parameters(), self.clip_value)
+
+        if self.clip_norm:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)

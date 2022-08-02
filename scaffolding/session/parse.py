@@ -5,14 +5,14 @@ import torch
 from torch import nn
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity
+from scaffolding.utils import instantiate_class, import_function, import_entity, GradientClipper
 from ..data import WrappedDataset, MergedDataset, MultiSplitter, LoaderFactory
 from scaffolding.preprocessors import NullProcessor
 from scaffolding.metrics import metric_functions, Metric
 from scaffolding.output_devices import Printer
 from scaffolding.output_adapters import IdentityAdapter
 from .registry import register
-from ..processing_graph import NeuralBatchProcessor
+from ..processing_graph import NeuralBatchProcessor, Node, BatchProcessingGraph
 
 
 class SpecParser:
@@ -189,93 +189,8 @@ def load_batch_processor(session, spec, object_name=None):
     return BatchProcessorLoader().load(session, spec, object_name)
 
 
-@register("batch_pipelines")
-def load_batch_pipeline(session, spec, object_name=None):
-    if "mix" in spec:
-        mixed_pipelines = [session.batch_pipelines[name] for name in spec["mix"]]
-        batch_generator = BatchPipelineMixer(mixed_pipelines)
-    else:
-        batch_generator = session.data_loaders[spec["data_loader"]]
-    object_names = spec.get("batch_processors", [])
-    batch_processors = [session.batch_processors[name] for name in object_names]
-    variable_names = spec.get("variable_names", [])
-    return BatchPipeline(batch_generator, batch_processors, variable_names)
-
-
-# todo: remove this class if it is not used and remove its loader function too
-class BatchPipeline:
-    def __init__(self, batch_generator, batch_processors, variable_names):
-        self.batch_generator = batch_generator
-        self.batch_processors = batch_processors
-        self.variable_names = variable_names
-
-    def __iter__(self):
-        for batch in self.batch_generator:
-            batch = self.batch_to_dict(batch)
-            processors = list(reversed(self.batch_processors))
-
-            while processors:
-                batch_processor = processors.pop()
-                batch_processor.prepare()
-                batch = batch_processor(batch)
-
-            yield batch
-
-    def __len__(self):
-        return len(self.batch_generator)
-
-    def batch_to_dict(self, batch):
-        if isinstance(batch, dict):
-            return batch
-        return dict(zip(self.variable_names, batch))
-
-    def update(self):
-        for processor in self.batch_processors:
-            processor.update()
-
-    def train_mode(self):
-        for processor in self.batch_processors:
-            processor.train_mode()
-
-    def eval_mode(self):
-        for processor in self.batch_processors:
-            processor.eval_mode()
-
-
-class BatchPipelineMixer:
-    def __init__(self, batch_pipelines):
-        self.batch_pipelines = batch_pipelines
-
-    def __iter__(self):
-        for batches in zip(*self.batch_pipelines):
-            batch = self.mix(batches)
-            yield batch
-
-    def __len__(self):
-        return min(len(pipeline) for pipeline in self.batch_pipelines)
-
-    def mix(self, batches):
-        # todo: randomly shuffle rows
-        any_batch = batches[0]
-        result = {}
-        for k in any_batch.keys():
-            tensors = [batch[k].to(torch.device("cpu")) for batch in batches]
-            concatenation = torch.cat(tensors)
-            result[k] = concatenation
-        return result
-
-    def train_mode(self):
-        for pipeline in self.batch_pipelines:
-            pipeline.train_mode()
-
-    def eval_mode(self):
-        for pipeline in self.batch_pipelines:
-            pipeline.eval_mode()
-
-
 @register("batch_graphs")
 def load_batch_processing_graph(session, spec, object_name=None):
-    from ..processing_graph import BatchProcessingGraph
     nodes = {}
     for node_name in spec["nodes"]:
         nodes[node_name] = session.batch_processors[node_name]
@@ -328,20 +243,6 @@ class PipelineLoader(Loader):
             metrics[display_name] = (node_name, metric)
 
         return metrics
-
-
-class GradientClipper:
-    def __init__(self, model, clip_value=None, clip_norm=None):
-        self.model = model
-        self.clip_value = clip_value
-        self.clip_norm = clip_norm
-
-    def __call__(self):
-        if self.clip_value:
-            torch.nn.utils.clip_grad_value_(self.model.parameters(), self.clip_value)
-
-        if self.clip_norm:
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
 
 
 @register("gradient_clippers")
@@ -537,32 +438,6 @@ class DebugPipeline:
         self.output_keys = output_keys
         self.postprocessor = postprocessor
         self.output_device = output_device
-
-
-class Node:
-    def __init__(self, name, model, optimizer, inputs, outputs):
-        self.name = name
-        self.net = model
-        self.optimizer = optimizer
-        self.inputs = inputs
-        self.outputs = outputs
-
-    def get_dependencies(self, batch_inputs, prev_outputs):
-        # todo: double check this line
-        lookup_table = batch_inputs.get(self.name, {}).copy()
-        lookup_table.update(prev_outputs)
-        return [lookup_table[var_name] for var_name in self.inputs]
-
-    def predict(self, *args, inference_mode=False):
-        # todo: consider to change args device here (need to store device as attribute)
-        if inference_mode:
-            return self.net.run_inference(*args)
-        else:
-            return self.net(*args)
-
-    def __call__(self, batch_inputs, prev_outputs, inference_mode=False):
-        args = self.get_dependencies(batch_inputs, prev_outputs)
-        return self.predict(*args, inference_mode=inference_mode)
 
 
 class Stage:
