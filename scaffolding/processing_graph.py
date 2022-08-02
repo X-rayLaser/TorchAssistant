@@ -164,49 +164,6 @@ class BatchLoader:
         return len(self.data_loader)
 
 
-class Trainer:
-    def __init__(self, graph, data_generator, losses: dict, gradient_clippers):
-        self.graph = graph
-        self.data_generator = data_generator
-        self.losses = losses
-        self.gradient_clippers = gradient_clippers
-
-    def __iter__(self):
-        from .training import IterationLogEntry
-
-        num_iterations = len(self.data_generator)
-
-        inputs = []
-        for i, batches in enumerate(self.data_generator):
-            losses, results = self.train_one_iteration(batches)
-            outputs = results
-            targets = results
-            # todo: fix this (may get rid of inputs and targets)
-            yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, losses)
-
-    def train_one_iteration(self, graph_inputs):
-        results = self.graph(graph_inputs)
-
-        losses = {}
-        for name, (node_name, loss_fn) in self.losses.items():
-            batch = results[node_name]
-            loss = loss_fn(batch, batch)
-
-            # invoke zero_grad for each neural network
-            self.graph.prepare()
-            loss.backward()
-
-            for clip_gradients in self.gradient_clippers.values():
-                clip_gradients()
-
-            # invoke optimizer.step() for every neural network if there is one
-            self.graph.update()
-
-            losses[node_name] = loss
-
-        return losses, results
-
-
 class DataBlueprint:
     def __init__(self, input_loaders):
         self.input_loaders = input_loaders

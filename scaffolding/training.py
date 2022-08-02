@@ -4,7 +4,7 @@ import torch
 from .metrics import MovingAverage
 from .formatters import Formatter
 from scaffolding.session import StopTrainingError
-from .processing_graph import Trainer, DataBlueprint
+from .processing_graph import DataBlueprint
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=1):
@@ -21,59 +21,25 @@ def train(session, log_metrics, save_checkpoint, stat_ivl=1):
 
 
 def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10):
-    # todo: refactor this function, it is too long
     stage = session.stages[stage_number]
 
-    stop_condition = stage.stop_condition
-
-    formatter = Formatter()
     start_epoch = session.progress.epochs_done_total + 1
 
-    training_pipelines = stage.training_pipelines
-
-    metric_dicts = [pipeline.metric_fns for pipeline in training_pipelines]
+    metric_dicts = [pipeline.metric_fns for pipeline in stage.training_pipelines]
 
     debuggers = [Debugger(pipeline) for pipeline in stage.debug_pipelines]
-    print(debuggers)
+
     for epoch in range(start_epoch, start_epoch + 1000):
         calculators = [MetricsSetCalculator(metrics, stat_ivl) for metrics in metric_dicts]
 
-        for log_entries in interleave_training(session, training_pipelines):
-            all_running_metrics = {}
-            for i, log in enumerate(log_entries):
-                all_running_metrics.update(calculators[i](log))
+        train_on_data(session, stage.training_pipelines, debuggers, calculators, epoch)
 
-            an_entry = log_entries[0]
-            stats = formatter(
-                epoch, an_entry.iteration + 1,
-                an_entry.num_iterations, all_running_metrics
-            )
-            print(f'\r{stats}', end='')
-
-            # run debuggers/visualization code
-            for debug in debuggers:
-                debug(log_entries)
-
-        # todo: choose which datasets/split slices to use for evaluation and with which metrics
-
-        all_train_metrics = {}
-        for pipeline in stage.validation_pipelines:
-            train_metrics = evaluate_pipeline(pipeline)
-            all_train_metrics.update(train_metrics)
-
-        final_metrics_string = formatter.format_metrics(all_train_metrics, validation=False)
-
-        epoch_str = formatter.format_epoch(epoch)
-
-        whitespaces = ' ' * 150
-        print(f'\r{whitespaces}\r{epoch_str} {final_metrics_string}')
-
-        log_metrics(stage_number, epoch, all_train_metrics)
+        compute_and_log_metrics(stage, stage_number, epoch, log_metrics)
 
         session.progress.increment_progress()
 
         # todo; more sophisticated stop condition that can look at number of iterations and more
-        should_stop = stop_condition(session.progress[stage_number].epochs_done, [])
+        should_stop = stage.stop_condition(session.progress[stage_number].epochs_done, [])
 
         if should_stop:
             session.progress.mark_completed()
@@ -82,6 +48,44 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
         if should_stop:
             break
+
+
+def train_on_data(session, training_pipelines, debuggers, metric_calculators, epoch):
+    formatter = Formatter()
+
+    for log_entries in interleave_training(session, training_pipelines):
+        all_running_metrics = {}
+        for i, log in enumerate(log_entries):
+            all_running_metrics.update(metric_calculators[i](log))
+
+        an_entry = log_entries[0]
+        stats = formatter(
+            epoch, an_entry.iteration + 1,
+            an_entry.num_iterations, all_running_metrics
+        )
+        print(f'\r{stats}', end='')
+
+        # run debuggers/visualization code
+        for debug in debuggers:
+            debug(log_entries)
+
+
+def compute_and_log_metrics(stage, stage_number, epoch, log_fn):
+    formatter = Formatter()
+
+    computed_metrics = {}
+    for pipeline in stage.validation_pipelines:
+        train_metrics = evaluate_pipeline(pipeline)
+        computed_metrics.update(train_metrics)
+
+    final_metrics_string = formatter.format_metrics(computed_metrics, validation=False)
+
+    epoch_str = formatter.format_epoch(epoch)
+
+    whitespaces = ' ' * 150
+    print(f'\r{whitespaces}\r{epoch_str} {final_metrics_string}')
+
+    log_fn(stage_number, epoch, computed_metrics)
 
 
 class Debugger:
@@ -160,18 +164,9 @@ def evaluate_pipeline(pipeline, num_batches=10):
                 break
 
             results_batch = graph(graph_inputs)
-
-            for name, (leaf_name, metric_fn) in metrics.items():
-                outputs = results_batch[leaf_name]
-                moving_averages[name].update(metric_fn(outputs, outputs))
-            #update_running_metrics(moving_averages, metrics, all_outputs, targets)
+            update_running_metrics(moving_averages, metrics, results_batch)
 
     return {metric_name: avg.value for metric_name, avg in moving_averages.items()}
-
-
-def update_running_metrics(moving_averages, metrics, outputs, targets):
-    for metric_name, metric in metrics.items():
-        moving_averages[metric.name].update(metric(outputs, targets))
 
 
 class MetricsSetCalculator:
@@ -188,14 +183,19 @@ class MetricsSetCalculator:
             self.reset()
 
         with torch.no_grad():
-            for name, (leaf_name, metric_fn) in self.metrics.items():
-                outputs = iteration_log.outputs[leaf_name]
-                self.running_metrics[name].update(metric_fn(outputs, outputs))
+            update_running_metrics(self.running_metrics, self.metrics, iteration_log.outputs)
+
         return self.running_metrics
 
     def reset(self):
         for metric_avg in self.running_metrics.values():
             metric_avg.reset()
+
+
+def update_running_metrics(moving_averages, metrics, results_batch):
+    for name, (leaf_name, metric_fn) in metrics.items():
+        outputs = results_batch[leaf_name]
+        moving_averages[name].update(metric_fn(outputs, outputs))
 
 
 class IterationLogEntry:
@@ -206,3 +206,44 @@ class IterationLogEntry:
         self.outputs = outputs
         self.targets = targets
         self.loss = loss
+
+
+class Trainer:
+    def __init__(self, graph, data_generator, losses: dict, gradient_clippers):
+        self.graph = graph
+        self.data_generator = data_generator
+        self.losses = losses
+        self.gradient_clippers = gradient_clippers
+
+    def __iter__(self):
+        num_iterations = len(self.data_generator)
+
+        inputs = []
+        for i, batches in enumerate(self.data_generator):
+            losses, results = self.train_one_iteration(batches)
+            outputs = results
+            targets = results
+            # todo: fix this (may get rid of inputs and targets)
+            yield IterationLogEntry(i, num_iterations, inputs, outputs, targets, losses)
+
+    def train_one_iteration(self, graph_inputs):
+        results = self.graph(graph_inputs)
+
+        losses = {}
+        for name, (node_name, loss_fn) in self.losses.items():
+            batch = results[node_name]
+            loss = loss_fn(batch, batch)
+
+            # invoke zero_grad for each neural network
+            self.graph.prepare()
+            loss.backward()
+
+            for clip_gradients in self.gradient_clippers.values():
+                clip_gradients()
+
+            # invoke optimizer.step() for every neural network if there is one
+            self.graph.update()
+
+            losses[node_name] = loss
+
+        return losses, results
