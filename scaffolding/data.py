@@ -1,36 +1,85 @@
 import math
-
-from torch.utils.data import Dataset
-
-from scaffolding.utils import Serializable
+from itertools import zip_longest
 
 
-class DataSplitter(Serializable):
-    def __init__(self, train_fraction=0.8):
-        self.dataset = None
-        self.train_fraction = train_fraction
+class BaseDataset:
+    def __getitem__(self, idx):
+        raise NotImplementedError
 
-        self.num_train = None
-        self.num_val = None
+    def __len__(self):
+        raise NotImplementedError
 
-    def prepare(self, dataset):
+    def get_preprocessors(self):
+        raise NotImplementedError
+
+
+class WrappedDataset(BaseDataset):
+    def __init__(self, dataset, preprocessors):
         self.dataset = dataset
-        self.num_train = int(self.train_fraction * len(dataset))
-        self.num_val = len(dataset) - self.num_train
+        self.preprocessors = preprocessors
 
-    @property
-    def train_ds(self):
-        return []
+    def __getitem__(self, idx):
+        example = self.dataset[idx]
+        if not (isinstance(example, list) or isinstance(example, tuple)):
+            example = [example]
 
-    @property
-    def val_ds(self):
-        return []
+        # todo: top if statement seems to be redundant
+        if isinstance(example, list) or isinstance(example, tuple):
+            if len(example) > len(self.preprocessors):
+                # when number of inputs > number of preprocessors, leave redundant ones as is
+                pairs = zip_longest(example, self.preprocessors)
+                return [p(v) if p else v for v, p in pairs]
+            else:
+                # when number of inputs <= number of preprocessors, ignore redundant preprocessors
+                return [preprocessor(v) for v, preprocessor in zip(example, self.preprocessors)]
 
-    def state_dict(self):
-        return {}
+    def __len__(self):
+        return len(self.dataset)
 
-    def load(self, state):
-        pass
+    def get_preprocessors(self):
+        wrapped_preprocessors = []
+
+        if self.dataset.get_preprocessors() and self.preprocessors:
+            for old_one, new_one in zip(self.dataset.get_preprocessors(), self.preprocessors):
+                wrapped_preprocessors.append(new_one.wrap_preprocessor(old_one))
+        else:
+            wrapped_preprocessors = self.dataset.get_preprocessors() or self.preprocessors
+        return wrapped_preprocessors
+
+
+class MergedDataset(BaseDataset):
+    class SemiInterval:
+        def __init__(self, a, b):
+            self.a = a
+            self.b = b
+
+        def __contains__(self, n):
+            return self.a <= n < self.b
+
+    def __init__(self, *datasets):
+        self.datasets = datasets
+        sizes = [len(ds) for ds in self.datasets]
+
+        s = 0
+        self.intervals = []
+        for size in sizes:
+            self.intervals.append(self.SemiInterval(s, s + size))
+            s += size
+
+    def __getitem__(self, idx):
+        datasets_with_intervals = zip(self.intervals, self.datasets)
+        for ivl, dataset in datasets_with_intervals:
+            if idx in ivl:
+                offset = idx - ivl.a
+                return dataset[offset]
+
+        raise IndexError('dataset index out of range')
+
+    def __len__(self):
+        return sum([len(ds) for ds in self.datasets])
+
+    def get_preprocessors(self):
+        return self.datasets[0].get_preprocessors()
 
 
 class MultiSplitter:
@@ -118,23 +167,12 @@ class BadSplitError(Exception):
     pass
 
 
-class SimpleSplitter(DataSplitter):
-    @property
-    def train_ds(self):
-        return DatasetSlice(self.dataset, 0, self.num_train)
-
-    @property
-    def val_ds(self):
-        offset = self.num_train
-        return DatasetSlice(self.dataset, offset, offset + self.num_val)
-
-
-class DatasetSlice(Dataset):
+class DatasetSlice(BaseDataset):
     def __init__(self, ds, index_from, index_to):
         """Create a dataset slice
 
         :param ds: original dataset
-        :type ds: type of sequence
+        :type ds: Sequence
         :param index_from: start index of the slice (included in a slice)
         :param index_to: last index of the slice (excluded from a slice)
         """
@@ -157,4 +195,5 @@ class DatasetSlice(Dataset):
         return self.index_to - self.index_from
 
     def get_preprocessors(self):
+        # todo: consider to delegate to self.ds.get_preprocessors
         return []

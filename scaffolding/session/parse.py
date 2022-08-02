@@ -5,10 +5,9 @@ import torch
 from torch import nn
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity, MergedDataset, \
-    WrappedDataset
+from scaffolding.utils import instantiate_class, import_function, import_entity
+from ..data import WrappedDataset, MergedDataset, MultiSplitter
 from scaffolding.preprocessors import NullProcessor
-from scaffolding.data_splitters import MultiSplitter
 from scaffolding.metrics import metric_functions, Metric
 from scaffolding.output_devices import Printer
 from scaffolding.output_adapters import IdentityAdapter

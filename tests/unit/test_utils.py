@@ -1,5 +1,5 @@
 import unittest
-from scaffolding.data_splitters import MultiSplitter, BadSplitError
+from scaffolding.data import MultiSplitter, BadSplitError
 from scaffolding.utils import override_spec, parse_object, override_dict, override_list,\
     MetaList, MetaDict, InvalidNumberOfMatchesError
 

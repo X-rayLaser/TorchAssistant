@@ -1,5 +1,4 @@
 import importlib
-from itertools import zip_longest
 from collections import UserDict, UserList
 
 from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
@@ -108,86 +107,6 @@ class AdaptedCollator:
     def __call__(self, *args):
         batch = self.collator(*args)
         return self.adapter.adapt(*batch)
-
-
-class BaseDataset:
-    def __getitem__(self, idx):
-        raise NotImplementedError
-
-    def __len__(self):
-        raise NotImplementedError
-
-    def get_preprocessors(self):
-        raise NotImplementedError
-
-
-class WrappedDataset(BaseDataset):
-    def __init__(self, dataset, preprocessors):
-        self.dataset = dataset
-        self.preprocessors = preprocessors
-
-    def __getitem__(self, idx):
-        example = self.dataset[idx]
-        if not (isinstance(example, list) or isinstance(example, tuple)):
-            example = [example]
-
-        # todo: top if statement seems to be redundant
-        if isinstance(example, list) or isinstance(example, tuple):
-            if len(example) > len(self.preprocessors):
-                # when number of inputs > number of preprocessors, leave redundant ones as is
-                pairs = zip_longest(example, self.preprocessors)
-                return [p(v) if p else v for v, p in pairs]
-            else:
-                # when number of inputs <= number of preprocessors, ignore redundant preprocessors
-                return [preprocessor(v) for v, preprocessor in zip(example, self.preprocessors)]
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def get_preprocessors(self):
-        wrapped_preprocessors = []
-
-        if self.dataset.get_preprocessors() and self.preprocessors:
-            for old_one, new_one in zip(self.dataset.get_preprocessors(), self.preprocessors):
-                wrapped_preprocessors.append(new_one.wrap_preprocessor(old_one))
-        else:
-            wrapped_preprocessors = self.dataset.get_preprocessors() or self.preprocessors
-        return wrapped_preprocessors
-
-
-class MergedDataset(BaseDataset):
-    class SemiInterval:
-        def __init__(self, a, b):
-            self.a = a
-            self.b = b
-
-        def __contains__(self, n):
-            return self.a <= n < self.b
-
-    def __init__(self, *datasets):
-        self.datasets = datasets
-        sizes = [len(ds) for ds in self.datasets]
-
-        s = 0
-        self.intervals = []
-        for size in sizes:
-            self.intervals.append(self.SemiInterval(s, s + size))
-            s += size
-
-    def __getitem__(self, idx):
-        datasets_with_intervals = zip(self.intervals, self.datasets)
-        for ivl, dataset in datasets_with_intervals:
-            if idx in ivl:
-                offset = idx - ivl.a
-                return dataset[offset]
-
-        raise IndexError('dataset index out of range')
-
-    def __len__(self):
-        return sum([len(ds) for ds in self.datasets])
-
-    def get_preprocessors(self):
-        return self.datasets[0].get_preprocessors()
 
 
 def override_spec(old_spec: dict, new_spec: dict) -> dict:

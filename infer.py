@@ -3,7 +3,7 @@ from scaffolding.utils import instantiate_class
 import torch
 from train import load_config
 from scaffolding.session import SessionSaver
-from scaffolding.utils import WrappedDataset
+from scaffolding.data import WrappedDataset
 from scaffolding.processing_graph import DataBlueprint
 
 
