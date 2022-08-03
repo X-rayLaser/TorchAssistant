@@ -1,20 +1,12 @@
 from collections import namedtuple
-import inspect
 
 import torch
-from torch import nn
-import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity, GradientClipper, BackwardHookInstaller, \
-    OptimizerWithLearningRateScheduler, get_dataset
-from .data_classes import DebugPipeline, Stage, InputLoader, TrainingPipeline
-from ..data import WrappedDataset, MergedDataset, MultiSplitter, LoaderFactory
-from scaffolding.preprocessors import NullProcessor
-from scaffolding.metrics import metric_functions, Metric
-from scaffolding.output_devices import Printer
 from scaffolding.output_adapters import IdentityAdapter
-from .registry import register
-from ..processing_graph import NeuralBatchProcessor, Node, BatchProcessingGraph
+from scaffolding.output_devices import Printer
+from scaffolding.processing_graph import NeuralBatchProcessor, Node
+from scaffolding.session.data_classes import InputLoader, TrainingPipeline, DebugPipeline, Stage
+from scaffolding.utils import instantiate_class, import_function, BackwardHookInstaller, Debugger
 
 
 class SpecParser:
@@ -91,62 +83,6 @@ class Loader:
         return self.load(session, spec, object_name)
 
 
-@register("datasets")
-def load_dataset(session, spec, object_name=None):
-    if 'class' in spec or 'factory_fn' in spec:
-        dataset = Loader().load(session, spec, object_name)
-    elif 'link' in spec:
-        # in that case, we are building a composite dataset
-        referred_ds = spec["link"]
-        dataset = get_dataset(session, referred_ds)
-    elif 'merge' in spec:
-        merge_names = spec['merge']
-        merge_datasets = [get_dataset(session, name) for name in merge_names]
-        dataset = MergedDataset(*merge_datasets)
-    else:
-        raise BadSpecificationError(f'Either one of these keys must be present: "class", "link" or "merge"')
-
-    preprocessors = spec.get("preprocessors", [])
-    preprocessors = [session.preprocessors.get(name, NullProcessor()) for name in preprocessors]
-    return WrappedDataset(dataset, preprocessors)
-
-
-@register("splits")
-def load_data_split(session, spec, object_name=None):
-    dataset_name = spec["dataset_name"]
-    ratio = spec["ratio"]
-    splitter = MultiSplitter(dataset_name, ratio)
-    return splitter
-
-
-@register("preprocessors")
-def load_preprocessor(session, spec, object_name=None):
-    instance = Loader().load(session, spec, object_name)
-    return instance
-
-
-@register("data_loaders")
-def load_data_loader(session, spec, object_name=None):
-    dataset = session.datasets[spec["dataset"]]
-    collator = session.collators[spec["collator"]]
-
-    kwargs = dict(shuffle=True, num_workers=2)
-    kwargs.update(spec.get("kwargs", {}))
-
-    return torch.utils.data.DataLoader(dataset, collate_fn=collator, **kwargs)
-
-
-@register("loader_factories")
-def load_data_factory(session, spec, object_name=None):
-    dataset = session.datasets[spec["dataset"]]
-    collator = session.collators[spec["collator"]]
-
-    kwargs = dict(shuffle=True, num_workers=2)
-    kwargs.update(spec.get("kwargs", {}))
-
-    return LoaderFactory(dataset, collator, **kwargs)
-
-
 class BatchProcessorLoader(Loader):
     def load(self, session, spec, object_name=None):
         if "class" in spec or "factory_fn" in spec:
@@ -184,25 +120,6 @@ class BatchProcessorLoader(Loader):
         return Node(name=node_spec.model_name,
                     model=model, optimizer=optimizer,
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
-
-
-@register("batch_processors")
-def load_batch_processor(session, spec, object_name=None):
-    return BatchProcessorLoader().load(session, spec, object_name)
-
-
-@register("batch_graphs")
-def load_batch_processing_graph(session, spec, object_name=None):
-    nodes = {}
-    for node_name in spec["nodes"]:
-        nodes[node_name] = session.batch_processors[node_name]
-
-    batch_input_names = spec["input_aliases"]
-    graph = BatchProcessingGraph(batch_input_names, **nodes)
-    for destination, sources in spec["ingoing_edges"].items():
-        for src in sources:
-            graph.make_edge(src, destination)
-    return graph
 
 
 class PipelineLoader(Loader):
@@ -243,15 +160,6 @@ class PipelineLoader(Loader):
         return metrics
 
 
-@register("gradient_clippers")
-def load_clipper(session, spec, object_name=None):
-    model_name = spec["model"]
-    clip_value = spec.get("clip_value")
-    clip_norm = spec.get("clip_norm")
-    model = session.models[model_name]
-    return GradientClipper(model, clip_value, clip_norm)
-
-
 class BackwardHookLoader(Loader):
     hook_installer = BackwardHookInstaller
 
@@ -262,72 +170,6 @@ class BackwardHookLoader(Loader):
         model = session.models[model_name]
         create_hook = import_function(function_name)
         return self.hook_installer(model, create_hook)
-
-
-@register("backward_hooks")
-def load_backward_hook(session, spec, object_name=None):
-    return BackwardHookLoader().load(session, spec, object_name)
-
-
-@register("optimizers")
-def load_optimizer(session, spec_dict, object_name=None):
-    # todo: support setting the same optimizer for more than 1 model
-    class_name = spec_dict.get("class")
-    args = spec_dict.get("args", [])
-    kwargs = spec_dict.get("kwargs", {})
-    model_name = spec_dict["model"]
-
-    cls = getattr(torch.optim, class_name)
-    model = session.models[model_name]
-    optimizer = cls(model.parameters(), *args, **kwargs)
-
-    scheduler_spec = spec_dict.get('lr_scheduler')
-
-    if scheduler_spec:
-        scheduler = instantiate_class(scheduler_spec["class"], optimizer,
-                                      **scheduler_spec.get("kwargs", {}))
-        optimizer = OptimizerWithLearningRateScheduler(optimizer, scheduler)
-
-    return optimizer
-
-
-@register("losses")
-def load_loss(session, spec, object_name=None):
-    loss_class_name = spec["class"]
-
-    if "transform" in spec:
-        transform_fn = import_function(spec["transform"])
-        if inspect.isclass(transform_fn):
-            transform_fn = transform_fn(session)
-    else:
-        transform_fn = lambda *fn_args: fn_args
-
-    criterion_class = getattr(nn, loss_class_name)
-    args = spec.get("args", [])
-    kwargs = spec.get("kwargs", {})
-
-    # todo: set device later
-    return Metric('loss', criterion_class(*args, **kwargs), spec["inputs"], transform_fn, 'cpu')
-
-
-@register("metrics")
-def load_metric(session, spec, object_name=None):
-    if "transform" in spec:
-        transform_fn = import_entity(spec["transform"])
-        if inspect.isclass(transform_fn):
-            transform_fn = transform_fn(session)
-    else:
-        def transform_fn(*fn_args):
-            return fn_args
-
-    metric_class = spec["class"]
-    if hasattr(torchmetrics, metric_class):
-        metric = instantiate_class(f'torchmetrics.{metric_class}')
-    else:
-        metric = metric_functions[metric_class]
-
-    # todo: set device later
-    return Metric(object_name, metric, spec["inputs"], transform_fn, device='cpu')
 
 
 class DebuggerLoader(Loader):
@@ -364,7 +206,6 @@ class DebuggerLoader(Loader):
             interval=interval, output_keys=output_keys, postprocessor=postprocessor,
             output_device=output_device
         )
-        from ..utils import Debugger
         return Debugger(pipeline)
 
 

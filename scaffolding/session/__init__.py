@@ -295,12 +295,12 @@ class SessionInitializer:
             self.build_object(session, d)
 
         self.prepare_pipelines(
-            session, init_dict["pipelines"], parse.PipelineLoader(), 'pipelines'
+            session, init_dict["pipelines"], parse.loaders.PipelineLoader(), 'pipelines'
         )
 
         self.prepare_pipelines(
             session, init_dict.get("debug_pipelines", {}),
-            parse.DebuggerLoader(), 'debug_pipelines'
+            parse.loaders.DebuggerLoader(), 'debug_pipelines'
         )
 
         self.load_stages(session, spec)
@@ -317,7 +317,7 @@ class SessionInitializer:
 
     def load_stages(self, session, spec):
         stages_spec = spec["train"]["stages"]
-        stage_loader = parse.StageLoader()
+        stage_loader = parse.loaders.StageLoader()
         session.stages = [stage_loader.load(session, stage) for stage in stages_spec]
 
     def initialize_progress(self, session):
@@ -326,7 +326,7 @@ class SessionInitializer:
 
     def build_object(self, session, definition):
         group = definition["group"]
-        loader = group_to_loader.get(group, parse.Loader())
+        loader = group_to_loader.get(group, parse.loaders.Loader())
         installer = self.installers[group]
         name = definition["name"]
         spec = definition["spec"]
