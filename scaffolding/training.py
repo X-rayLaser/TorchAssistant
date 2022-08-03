@@ -194,8 +194,9 @@ class MetricsSetCalculator:
 
 def update_running_metrics(moving_averages, metrics, results_batch):
     for name, (leaf_name, metric_fn) in metrics.items():
-        outputs = results_batch[leaf_name]
-        moving_averages[name].update(metric_fn(outputs, outputs))
+        moving_averages[name].update(
+            metric_fn(results_batch[leaf_name])
+        )
 
 
 class IterationLogEntry:
@@ -232,7 +233,7 @@ class Trainer:
         losses = {}
         for name, (node_name, loss_fn) in self.losses.items():
             batch = results[node_name]
-            loss = loss_fn(batch, batch)
+            loss = loss_fn(batch)
 
             # invoke zero_grad for each neural network
             self.graph.prepare()

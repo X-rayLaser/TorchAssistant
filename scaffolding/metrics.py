@@ -27,7 +27,16 @@ metric_functions = {
 
 class Metric:
     def __init__(self, name, metric_fn, metric_args, transform_fn, device):
-        # todo: pass here a shorthand name used in place of full metric name when printing/saving history
+        """
+
+        :param name: A string that identifies the metric
+        :param metric_fn: a callable that maps variable number of tensors to a scalar
+        :param metric_args: tensor names of batch that are used to compute the metric on
+        :type metric_args: iterable of type str
+        :param transform_fn: a callable that transforms/reduces # of the metrics arguments
+        :param device: compute device to run the metric computation on
+        :type device: torch.device
+        """
         self.name = name
         self.metric_fn = metric_fn
         self.metric_args = metric_args
@@ -37,24 +46,25 @@ class Metric:
     def rename_and_clone(self, new_name):
         return self.__class__(new_name, self.metric_fn, self.metric_args, self.transform_fn, self.device)
 
-    def __call__(self, *args):
-        """
+    def __call__(self, batch):
+        """Given the batch of predictions and targets, compute the metric.
 
-        :param outputs: a dictionary of all outputs from prediction pipeline
-        :type outputs: Dict[str -> torch.tensor]
-        :param targets: a dictionary of all targets
-        :type targets: Dict[str -> torch.tensor]
+        The method will first extract all arguments that metric
+        function expects from batch. Then it will apply transforms to them.
+        Finally, it will place all tensors on a specified device and compute the metric value.
+
+        Note that this method will also compute gradients with respect to tensors that participate in
+        the metrics calculation. If this is not required, one should manually detach() tensors or
+        make the call under no_grad() context manager.
+
+        :param batch: a dictionary mapping a name of a metric argument to a corresponding tensor
+        :type batch: Dict[str -> torch.tensor]
         :return: a metric scalar
         :rtype: degenerate tensor of shape ()
         """
 
         # todo: get rid of this (make it work with single argument)
-        if len(args) == 2:
-            outputs, targets = args
-            lookup_table = targets.copy()
-            lookup_table.update(outputs)
-        else:
-            lookup_table = args[0]
+        lookup_table = batch
 
         tensors = [lookup_table[arg] for arg in self.metric_args]
 
