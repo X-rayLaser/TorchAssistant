@@ -5,6 +5,7 @@ from .metrics import MovingAverage
 from .formatters import Formatter
 from scaffolding.session import StopTrainingError
 from .data import DataBlueprint
+from .utils import Debugger
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=1):
@@ -86,38 +87,6 @@ def compute_and_log_metrics(stage, stage_number, epoch, log_fn):
     print(f'\r{whitespaces}\r{epoch_str} {final_metrics_string}')
 
     log_fn(stage_number, epoch, computed_metrics)
-
-
-class Debugger:
-    def __init__(self, pipeline):
-        self.graph = pipeline.graph
-        self.postprocessor = pipeline.postprocessor
-        self.output_device = pipeline.output_device
-        self.pipeline = pipeline
-
-    def __call__(self, log_entries):
-        entry = log_entries[0]
-        interval = self.pipeline.interval
-
-        if entry.iteration % interval == interval - 1:
-            with torch.no_grad():
-                self.debug()
-
-    def debug(self):
-        it = iter(DataBlueprint(self.pipeline.input_loaders))
-
-        for _ in range(self.pipeline.num_iterations):
-
-            graph_inputs = next(it)
-            results = self.graph(graph_inputs)
-            all_results = {k: v for batches in results.values() for k, v in batches.items()}
-
-            predictions = {k: all_results[k] for k in self.pipeline.output_keys}
-
-            if self.postprocessor:
-                predictions = self.postprocessor(predictions)
-
-            self.output_device(predictions)
 
 
 def interleave_training(session, pipelines):

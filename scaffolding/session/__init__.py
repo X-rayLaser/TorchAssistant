@@ -8,7 +8,7 @@ import torch
 
 from . import parse
 from .override_spec import override_spec
-from .parse import get_dataset
+from ..utils import get_dataset
 from .registry import group_to_loader
 
 
@@ -300,7 +300,7 @@ class SessionInitializer:
 
         self.prepare_pipelines(
             session, init_dict.get("debug_pipelines", {}),
-            parse.DebugPipelineLoader(), 'debug_pipelines'
+            parse.DebuggerLoader(), 'debug_pipelines'
         )
 
         self.load_stages(session, spec)

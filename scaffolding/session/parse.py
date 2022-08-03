@@ -5,7 +5,9 @@ import torch
 from torch import nn
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity, GradientClipper
+from scaffolding.utils import instantiate_class, import_function, import_entity, GradientClipper, BackwardHookInstaller, \
+    OptimizerWithLearningRateScheduler, get_dataset
+from .data_classes import DebugPipeline, Stage, InputLoader, TrainingPipeline
 from ..data import WrappedDataset, MergedDataset, MultiSplitter, LoaderFactory
 from scaffolding.preprocessors import NullProcessor
 from scaffolding.metrics import metric_functions, Metric
@@ -203,9 +205,6 @@ def load_batch_processing_graph(session, spec, object_name=None):
     return graph
 
 
-InputLoader = namedtuple("InputLoader", ["input_alias", "loader_factory", "variable_names"])
-
-
 class PipelineLoader(Loader):
     def load(self, session, spec, object_name=None):
         graph = session.batch_graphs[spec["graph"]]
@@ -230,7 +229,6 @@ class PipelineLoader(Loader):
                 renamed_loss_fn = loss_fn[1].rename_and_clone(loss_display_name)
                 metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
 
-        TrainingPipeline = namedtuple('TrainingPipeline', ["graph", "input_loaders", "loss_fns", "metric_fns"])
         return TrainingPipeline(graph, input_loaders, loss_fns, metric_fns)
 
     def parse_metrics(self, session, pipeline_spec):
@@ -254,25 +252,6 @@ def load_clipper(session, spec, object_name=None):
     return GradientClipper(model, clip_value, clip_norm)
 
 
-class HookInstaller:
-    def __init__(self, model, hook_factory_fn):
-        self.model = model
-        self.hook_factory_fn = hook_factory_fn
-
-    def __call__(self):
-        for name, param in self.model.named_parameters():
-            hook = self.hook_factory_fn(name)
-            self.register_hook(param, hook)
-
-    def register_hook(self, param, hook):
-        raise NotImplementedError
-
-
-class BackwardHookInstaller(HookInstaller):
-    def register_hook(self, param, hook):
-        param.register_hook(hook)
-
-
 class BackwardHookLoader(Loader):
     hook_installer = BackwardHookInstaller
 
@@ -288,29 +267,6 @@ class BackwardHookLoader(Loader):
 @register("backward_hooks")
 def load_backward_hook(session, spec, object_name=None):
     return BackwardHookLoader().load(session, spec, object_name)
-
-
-class OptimizerWithLearningRateScheduler:
-    def __init__(self, optimizer, lr_scheduler):
-        self.optimizer = optimizer
-        self.scheduler = lr_scheduler
-
-    def state_dict(self):
-        return {
-            'optimizer': self.optimizer.state_dict(),
-            'scheduler': self.scheduler.state_dict()
-        }
-
-    def load_state_dict(self, state_dict):
-        self.optimizer.load_state_dict(state_dict['optimizer'])
-        self.scheduler.load_state_dict(state_dict['scheduler'])
-
-    def zero_grad(self):
-        self.optimizer.zero_grad()
-
-    def step(self):
-        self.optimizer.step()
-        self.scheduler.step()
 
 
 @register("optimizers")
@@ -374,7 +330,7 @@ def load_metric(session, spec, object_name=None):
     return Metric(object_name, metric, spec["inputs"], transform_fn, device='cpu')
 
 
-class DebugPipelineLoader(Loader):
+class DebuggerLoader(Loader):
     def load(self, session, pipeline_spec, object_name=None):
         graph = session.batch_graphs[pipeline_spec["graph"]]
         input_loaders = []
@@ -403,11 +359,13 @@ class DebugPipelineLoader(Loader):
 
         output_keys = pipeline_spec.get("output_keys", ["y_hat"])
 
-        return DebugPipeline(
+        pipeline = DebugPipeline(
             graph=graph, input_loaders=input_loaders, num_iterations=num_iterations,
             interval=interval, output_keys=output_keys, postprocessor=postprocessor,
             output_device=output_device
         )
+        from ..utils import Debugger
+        return Debugger(pipeline)
 
 
 class StageLoader(Loader):
@@ -426,36 +384,3 @@ class StageLoader(Loader):
 
         stop_condition = Loader().load(session, stop_condition_dict)
         return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines, stop_condition)
-
-
-class DebugPipeline:
-    def __init__(self, *, graph, input_loaders, num_iterations, interval,
-                 output_keys, postprocessor, output_device):
-        self.graph = graph
-        self.input_loaders = input_loaders
-        self.num_iterations = num_iterations
-        self.interval = interval
-        self.output_keys = output_keys
-        self.postprocessor = postprocessor
-        self.output_device = output_device
-
-
-class Stage:
-    def __init__(self, mode, training_pipelines,
-                 validation_pipelines, debug_pipelines, stop_condition):
-        self.mode = mode
-        self.training_pipelines = training_pipelines
-        self.validation_pipelines = validation_pipelines
-        self.debug_pipelines = debug_pipelines
-        self.stop_condition = stop_condition
-
-
-def get_dataset(session, dataset_name):
-    if '.' in dataset_name:
-        splitter_name, slice_name = dataset_name.split('.')
-        splitter = session.splits[splitter_name]
-        split = splitter.split(session.datasets[splitter.dataset_name])
-        dataset = getattr(split, slice_name)
-    else:
-        dataset = session.datasets[dataset_name]
-    return dataset

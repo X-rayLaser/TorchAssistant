@@ -2,6 +2,7 @@ import importlib
 
 import torch
 
+from scaffolding.data import DataBlueprint
 from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
 
 
@@ -81,3 +82,88 @@ class GradientClipper:
 
         if self.clip_norm:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
+
+
+class HookInstaller:
+    def __init__(self, model, hook_factory_fn):
+        self.model = model
+        self.hook_factory_fn = hook_factory_fn
+
+    def __call__(self):
+        for name, param in self.model.named_parameters():
+            hook = self.hook_factory_fn(name)
+            self.register_hook(param, hook)
+
+    def register_hook(self, param, hook):
+        raise NotImplementedError
+
+
+class BackwardHookInstaller(HookInstaller):
+    def register_hook(self, param, hook):
+        param.register_hook(hook)
+
+
+class OptimizerWithLearningRateScheduler:
+    def __init__(self, optimizer, lr_scheduler):
+        self.optimizer = optimizer
+        self.scheduler = lr_scheduler
+
+    def state_dict(self):
+        return {
+            'optimizer': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict()
+        }
+
+    def load_state_dict(self, state_dict):
+        self.optimizer.load_state_dict(state_dict['optimizer'])
+        self.scheduler.load_state_dict(state_dict['scheduler'])
+
+    def zero_grad(self):
+        self.optimizer.zero_grad()
+
+    def step(self):
+        self.optimizer.step()
+        self.scheduler.step()
+
+
+def get_dataset(session, dataset_name):
+    if '.' in dataset_name:
+        splitter_name, slice_name = dataset_name.split('.')
+        splitter = session.splits[splitter_name]
+        split = splitter.split(session.datasets[splitter.dataset_name])
+        dataset = getattr(split, slice_name)
+    else:
+        dataset = session.datasets[dataset_name]
+    return dataset
+
+
+class Debugger:
+    def __init__(self, pipeline):
+        self.graph = pipeline.graph
+        self.postprocessor = pipeline.postprocessor
+        self.output_device = pipeline.output_device
+        self.pipeline = pipeline
+
+    def __call__(self, log_entries):
+        entry = log_entries[0]
+        interval = self.pipeline.interval
+
+        if entry.iteration % interval == interval - 1:
+            with torch.no_grad():
+                self.debug()
+
+    def debug(self):
+        it = iter(DataBlueprint(self.pipeline.input_loaders))
+
+        for _ in range(self.pipeline.num_iterations):
+
+            graph_inputs = next(it)
+            results = self.graph(graph_inputs)
+            all_results = {k: v for batches in results.values() for k, v in batches.items()}
+
+            predictions = {k: all_results[k] for k in self.pipeline.output_keys}
+
+            if self.postprocessor:
+                predictions = self.postprocessor(predictions)
+
+            self.output_device(predictions)
