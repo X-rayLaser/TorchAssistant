@@ -1,5 +1,4 @@
 import torch
-from scaffolding.utils import change_model_device, switch_to_train_mode, switch_to_evaluation_mode
 
 
 class BatchProcessor:
@@ -45,7 +44,7 @@ class NeuralBatchProcessor(BatchProcessor):
 
     def __call__(self, batch):
         inputs = self.input_adapter(batch)
-        change_model_device(self.neural_nodes, self.device)
+        self.change_model_device()
 
         self.inputs_to(inputs)
 
@@ -60,6 +59,10 @@ class NeuralBatchProcessor(BatchProcessor):
         result_dict.update(all_outputs)
         res = self.output_adapter(result_dict)
         return res
+
+    def change_model_device(self):
+        for model in self.neural_nodes:
+            model.net.to(self.device)
 
     def inputs_to(self, inputs):
         for k, mapping in inputs.items():
@@ -78,10 +81,12 @@ class NeuralBatchProcessor(BatchProcessor):
                 node.optimizer.step()
 
     def train_mode(self):
-        switch_to_train_mode(self.neural_nodes)
+        for node in self.neural_nodes:
+            node.net.train()
 
     def eval_mode(self):
-        switch_to_evaluation_mode(self.neural_nodes)
+        for node in self.neural_nodes:
+            node.net.eval()
 
 
 class BatchProcessingGraph:

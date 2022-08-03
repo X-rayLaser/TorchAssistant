@@ -9,7 +9,7 @@ class Serializable:
     def state_dict(self):
         return {}
 
-    def load(self, state_dict):
+    def load_state_dict(self, state_dict):
         pass
 
 
@@ -67,47 +67,6 @@ def import_entity(dotted_path):
         return getattr(module, name)
     except AttributeError:
         raise EntityImportError(error_msg)
-
-
-def switch_to_train_mode(prediction_pipeline):
-    for node in prediction_pipeline:
-        #node.net.instance.train()
-        node.net.train()
-
-
-def switch_to_evaluation_mode(prediction_pipeline):
-    for node in prediction_pipeline:
-        #node.net.instance.eval()
-        node.net.eval()
-
-
-def change_model_device(train_pipeline, device):
-    for model in train_pipeline:
-        #model.net.instance.to(device)
-        model.net.to(device)
-
-
-def change_batch_device(batch, device):
-    inputs_dict = batch["inputs"]
-
-    for k, mapping in inputs_dict.items():
-        for tensor_name, value in mapping.items():
-            mapping[tensor_name] = value.to(device)
-
-    targets_dict = batch.get("targets")
-    if targets_dict:
-        for tensor_name, value in targets_dict.items():
-            targets_dict[tensor_name] = value.to(device)
-
-
-class AdaptedCollator:
-    def __init__(self, collator, batch_adapter):
-        self.collator = collator
-        self.adapter = batch_adapter
-
-    def __call__(self, *args):
-        batch = self.collator(*args)
-        return self.adapter.adapt(*batch)
 
 
 class GradientClipper:
