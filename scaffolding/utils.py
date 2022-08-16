@@ -15,59 +15,46 @@ class Serializable:
 
 
 def instantiate_class(dotted_path, *args, **kwargs):
-    parts = dotted_path.split('.')
-    module_path = '.'.join(parts[:-1])
-    class_name = parts[-1]
+    if '.' not in dotted_path:
+        raise ClassImportError(f'Invalid import path: "{dotted_path}"')
 
-    error_msg = f'Failed to import a class "{class_name}" from "{module_path}"'
-
+    module_path, class_name = split_import_path(dotted_path)
+    error_msg = f'Failed to import and instantiate a class "{class_name}" from "{module_path}": '
     try:
         module = importlib.import_module(module_path)
-    except ModuleNotFoundError:
-        raise ClassImportError(error_msg)
-
-    try:
         cls = getattr(module, class_name)
-    except AttributeError:
-        raise ClassImportError(error_msg)
-
-    return cls(*args, **kwargs)
+        return cls(*args, **kwargs)
+    except Exception as e:
+        raise ClassImportError(error_msg + str(e))
 
 
 def import_function(dotted_path):
-    parts = dotted_path.split('.')
-    module_path = '.'.join(parts[:-1])
-    fn_name = parts[-1]
-
-    error_msg = f'Failed to import a function "{fn_name}" from "{module_path}"'
-
     try:
-        module = importlib.import_module(module_path)
-    except ModuleNotFoundError:
-        raise FunctionImportError(error_msg)
-
-    try:
-        return getattr(module, fn_name)
-    except AttributeError:
-        raise FunctionImportError(error_msg)
+        return import_entity(dotted_path)
+    except EntityImportError as e:
+        raise FunctionImportError(str(e))
 
 
 def import_entity(dotted_path):
-    parts = dotted_path.split('.')
-    module_path = '.'.join(parts[:-1])
-    name = parts[-1]
+    if '.' not in dotted_path:
+        raise EntityImportError(f'Invalid import path: "{dotted_path}"')
 
-    error_msg = f'Failed to import an entity "{name}" from "{module_path}"'
+    module_path, name = split_import_path(dotted_path)
+
+    error_msg = f'Failed to import an entity "{name}" from "{module_path}": '
 
     try:
         module = importlib.import_module(module_path)
-    except ModuleNotFoundError:
-        raise EntityImportError(error_msg)
-
-    try:
         return getattr(module, name)
-    except AttributeError:
-        raise EntityImportError(error_msg)
+    except Exception as e:
+        raise EntityImportError(error_msg + str(e))
+
+
+def split_import_path(dotted_path):
+    idx = dotted_path.rindex('.')
+    module_path = dotted_path[:idx]
+    name = dotted_path[idx + 1:]
+    return module_path, name
 
 
 class GradientClipper:
@@ -167,3 +154,7 @@ class Debugger:
                 predictions = self.postprocessor(predictions)
 
             self.output_device(predictions)
+
+
+class InvalidImportPathError(Exception):
+    pass
