@@ -1,5 +1,7 @@
 import unittest
 from scaffolding import utils
+from scaffolding.data import MultiSplitter, DatasetSlice
+from scaffolding.session import Session
 
 
 class InstantiateClassTests(unittest.TestCase):
@@ -73,3 +75,72 @@ class TestImportEntity(TestImportFunction):
     def setUp(self):
         self.exception_class = utils.EntityImportError
         self.function_to_test = utils.import_entity
+
+
+class TestGetDataset(unittest.TestCase):
+    def test_dataset_not_found(self):
+        session = Session()
+
+        self.assertRaises(utils.DatasetNotFoundError, utils.get_dataset, session, 'other dataset')
+
+        session.datasets = dict(dataset=[0, 1])
+        session.splits['my_split'] = MultiSplitter('other', [0.5, 0.5])
+        self.assertRaises(utils.DatasetNotFoundError, utils.get_dataset, session, 'other dataset')
+        self.assertRaises(utils.DatasetNotFoundError, utils.get_dataset, session, 'my_split.train')
+
+    def test_data_splitter_not_found(self):
+        session = Session()
+        session.datasets = dict(dataset=[0, 1])
+        session.splits['my_split'] = MultiSplitter('dataset', [0.5, 0.5])
+        self.assertRaises(utils.SplitterNotFoundError, utils.get_dataset, session, 'other_split.train')
+
+    def test_get_normal_dataset(self):
+        session = Session()
+        session.datasets = dict(ds_a=[0, 1], ds_b=[2, 3])
+        ds = utils.get_dataset(session, 'ds_a')
+        self.assertEqual([0, 1], ds)
+
+    def test_get_data_split_part(self):
+        ds = [(4, 16), (3, 9), (2, 4), (1, 1)]
+        session = Session()
+        session.datasets['ds_a'] = ds
+        session.datasets['other_ds'] = [(10, 100), (9, 81), (8, 64), (7, 49), (6, 36)]
+
+        session.splits['my_split'] = MultiSplitter('ds_a', [0.5, 0.5])
+        session.splits['other_split'] = MultiSplitter('other_ds', [0.4, 0.4, 0.2])
+
+        train_slice = utils.get_dataset(session, 'my_split.train')
+        val_slice = utils.get_dataset(session, 'my_split.val')
+        self.assertIsInstance(train_slice, DatasetSlice)
+        self.assertIsInstance(val_slice, DatasetSlice)
+
+        self.assertEqual([(4, 16), (3, 9)], list(train_slice))
+        self.assertEqual([(2, 4), (1, 1)], list(val_slice))
+        self.assertRaises(utils.BadDatasetSliceError, utils.get_dataset, session, 'my_split.test')
+
+        train_slice = utils.get_dataset(session, 'other_split.train')
+        val_slice = utils.get_dataset(session, 'other_split.val')
+        test_slice = utils.get_dataset(session, 'other_split.test')
+        self.assertIsInstance(train_slice, DatasetSlice)
+        self.assertIsInstance(val_slice, DatasetSlice)
+        self.assertIsInstance(test_slice, DatasetSlice)
+
+        self.assertEqual([(10, 100), (9, 81)], list(train_slice))
+        self.assertEqual([(8, 64), (7, 49)], list(val_slice))
+        self.assertEqual([(6, 36)], list(test_slice))
+
+    def test_get_data_split_part_by_numeric_index(self):
+        session = Session()
+        session.datasets['other_ds'] = [(10, 100), (9, 81), (8, 64), (7, 49), (6, 36)]
+
+        session.splits['my_split'] = MultiSplitter('other_ds', [0.4, 0.4, 0.2])
+
+        train_slice = utils.get_dataset(session, 'my_split[0]')
+        val_slice = utils.get_dataset(session, 'my_split[1]')
+        test_slice = utils.get_dataset(session, 'my_split[2]')
+
+        self.assertEqual([(10, 100), (9, 81)], list(train_slice))
+        self.assertEqual([(8, 64), (7, 49)], list(val_slice))
+        self.assertEqual([(6, 36)], list(test_slice))
+
+        self.assertRaises(utils.BadDatasetSliceError, utils.get_dataset, session, 'my_split.haha')

@@ -114,14 +114,52 @@ class OptimizerWithLearningRateScheduler:
 
 
 def get_dataset(session, dataset_name):
+    if not ('.' in dataset_name or '[' in dataset_name):
+        return try_retrieve_dataset(session, dataset_name)
+
     if '.' in dataset_name:
-        splitter_name, slice_name = dataset_name.split('.')
-        splitter = session.splits[splitter_name]
-        split = splitter.split(session.datasets[splitter.dataset_name])
-        dataset = getattr(split, slice_name)
+        splitter_name, slice_id = dataset_name.split('.')
     else:
-        dataset = session.datasets[dataset_name]
-    return dataset
+        splitter_name, tail = dataset_name.split('[')
+        slice_id = int(tail[:-1])
+
+    error_msg = f'Data slice "{slice_id}" does not exist'
+    splitter = try_retrieve_splitter(session, splitter_name)
+    split = splitter.split(try_retrieve_dataset(session, splitter.dataset_name))
+    return try_retrieve_slice(split, slice_id, error_msg)
+
+
+def try_retrieve_splitter(session, splitter_name):
+    try:
+        return session.splits[splitter_name]
+    except KeyError:
+        raise SplitterNotFoundError(f'{splitter_name} not found in session')
+
+
+def try_retrieve_dataset(session, dataset_name):
+    try:
+        return session.datasets[dataset_name]
+    except KeyError:
+        raise DatasetNotFoundError(f'{dataset_name} not found in session')
+
+
+def try_retrieve_slice(split, slice_id, error_msg):
+    try:
+        return split[slice_id] if isinstance(slice_id, int) else getattr(split, slice_id)
+    except (IndexError, AttributeError):
+        raise BadDatasetSliceError(error_msg)
+
+
+class SplitterNotFoundError(Exception):
+    pass
+
+
+class DatasetNotFoundError(Exception):
+    pass
+
+
+class BadDatasetSliceError(Exception):
+    pass
 
 
 class Debugger:
