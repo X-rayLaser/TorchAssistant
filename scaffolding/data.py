@@ -185,6 +185,16 @@ class DatasetSlice(BaseDataset):
                 f'index_to must be greater than index_from: Got {index_to}, {index_from}'
             )
 
+        if index_to < 0 or index_from < 0:
+            raise BadSplitError(
+                f'Negative indices are not allowed: Got index_to={index_to}, index_from={index_from}'
+            )
+
+        if index_to > len(ds) or index_from > len(ds):
+            raise BadSplitError(
+                f'At least one of indices is out of range: Got index_to={index_to}, index_from={index_from}'
+            )
+
         self.ds = ds
         self.index_from = index_from
         self.index_to = index_to
@@ -215,6 +225,7 @@ class BatchLoader:
         return len(self.data_loader)
 
 
+# todo: consider renaming it (e.g. DataFactory, BatchFactory, TrainingBatchGenerator)
 class DataBlueprint:
     def __init__(self, input_loaders):
         self.input_loaders = input_loaders

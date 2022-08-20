@@ -151,3 +151,129 @@ class MultiSplitterTests(unittest.TestCase):
         data_split = splitter.split(ds)
         self.assertEqual([2], list(data_split[0]))
         self.assertEqual([1, 3], list(data_split[1]))
+
+
+class DatasetSliceTests(unittest.TestCase):
+    def test_slice_with_invalid_end_points(self):
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [0, 1, 2], 2, 2)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [0, 1, 2], 1, 1)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [0, 1, 2], 0, 0)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [0, 1, 2], 2, 1)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [0, 1, 2], 2, 0)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [0, 1, 2], -3, 2)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [0, 1, 2], 0, -1)
+
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [1], 0, 2)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [1], 3, 4)
+
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [], 0, 0)
+        self.assertRaises(data.BadSplitError, data.DatasetSlice, [], 0, 1)
+
+    def test_single_item_slice(self):
+        data_slice = data.DatasetSlice([10], 0, 1)
+        self.assertEqual(1, len(data_slice))
+        self.assertEqual([10], list(data_slice))
+        self.assertEqual(10, data_slice[0])
+        self.assertRaises(IndexError, lambda: data_slice[1])
+        self.assertRaises(IndexError, lambda: data_slice[10])
+        self.assertRaises(IndexError, lambda: data_slice[-1])
+
+    def test_many_items_slice(self):
+        data_slice = data.DatasetSlice([10, 11, 12], 0, 2)
+        self.assertEqual(2, len(data_slice))
+        self.assertEqual([10, 11], list(data_slice))
+        self.assertEqual(10, data_slice[0])
+        self.assertEqual(11, data_slice[1])
+
+        data_slice = data.DatasetSlice([10, 11, 12], 1, 3)
+        self.assertEqual(2, len(data_slice))
+        self.assertEqual([11, 12], list(data_slice))
+        self.assertEqual(11, data_slice[0])
+        self.assertEqual(12, data_slice[1])
+
+        data_slice = data.DatasetSlice([10, 11, 12], 0, 3)
+        self.assertEqual(3, len(data_slice))
+        self.assertEqual([10, 11, 12], list(data_slice))
+        self.assertEqual(10, data_slice[0])
+        self.assertEqual(11, data_slice[1])
+        self.assertEqual(12, data_slice[2])
+
+        data_slice = data.DatasetSlice([10, 11, 12], 1, 2)
+        self.assertEqual(1, len(data_slice))
+        self.assertEqual([11], list(data_slice))
+        self.assertEqual(11, data_slice[0])
+
+
+class DataSplitTests(unittest.TestCase):
+    def test_indexing(self):
+        split = data.DataSplit([[0, 2]])
+        self.assertEqual([0, 2], split[0])
+        self.assertEqual([0, 2], split.train)
+        self.assertRaises(IndexError, lambda: split[1])
+        self.assertRaises(AttributeError, lambda: split.val)
+
+        split = data.DataSplit([[1, 2], [5]])
+        self.assertEqual([1, 2], split[0])
+        self.assertEqual([5], split[1])
+        self.assertEqual([5], split.val)
+
+        self.assertRaises(IndexError, lambda: split[2])
+        self.assertRaises(AttributeError, lambda: split.test)
+
+        split = data.DataSplit([[1, 2], [5], [3]])
+        self.assertEqual([1, 2], split[0])
+        self.assertEqual([5], split[1])
+        self.assertEqual([3], split[2])
+        self.assertEqual([3], split.test)
+
+        self.assertRaises(IndexError, lambda: split[3])
+
+
+class WrappedDatasetTests(unittest.TestCase):
+    def test_without_preprocessors(self):
+        ds = data.WrappedDataset([10, 11, 12], [])
+        self.assertEqual(3, len(ds))
+        self.assertEqual([[10], [11], [12]], list(ds))
+        self.assertEqual([10], ds[0])
+        self.assertEqual([11], ds[1])
+        self.assertEqual([12], ds[2])
+
+        ds = data.WrappedDataset([(1, 1), (2, 4), (3, 9)], [])
+        self.assertEqual(3, len(ds))
+        self.assertEqual([[1, 1], [2, 4], [3, 9]], list(ds))
+
+        ds = data.WrappedDataset([[1, 1], [2, 4], [3, 9]], [])
+        self.assertEqual(3, len(ds))
+        self.assertEqual([[1, 1], [2, 4], [3, 9]], list(ds))
+
+    def test_with_one_preprocessor_and_one_element_examples(self):
+        def square(x): return x**2
+
+        ds = data.WrappedDataset([1, 2, 3], [square])
+        self.assertEqual(3, len(ds))
+        self.assertEqual([[1], [4], [9]], list(ds))
+
+    def test_when_example_size_is_greater_than_number_of_preprocessors(self):
+        def square(x): return x**2
+
+        ds = data.WrappedDataset([(1, 10, 100), (2, 20, 200), (3, 30, 300)], [square])
+        self.assertEqual(3, len(ds))
+        self.assertEqual([[1, 10, 100], [4, 20, 200], [9, 30, 300]], list(ds))
+
+    def test_when_example_size_is_smaller_than_number_of_preprocessor(self):
+        def square(x): return x**2
+        def cube(x): return x**3
+
+        ds = data.WrappedDataset([1, 2, 3], [square, cube])
+        self.assertEqual(3, len(ds))
+        self.assertEqual([[1], [4], [9]], list(ds))
+
+    def test_when_example_size_equals_number_of_preprocessor(self):
+        def square(x): return x**2
+        def cube(x): return x**3
+
+        ds = data.WrappedDataset([(10, 1), (20, 2), (30, 3)], [square, cube])
+        self.assertEqual(3, len(ds))
+        self.assertEqual([[10**2, 1**3], [20**2, 2**3], [30**2, 3**3]], list(ds))
+
+# todo: write tests for get_preprocessors method
