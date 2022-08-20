@@ -81,6 +81,7 @@ class MergedDataset(BaseDataset):
         return sum([len(ds) for ds in self.datasets])
 
     def get_preprocessors(self):
+        # todo: why we take only first dataset preprocessors?
         return self.datasets[0].get_preprocessors()
 
 
