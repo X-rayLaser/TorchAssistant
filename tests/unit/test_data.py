@@ -1,6 +1,7 @@
 import unittest
 from scaffolding import data
 from scaffolding.preprocessors import ValuePreprocessor
+from scaffolding.collators import BatchDivide
 
 
 class MergedDatasetTests(unittest.TestCase):
@@ -410,3 +411,90 @@ class GetPreprocessorsTests(unittest.TestCase):
 
         p1, p2 = preprocessors
         self.assertEqual([(1 + 1, 0), (8 + 1, 1), (27 + 1, 4)], [(p1(x), p2(y)) for x, y in raw_data])
+
+
+class BatchLoaderTests(unittest.TestCase):
+    def test(self):
+        ints1 = [0, 1, 2, 3]
+        squares1 = [0, 1, 4, 9]
+        cubes1 = [0, 1, 8, 27]
+
+        ints2 = [0, -1, -2, -3]
+        squares2 = [0, 1, 4, 9]
+        cubes2 = [0, -1, -8, -27]
+
+        first_batch = [ints1, squares1, cubes1]
+        second_batch = [ints2, squares2, cubes2]
+        batches = [first_batch, second_batch]
+
+        loader = data.BatchLoader(batches, ['x', 'square', 'cube'])
+        self.assertEqual(2, len(loader))
+        it = iter(loader)
+        b1 = next(it)
+        self.assertEqual(dict(x=list(ints1), square=list(squares1), cube=list(cubes1)), b1)
+        b2 = next(it)
+
+        self.assertEqual(dict(x=list(ints2), square=list(squares2), cube=list(cubes2)), b2)
+
+
+class LoaderFactoryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        ints = [0, 1, 2, 3]
+        self.ints = ints
+        raw_data = list(zip(ints, ints))
+        self.raw_data = raw_data
+
+        ds1 = data.WrappedDataset(raw_data, [FunctionalPreprocessor(square),
+                                             FunctionalPreprocessor(cube)])
+        ds2 = data.WrappedDataset(ds1, [FunctionalPreprocessor(increment)])
+
+        self.factory = data.LoaderFactory(ds2, BatchDivide(), batch_size=4, shuffle=False)
+
+    def test_without_transformations(self):
+        factory = data.LoaderFactory(self.raw_data, BatchDivide(), batch_size=4, shuffle=False)
+        loader = factory.build()
+        self.assertEqual(1, len(loader))
+        x, y = next(iter(loader))
+        self.assertEqual(self.ints, x)
+        self.assertEqual(self.ints, y)
+
+        ints = [0, -1, -2, -3]
+        raw_data = list(zip(ints, ints))
+        factory.swap_dataset(raw_data)
+        loader = factory.build()
+        self.assertEqual(1, len(loader))
+        x, y = next(iter(loader))
+        self.assertEqual(ints, x)
+        self.assertEqual(ints, y)
+
+    def test_without_swapping_dataset(self):
+        factory = self.factory
+        loader = factory.build()
+        self.assertEqual(1, len(loader))
+        x, y = next(iter(loader))
+        self.assertEqual(4, len(x))
+        self.assertEqual(4, len(y))
+
+        self.assertEqual(self.expected_x(self.ints), x)
+        self.assertEqual(self.expected_y(self.ints), y)
+
+    def test_swapping_preserves_associated_data_transformations(self):
+        factory = self.factory
+        ints = [0, -1, -2, -3]
+        ds = list(zip(ints, ints))
+        factory.swap_dataset(ds)
+        loader = factory.build()
+
+        self.assertEqual(1, len(loader))
+        x, y = next(iter(loader))
+        self.assertEqual(4, len(x))
+        self.assertEqual(4, len(y))
+
+        self.assertEqual(self.expected_x(ints), x)
+        self.assertEqual(self.expected_y(ints), y)
+
+    def expected_x(self, ints):
+        return [elem**2 + 1 for elem in ints]
+
+    def expected_y(self, ints):
+        return [elem**3 for elem in ints]

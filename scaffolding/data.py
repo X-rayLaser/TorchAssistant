@@ -296,6 +296,9 @@ class LoaderFactory:
         )
 
     def swap_dataset(self, dataset):
-        preprocessors = self.dataset.get_preprocessors()
-        self.dataset = dataset
-        self.dataset.preprocessors = preprocessors
+        if isinstance(self.dataset, BaseDataset):
+            preprocessors = self.dataset.get_preprocessors()
+        else:
+            preprocessors = []
+
+        self.dataset = WrappedDataset(dataset, preprocessors)
