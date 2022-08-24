@@ -1,5 +1,6 @@
 import unittest
 from scaffolding import data
+from scaffolding.preprocessors import ValuePreprocessor
 
 
 class MergedDatasetTests(unittest.TestCase):
@@ -229,6 +230,11 @@ class DataSplitTests(unittest.TestCase):
         self.assertRaises(IndexError, lambda: split[3])
 
 
+def square(x): return x**2
+def cube(x): return x**3
+def increment(x): return x + 1
+
+
 class WrappedDatasetTests(unittest.TestCase):
     def test_without_preprocessors(self):
         ds = data.WrappedDataset([10, 11, 12], [])
@@ -247,33 +253,160 @@ class WrappedDatasetTests(unittest.TestCase):
         self.assertEqual([[1, 1], [2, 4], [3, 9]], list(ds))
 
     def test_with_one_preprocessor_and_one_element_examples(self):
-        def square(x): return x**2
-
         ds = data.WrappedDataset([1, 2, 3], [square])
         self.assertEqual(3, len(ds))
         self.assertEqual([[1], [4], [9]], list(ds))
 
     def test_when_example_size_is_greater_than_number_of_preprocessors(self):
-        def square(x): return x**2
-
         ds = data.WrappedDataset([(1, 10, 100), (2, 20, 200), (3, 30, 300)], [square])
         self.assertEqual(3, len(ds))
         self.assertEqual([[1, 10, 100], [4, 20, 200], [9, 30, 300]], list(ds))
 
     def test_when_example_size_is_smaller_than_number_of_preprocessor(self):
-        def square(x): return x**2
-        def cube(x): return x**3
-
         ds = data.WrappedDataset([1, 2, 3], [square, cube])
         self.assertEqual(3, len(ds))
         self.assertEqual([[1], [4], [9]], list(ds))
 
     def test_when_example_size_equals_number_of_preprocessor(self):
-        def square(x): return x**2
-        def cube(x): return x**3
-
         ds = data.WrappedDataset([(10, 1), (20, 2), (30, 3)], [square, cube])
         self.assertEqual(3, len(ds))
         self.assertEqual([[10**2, 1**3], [20**2, 2**3], [30**2, 3**3]], list(ds))
 
-# todo: write tests for get_preprocessors method
+
+class SimpleDataset(list, data.BaseDataset):
+    def get_preprocessors(self):
+        return []
+
+
+class FunctionalPreprocessor(ValuePreprocessor):
+    def __init__(self, f):
+        self.func = f
+
+    def process(self, x):
+        return self.func(x)
+
+
+class GetPreprocessorsTests(unittest.TestCase):
+    def test_get_preprocessors_from_wrapped_dataset(self):
+        examples = [(1, 10), (2, 20), (3, 30)]
+        ds = data.WrappedDataset(SimpleDataset(examples), [cube, square])
+        self.assertEqual([cube, square], ds.get_preprocessors())
+
+        ds = data.WrappedDataset(examples, [cube, square])
+        self.assertEqual([cube, square], ds.get_preprocessors())
+
+        ds = data.WrappedDataset(examples, [])
+        self.assertEqual([], ds.get_preprocessors())
+
+    def test_get_preprocessors_from_merged_dataset(self):
+        ds1 = data.WrappedDataset(SimpleDataset([(1, 10), (2, 20), (3, 30)]), [cube, square])
+        ds2 = data.WrappedDataset(SimpleDataset([(3, 30), (4, 40)]), [square])
+
+        ds = data.MergedDataset(ds1, ds2)
+        self.assertEqual([cube, square], ds.get_preprocessors())
+
+        ds1 = data.WrappedDataset([(1, 10), (2, 20), (3, 30)], [cube])
+        ds2 = data.WrappedDataset([(3, 30), (4, 40)], [square])
+
+        ds = data.MergedDataset(ds1, ds2)
+        self.assertEqual([cube], ds.get_preprocessors())
+
+        ds = data.MergedDataset()
+        self.assertEqual([], ds.get_preprocessors())
+
+    def test_get_preprocessors_from_dataset_slice(self):
+        ds = data.WrappedDataset(SimpleDataset([(1, 10), (2, 20), (3, 30)]), [cube, square])
+        dataset_slice = data.DatasetSlice(ds, 0, 2)
+        self.assertEqual([cube, square], dataset_slice.get_preprocessors())
+
+        ds = data.WrappedDataset([(1, 10), (2, 20), (3, 30)], [cube])
+        dataset_slice = data.DatasetSlice(ds, 0, 2)
+        self.assertEqual([cube], dataset_slice.get_preprocessors())
+
+        ds = [(1, 10), (2, 20), (3, 30)]
+        dataset_slice = data.DatasetSlice(ds, 0, 2)
+        self.assertEqual([], dataset_slice.get_preprocessors())
+
+    def test_preprocessing_for_dataset_with_many_layers_of_wrappers(self):
+        ds1 = data.WrappedDataset([0, 1, 2], [increment])
+        self.assertEqual([[1], [2], [3]], list(ds1))
+
+        ds2 = data.WrappedDataset(ds1, [cube])
+        self.assertEqual([[1], [8], [27]], list(ds2))
+
+        ds3 = data.WrappedDataset(ds2, [square])
+        self.assertEqual([[1], [8**2], [27**2]], list(ds3))
+
+        ds1 = data.WrappedDataset([0, 1, 2], [cube])
+        self.assertEqual([[0], [1], [8]], list(ds1))
+
+        ds2 = data.WrappedDataset(ds1, [increment])
+        self.assertEqual([[1], [2], [9]], list(ds2))
+
+        ds3 = data.WrappedDataset(ds2, [square])
+        self.assertEqual([[1], [4], [81]], list(ds3))
+
+        ds1 = data.WrappedDataset([(0, 0), (1, 1), (2, 2)], [increment, cube])
+        self.assertEqual([[1, 0], [2, 1], [3, 8]], list(ds1))
+
+        ds2 = data.WrappedDataset(ds1, [cube])
+        self.assertEqual([[1, 0], [8, 1], [27, 8]], list(ds2))
+
+        ds3 = data.WrappedDataset(ds2, [square, square])
+        self.assertEqual([[1, 0], [8**2, 1], [27**2, 8**2]], list(ds3))
+
+    def test_get_preprocessors_from_nested_wrapped_dataset(self):
+        raw_data = [0, 1, 2]
+        p1 = FunctionalPreprocessor(increment)
+        ds1 = data.WrappedDataset(raw_data, [p1])
+        self.assertEqual([p1], ds1.get_preprocessors())
+
+        p2 = FunctionalPreprocessor(cube)
+        ds2 = data.WrappedDataset(ds1, [p2])
+
+        returned_preprocessors = ds2.get_preprocessors()
+        self.assertEqual(1, len(returned_preprocessors))
+        self.assertEqual([1, 8, 27], [returned_preprocessors[0](x) for x in raw_data])
+
+        p3 = FunctionalPreprocessor(square)
+        ds3 = data.WrappedDataset(ds2, [p3])
+
+        returned_preprocessors = ds3.get_preprocessors()
+        self.assertEqual(1, len(returned_preprocessors))
+        self.assertEqual([1, 8**2, 27**2], [returned_preprocessors[0](x) for x in raw_data])
+
+    def test_get_preprocessors_from_nested_wrapped_dataset_with_2_preprocessors_per_example(self):
+        incrementer = FunctionalPreprocessor(increment)
+        take_square = FunctionalPreprocessor(square)
+        take_cube = FunctionalPreprocessor(cube)
+
+        raw_data = [(0, 0), (1, 1), (2, 2)]
+        ds1 = data.WrappedDataset(raw_data, [incrementer, take_cube])
+        preprocessors = ds1.get_preprocessors()
+        p1, p2 = preprocessors
+        self.assertEqual([(1, 0), (2, 1), (3, 8)], [(p1(x), p2(y)) for x, y in raw_data])
+
+        ds2 = data.WrappedDataset(ds1, [take_cube])
+        preprocessors = ds2.get_preprocessors()
+        p1, p2 = preprocessors
+        self.assertEqual([(1, 0), (8, 1), (27, 8)], [(p1(x), p2(y)) for x, y in raw_data])
+
+        ds3 = data.WrappedDataset(ds2, [take_square, take_square])
+        preprocessors = ds3.get_preprocessors()
+        p1, p2 = preprocessors
+        self.assertEqual([(1, 0), (8 ** 2, 1), (27 ** 2, 8 ** 2)], [(p1(x), p2(y)) for x, y in raw_data])
+
+    def test_can_have_different_number_of_preprocessors_on_different_levels(self):
+        incrementer = FunctionalPreprocessor(increment)
+        take_square = FunctionalPreprocessor(square)
+        take_cube = FunctionalPreprocessor(cube)
+
+        raw_data = [(0, 0), (1, 1), (2, 2)]
+        ds1 = data.WrappedDataset(raw_data, [incrementer])
+        ds2 = data.WrappedDataset(ds1, [take_cube, take_square])
+        ds3 = data.WrappedDataset(ds2, [FunctionalPreprocessor(increment)])
+
+        preprocessors = ds3.get_preprocessors()
+
+        p1, p2 = preprocessors
+        self.assertEqual([(1 + 1, 0), (8 + 1, 1), (27 + 1, 4)], [(p1(x), p2(y)) for x, y in raw_data])

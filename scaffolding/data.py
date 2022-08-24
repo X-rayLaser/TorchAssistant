@@ -1,5 +1,6 @@
 import math
 from itertools import zip_longest
+from scaffolding.preprocessors import NullProcessor
 
 import torch
 
@@ -41,11 +42,28 @@ class WrappedDataset(BaseDataset):
     def get_preprocessors(self):
         wrapped_preprocessors = []
 
-        if self.dataset.get_preprocessors() and self.preprocessors:
-            for old_one, new_one in zip(self.dataset.get_preprocessors(), self.preprocessors):
+        if hasattr(self.dataset, 'get_preprocessors'):
+            preprocessors = list(self.dataset.get_preprocessors())
+        else:
+            preprocessors = []
+
+        if preprocessors and self.preprocessors:
+            new_preprocesors = list(self.preprocessors)
+            old_preprocessors = preprocessors
+
+            # fill in missing preprocessors if there are any
+            len_diff = len(old_preprocessors) - len(new_preprocesors)
+            if len_diff > 0:
+                for i in range(abs(len_diff)):
+                    new_preprocesors.append(NullProcessor())
+            elif len_diff < 0:
+                for i in range(abs(len_diff)):
+                    old_preprocessors.append(NullProcessor())
+
+            for old_one, new_one in zip(old_preprocessors, new_preprocesors):
                 wrapped_preprocessors.append(new_one.wrap_preprocessor(old_one))
         else:
-            wrapped_preprocessors = self.dataset.get_preprocessors() or self.preprocessors
+            wrapped_preprocessors = preprocessors or self.preprocessors
         return wrapped_preprocessors
 
 
@@ -59,6 +77,9 @@ class MergedDataset(BaseDataset):
             return self.a <= n < self.b
 
     def __init__(self, *datasets):
+        """
+        All datasets are assumed to have identical shape of examples and preprocessors.
+        """
         self.datasets = datasets
         sizes = [len(ds) for ds in self.datasets]
 
@@ -81,8 +102,9 @@ class MergedDataset(BaseDataset):
         return sum([len(ds) for ds in self.datasets])
 
     def get_preprocessors(self):
-        # todo: why we take only first dataset preprocessors?
-        return self.datasets[0].get_preprocessors()
+        # since all datasets are assumed to have the same preprocessors,
+        # we can return preprocessors from any of them
+        return self.datasets[0].get_preprocessors() if self.datasets else []
 
 
 class MultiSplitter:
@@ -129,14 +151,17 @@ class MultiSplitter:
 
         return DataSplit(slices)
 
-    def shuffled_dataset(self, ds, shuffled_indices):
-        class ShuffledDataset:
+    def shuffled_dataset(self, ds: BaseDataset, shuffled_indices):
+        class ShuffledDataset(BaseDataset):
             def __getitem__(self, idx):
                 new_index = shuffled_indices[idx]
                 return ds[new_index]
 
             def __len__(self):
                 return len(ds)
+
+            def get_preprocessors(self):
+                return ds.get_preprocessors()
 
         return ShuffledDataset()
 
@@ -175,7 +200,7 @@ class DatasetSlice(BaseDataset):
         """Create a dataset slice
 
         :param ds: original dataset
-        :type ds: Sequence
+        :type ds: BaseDataset or Sequence
         :param index_from: start index of the slice (included in a slice)
         :param index_to: last index of the slice (excluded from a slice)
         """
@@ -208,8 +233,7 @@ class DatasetSlice(BaseDataset):
         return self.index_to - self.index_from
 
     def get_preprocessors(self):
-        # todo: consider to delegate to self.ds.get_preprocessors
-        return []
+        return self.ds.get_preprocessors() if hasattr(self.ds, 'get_preprocessors') else []
 
 
 class BatchLoader:
