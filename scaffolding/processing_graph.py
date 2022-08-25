@@ -123,19 +123,21 @@ class BatchProcessingGraph:
     def leaves(self):
         return [name for name in self.nodes if name not in self.outgoing_edges]
 
-    def __call__(self, batches: dict) -> dict:
+    def __call__(self, data_frames: dict) -> dict:
         """Propagate given number of batches through the graph and compute results.
 
-        :param batches: mapping from batch name to their value which is itself a mapping variable name -> tensor
-        :return: outputs of leaf nodes as a name -> batch mapping
+        :param data_frames: a mapping from name to data_frame object
+        :return: outputs of leaf nodes as a data_frame_dict
         """
         self.invalidate_cache()
-        return {leaf: self.backtrace(leaf, batches) for leaf in self.leaves}
+        return {leaf: self.backtrace(leaf, data_frames) for leaf in self.leaves}
 
     def invalidate_cache(self):
         self.cache = {}
 
     def backtrace(self, name, batches):
+        # todo: replace batches with data_frames
+        # todo: more renaming of similar nature in other modules
         if name in self.batch_input_names:
             return batches[name]
 

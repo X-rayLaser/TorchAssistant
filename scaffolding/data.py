@@ -235,8 +235,8 @@ class DataBlueprint:
     def __init__(self, input_loaders):
         self.input_loaders = input_loaders
 
-        batch_names = [input_loader.input_alias for input_loader in self.input_loaders]
-        self.batch_names = batch_names
+        frame_names = [input_loader.input_alias for input_loader in self.input_loaders]
+        self.frame_names = frame_names
         self.batch_loaders = self.refresh_batch_loaders(self.input_loaders)
 
     def override_datasets(self, new_datasets: dict):
@@ -260,9 +260,8 @@ class DataBlueprint:
 
     def __iter__(self):
         iterators = [iter(loader) for loader in self.batch_loaders]
-        for i, batches in enumerate(zip(*iterators)):
-            named_batches = dict(zip(self.batch_names, batches))
-            yield named_batches
+        for i, frames in enumerate(zip(*iterators)):
+            yield data_frame_dict(self.frame_names, frames)
 
 
 class BatchLoader:
@@ -277,7 +276,7 @@ class BatchLoader:
 
     def __iter__(self):
         for batch in self.data_loader:
-            yield dict(zip(self.var_names, batch))
+            yield data_frame(self.var_names, batch)
 
     def __len__(self):
         return len(self.data_loader)
@@ -302,3 +301,13 @@ class LoaderFactory:
             preprocessors = []
 
         self.dataset = WrappedDataset(dataset, preprocessors)
+
+
+def data_frame(names, columns):
+    """Create a simple data frame, "name" -> "column" mapping"""
+    return dict(zip(names, columns))
+
+
+def data_frame_dict(names, data_frames):
+    """Create a simple dictionary that associates data frame with names"""
+    return data_frame(names, data_frames)
