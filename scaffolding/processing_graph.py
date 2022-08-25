@@ -166,15 +166,43 @@ class Node:
         self.inputs = inputs
         self.outputs = outputs
 
-    def get_dependencies(self, batch_inputs, prev_outputs):
+    def get_dependencies(self, batch_inputs: dict, prev_outputs: dict):
+        """Retrieve quantities needed to process inputs."""
+        # todo: pick a better name for arguments
         # todo: double check this line
-        lookup_table = batch_inputs.get(self.name, {}).copy()
+        d = batch_inputs.get(self.name, {})
+        if not isinstance(d, dict):
+            fmt = """
+            {
+                "model_name1": {
+                    "var_name1": "value1",
+                    "var_name2": "value2",
+                    ...
+                },
+                "model_name2": {
+                    "var_name1": "value1",
+                    "var_name1": "value1",
+                    ...
+                }
+                ...
+            }
+            """
+            raise InvalidFormatOfInputsError(
+                f'"batch_inputs" should be a nested dict of shape: {fmt}\nGot {batch_inputs}'
+            )
+        lookup_table = d.copy()
         lookup_table.update(prev_outputs)
-        return [lookup_table[var_name] for var_name in self.inputs]
+        try:
+            return [lookup_table[var_name] for var_name in self.inputs]
+        except KeyError as e:
+            name = e.args[0]
+            raise DependencyNotFoundError(
+                f'Node dependency is missing: "{name}". All node dependencies: {self.inputs}.'
+            )
 
     def predict(self, *args, inference_mode=False):
         # todo: consider to change args device here (need to store device as attribute)
-        if inference_mode:
+        if inference_mode and hasattr(self.net, 'run_inference'):
             return self.net.run_inference(*args)
         else:
             return self.net(*args)
@@ -182,3 +210,11 @@ class Node:
     def __call__(self, batch_inputs, prev_outputs, inference_mode=False):
         args = self.get_dependencies(batch_inputs, prev_outputs)
         return self.predict(*args, inference_mode=inference_mode)
+
+
+class DependencyNotFoundError(Exception):
+    pass
+
+
+class InvalidFormatOfInputsError(Exception):
+    pass
