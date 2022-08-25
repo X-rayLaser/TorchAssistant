@@ -26,45 +26,38 @@ class WrappedDataset(BaseDataset):
         if not (isinstance(example, list) or isinstance(example, tuple)):
             example = [example]
 
-        # todo: top if statement seems to be redundant
-        if isinstance(example, list) or isinstance(example, tuple):
-            if len(example) > len(self.preprocessors):
-                # when number of inputs > number of preprocessors, leave redundant ones as is
-                pairs = zip_longest(example, self.preprocessors)
-                return [p(v) if p else v for v, p in pairs]
-            else:
-                # when number of inputs <= number of preprocessors, ignore redundant preprocessors
-                return [preprocessor(v) for v, preprocessor in zip(example, self.preprocessors)]
+        if len(example) > len(self.preprocessors):
+            # when number of inputs > number of preprocessors, leave redundant ones as is
+            pairs = zip_longest(example, self.preprocessors)
+            return [p(v) if p else v for v, p in pairs]
+        else:
+            # when number of inputs <= number of preprocessors, ignore redundant preprocessors
+            return [preprocessor(v) for v, preprocessor in zip(example, self.preprocessors)]
 
     def __len__(self):
         return len(self.dataset)
 
     def get_preprocessors(self):
-        wrapped_preprocessors = []
+        dataset = self.dataset
+        old_ones = dataset.get_preprocessors() if isinstance(dataset, BaseDataset) else []
+        old_ones = list(old_ones)
+        new_ones = list(self.preprocessors)
 
-        if hasattr(self.dataset, 'get_preprocessors'):
-            preprocessors = list(self.dataset.get_preprocessors())
+        if old_ones and new_ones:
+            self.pad_smaller_list(old_ones, new_ones)
+            res = [new_p.wrap_preprocessor(old_p) for old_p, new_p in zip(old_ones, new_ones)]
         else:
-            preprocessors = []
+            res = old_ones or new_ones
+        return res
 
-        if preprocessors and self.preprocessors:
-            new_preprocesors = list(self.preprocessors)
-            old_preprocessors = preprocessors
+    def pad_smaller_list(self, old_preprocessors: list, new_preprocessors: list):
+        """Make both lists have equal length by padding a smaller one with instances of NullProcessor class."""
 
-            # fill in missing preprocessors if there are any
-            len_diff = len(old_preprocessors) - len(new_preprocesors)
-            if len_diff > 0:
-                for i in range(abs(len_diff)):
-                    new_preprocesors.append(NullProcessor())
-            elif len_diff < 0:
-                for i in range(abs(len_diff)):
-                    old_preprocessors.append(NullProcessor())
+        len_diff = len(old_preprocessors) - len(new_preprocessors)
+        smaller_list = new_preprocessors if len_diff >= 0 else old_preprocessors
 
-            for old_one, new_one in zip(old_preprocessors, new_preprocesors):
-                wrapped_preprocessors.append(new_one.wrap_preprocessor(old_one))
-        else:
-            wrapped_preprocessors = preprocessors or self.preprocessors
-        return wrapped_preprocessors
+        for i in range(abs(len_diff)):
+            smaller_list.append(NullProcessor())
 
 
 class MergedDataset(BaseDataset):
@@ -135,7 +128,8 @@ class MultiSplitter:
         ds_size = len(dataset)
         if shuffled_size != ds_size:
             raise BadSplitError(
-                f'Shuffled_indices size mismatch: {shuffled_size} for a dataset of size {ds_size}')
+                f'Shuffled_indices size mismatch: {shuffled_size} for a dataset of size {ds_size}'
+            )
 
         dataset = self.shuffled_dataset(dataset, shuffled_indices)
 
@@ -233,20 +227,7 @@ class DatasetSlice(BaseDataset):
         return self.index_to - self.index_from
 
     def get_preprocessors(self):
-        return self.ds.get_preprocessors() if hasattr(self.ds, 'get_preprocessors') else []
-
-
-class BatchLoader:
-    def __init__(self, data_loader, var_names):
-        self.data_loader = data_loader
-        self.var_names = var_names
-
-    def __iter__(self):
-        for batch in self.data_loader:
-            yield dict(zip(self.var_names, batch))
-
-    def __len__(self):
-        return len(self.data_loader)
+        return self.ds.get_preprocessors() if isinstance(self.ds, BaseDataset) else []
 
 
 # todo: consider renaming it (e.g. DataFactory, BatchFactory, TrainingBatchGenerator)
@@ -284,7 +265,26 @@ class DataBlueprint:
             yield named_batches
 
 
+class BatchLoader:
+    """An iterable of named batches.
+
+    It is a wrapper around a torch DataLoader class.
+    An item is yielded as a dictionary with "name" -> "batch" mapping.
+    """
+    def __init__(self, data_loader, var_names):
+        self.data_loader = data_loader
+        self.var_names = var_names
+
+    def __iter__(self):
+        for batch in self.data_loader:
+            yield dict(zip(self.var_names, batch))
+
+    def __len__(self):
+        return len(self.data_loader)
+
+
 class LoaderFactory:
+    """Factory producing instances of torch.utils.data.DataLoader."""
     def __init__(self, dataset, collator, **kwargs):
         self.dataset = dataset
         self.collator = collator
