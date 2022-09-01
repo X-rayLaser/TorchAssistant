@@ -217,3 +217,7 @@ class Trainer:
             losses[node_name] = loss
 
         return losses, results
+
+
+# todo: consider to redesign this whole module using simple notification system
+# todo: extend this approach to processing_graph module

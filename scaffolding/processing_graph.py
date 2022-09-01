@@ -42,8 +42,20 @@ class NeuralBatchProcessor(BatchProcessor):
         self.device = device
         self.inference_mode = inference_mode
 
-    def __call__(self, batch):
-        inputs = self.input_adapter(batch)
+    def __call__(self, batch: dict):
+        """
+
+        :param batch: named batches to process
+        :type batch: data_frame
+        :return: results of processing
+        :rtype: data_frame
+        """
+        # todo: rename batch to data_frame
+        try:
+            inputs = self.input_adapter(batch)
+        except Exception as e:
+            raise InputAdapterError(repr(e))
+
         self.change_model_device()
 
         self.inputs_to(inputs)
@@ -57,7 +69,11 @@ class NeuralBatchProcessor(BatchProcessor):
 
         result_dict = dict(batch)
         result_dict.update(all_outputs)
-        res = self.output_adapter(result_dict)
+        try:
+            res = self.output_adapter(result_dict)
+        except Exception as e:
+            raise OutputAdapterError(repr(e))
+
         return res
 
     def change_model_device(self):
@@ -87,6 +103,14 @@ class NeuralBatchProcessor(BatchProcessor):
     def eval_mode(self):
         for node in self.neural_nodes:
             node.net.eval()
+
+
+class InputAdapterError(Exception):
+    pass
+
+
+class OutputAdapterError(Exception):
+    pass
 
 
 class BatchProcessingGraph:
