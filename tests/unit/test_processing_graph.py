@@ -270,10 +270,88 @@ class NeuralBatchProcessor(unittest.TestCase):
         res = processor(dict(x=inputs))
         expected = torch.tensor([[1], [-2], [-5], [19]], dtype=torch.float32)
 
-        self.assertTrue(torch.allclose(expected, res["y_hat"], rtol=1))
+        self.assertTrue(torch.allclose(expected, res["y_hat"], rtol=3))
 
     def test_input_device_change(self):
         # todo: find a way to test this without having access to nvidia graphic card
         pass
 
-# todo: refactor tests
+
+class DetachBatchTests(unittest.TestCase):
+    def test(self):
+        detach = processing_graph.DetachBatch()
+
+        data_frame = {
+            'x': torch.tensor([1, 2, 3, 4], dtype=torch.float32, requires_grad=True),
+            'y': torch.tensor([1, 1, 1, 1], dtype=torch.float32, requires_grad=False)
+        }
+        data_frame = detach(data_frame)
+
+        self.assertFalse(data_frame['x'].requires_grad)
+        self.assertFalse(data_frame['y'].requires_grad)
+
+
+class BatchMergerTests(unittest.TestCase):
+    def test_merge_empty_data_frames(self):
+        merger = processing_graph.BatchMerger()
+        self.assertEqual({}, merger([]))
+
+        self.assertEqual({}, merger([{}]))
+        self.assertEqual({}, merger([{}, {}]))
+        self.assertEqual({}, merger([{}, {}, {}, {}, {}, {}]))
+
+    def test_merge_with_empty_data_frame(self):
+        merger = processing_graph.BatchMerger()
+        df = {'a': torch.tensor([1, 2, 3])}
+        self.assertRaises(processing_graph.MergeError, merger, [df, {}])
+        self.assertRaises(processing_graph.MergeError, merger, [df, df, {}, df])
+        self.assertRaises(processing_graph.MergeError, merger, [{}, df, df, {}])
+
+    def test_merge_with_itself(self):
+        merger = processing_graph.BatchMerger()
+        df = {
+            'a': torch.tensor([[1, 10], [2, 20], [3, 30]]),
+            'b': torch.tensor([5, 6])
+        }
+        expected = {
+            'a': torch.tensor([[1, 10], [2, 20], [3, 30], [1, 10], [2, 20], [3, 30]]),
+            'b': torch.tensor([5, 6, 5, 6])
+        }
+        res = merger([df, df])
+        self.assertEqual({'a', 'b'}, set(res.keys()))
+        self.assertTrue(torch.allclose(expected['a'], res['a']))
+        self.assertTrue(torch.allclose(expected['b'], res['b']))
+
+    def test_merge_3_data_frames(self):
+        merger = processing_graph.BatchMerger()
+        df1 = {
+            'a': torch.tensor([[1, 10], [2, 20], [3, 30]], dtype=torch.float32),
+            'b': torch.tensor([5, 6], dtype=torch.float32)
+        }
+        df2 = {
+            'a': torch.tensor([[4, 40], [5, 50]], dtype=torch.float32),
+            'b': torch.tensor([7, 8, 9, 10], dtype=torch.float32)
+        }
+
+        df3 = {
+            'a': torch.tensor([[6, 60]], dtype=torch.float32),
+            'b': torch.tensor([], dtype=torch.float32)
+        }
+
+        res = merger([df1, df2, df3])
+        expected = {
+            'a': torch.tensor([[1, 10], [2, 20], [3, 30], [4, 40], [5, 50], [6, 60]], dtype=torch.float32),
+            'b': torch.tensor([5, 6, 7, 8, 9, 10], dtype=torch.float32)
+        }
+        self.assertEqual({'a', 'b'}, set(res.keys()))
+        self.assertTrue(torch.allclose(expected['a'], res['a']))
+        self.assertTrue(torch.allclose(expected['b'], res['b']))
+
+        res = merger([df3, df2, df1])
+        expected = {
+            'a': torch.tensor([[6, 60], [4, 40], [5, 50], [1, 10], [2, 20], [3, 30]], dtype=torch.float32),
+            'b': torch.tensor([7, 8, 9, 10, 5, 6], dtype=torch.float32)
+        }
+
+        self.assertTrue(torch.allclose(expected['a'], res['a']))
+        self.assertTrue(torch.allclose(expected['b'], res['b']))

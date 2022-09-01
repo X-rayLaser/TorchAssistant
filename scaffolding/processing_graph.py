@@ -24,14 +24,31 @@ class DetachBatch(BatchProcessor):
 
 
 class BatchMerger:
-    def __call__(self, batches: list):
-        any_batch = batches[0]
+    def __call__(self, data_frames: list):
+        """Concatenates a list of data frames.
+
+        :param data_frames: a list of data frames
+        :return: a data frame containing the same column name, with columns concatenated along batch axis
+        """
+
+        if not data_frames:
+            return {}
+
+        a_frame = max(data_frames, key=len)
         result = {}
-        for k in any_batch.keys():
-            tensors = [batch[k].to(torch.device("cpu")) for batch in batches]
-            concatenation = torch.cat(tensors)
-            result[k] = concatenation
+        try:
+            for k in a_frame.keys():
+                tensors = [data_frame[k].to(torch.device("cpu")) for data_frame in data_frames]
+                concatenation = torch.cat(tensors)
+                result[k] = concatenation
+        except KeyError as e:
+            raise MergeError(f'Expects all data frames contain the same set of column names. '
+                             f'Missing name in one of data frames: {e}')
         return result
+
+
+class MergeError(Exception):
+    pass
 
 
 class NeuralBatchProcessor(BatchProcessor):
