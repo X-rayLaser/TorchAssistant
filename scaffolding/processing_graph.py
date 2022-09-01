@@ -8,8 +8,8 @@ class BatchProcessor:
     def update(self):
         pass
 
-    def __call__(self, batch):
-        return batch
+    def __call__(self, data_frame):
+        return data_frame
 
     def train_mode(self):
         pass
@@ -19,8 +19,8 @@ class BatchProcessor:
 
 
 class DetachBatch(BatchProcessor):
-    def __call__(self, batch):
-        return {name: tensor.detach() for name, tensor in batch.items()}
+    def __call__(self, data_frame):
+        return {name: tensor.detach() for name, tensor in data_frame.items()}
 
 
 class BatchMerger:
@@ -59,17 +59,17 @@ class NeuralBatchProcessor(BatchProcessor):
         self.device = device
         self.inference_mode = inference_mode
 
-    def __call__(self, batch: dict):
+    def __call__(self, data_frame: dict):
         """
 
-        :param batch: named batches to process
-        :type batch: data_frame
+        :param data_frame: named batches to process
+        :type data_frame: data_frame
         :return: results of processing
         :rtype: data_frame
         """
         # todo: rename batch to data_frame
         try:
-            inputs = self.input_adapter(batch)
+            inputs = self.input_adapter(data_frame)
         except Exception as e:
             raise InputAdapterError(repr(e))
 
@@ -84,7 +84,7 @@ class NeuralBatchProcessor(BatchProcessor):
                 dict(zip(node.outputs, outputs))
             )
 
-        result_dict = dict(batch)
+        result_dict = dict(data_frame)
         result_dict.update(all_outputs)
         try:
             res = self.output_adapter(result_dict)
@@ -98,10 +98,10 @@ class NeuralBatchProcessor(BatchProcessor):
             model.net.to(self.device)
 
     def inputs_to(self, inputs):
-        for k, mapping in inputs.items():
-            for tensor_name, value in mapping.items():
+        for k, data_frame in inputs.items():
+            for tensor_name, value in data_frame.items():
                 if hasattr(value, 'device') and value.device != self.device:
-                    mapping[tensor_name] = value.to(self.device)
+                    data_frame[tensor_name] = value.to(self.device)
 
     def prepare(self):
         for model in self.neural_nodes:
@@ -211,8 +211,8 @@ class Node:
         """Retrieve quantities needed to process inputs."""
         # todo: pick a better name for arguments
         # todo: double check this line
-        d = batch_inputs.get(self.name, {})
-        if not isinstance(d, dict):
+        data_frame = batch_inputs.get(self.name, {})
+        if not isinstance(data_frame, dict):
             fmt = """
             {
                 "model_name1": {
@@ -231,7 +231,7 @@ class Node:
             raise InvalidFormatOfInputsError(
                 f'"batch_inputs" should be a nested dict of shape: {fmt}\nGot {batch_inputs}'
             )
-        lookup_table = d.copy()
+        lookup_table = data_frame.copy()
         lookup_table.update(prev_outputs)
         try:
             return [lookup_table[var_name] for var_name in self.inputs]
