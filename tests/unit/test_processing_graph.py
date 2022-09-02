@@ -355,3 +355,81 @@ class BatchMergerTests(unittest.TestCase):
 
         self.assertTrue(torch.allclose(expected['a'], res['a']))
         self.assertTrue(torch.allclose(expected['b'], res['b']))
+
+
+def square_input(data_frame):
+    df = data_frame.copy()
+    df["x"] = data_frame["x"] ** 2
+    return df
+
+
+def add_1(data_frame):
+    df = data_frame.copy()
+    df["x"] = data_frame["x"] + 1
+    return df
+
+
+class ProcessingGraphTests(unittest.TestCase):
+    def test_computing_on_empty_graph(self):
+        graph = processing_graph.BatchProcessingGraph([])
+        res = graph({'x': 32, 'y': 0})
+        self.assertEqual({}, res)
+
+        graph = processing_graph.BatchProcessingGraph(["x1", "x2"])
+        self.assertEqual({}, graph({'a': 1, 'b': 2, 'x': 32, 'y': 0}))
+
+    def test_cannot_have_name_collision_between_input_nodes_and_graph_nodes(self):
+        self.assertRaises(processing_graph.InvalidGraphError, processing_graph.BatchProcessingGraph,
+                          ["x", "x", "y"], a=lambda d: d, x=lambda d: d)
+
+    def test_cannot_make_edges_between_input_nodes_and_missing_nodes(self):
+        graph = processing_graph.BatchProcessingGraph(["x1", "x2"], a=lambda d: d)
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, 'foo', 'bar')
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, 'a', 'bar')
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, 'bar', 'a')
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, 'bar', 'x1')
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, 'x1', 'x2')
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, 'x1', 'x1')
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, 'x2', 'x2')
+
+    def test_input_nodes_cannot_have_ingoing_edges(self):
+        graph = processing_graph.BatchProcessingGraph(["x1", "x2"], x_squared=square_input)
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, "x_squared", "x1")
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, "x_squared", "x2")
+
+    def test_cannot_run_computation_on_disconnected_graph(self):
+        graph = processing_graph.BatchProcessingGraph(["x1", "x2"], x_squared=square_input)
+
+        frames = dict(input1={"x": torch.tensor([2, 3])})
+        self.assertRaises(processing_graph.DisconnectedGraphError, graph, frames)
+
+    def test_graph_cannot_have_cycles(self):
+        graph = processing_graph.BatchProcessingGraph(
+            ["inp"], a=square_input, b=add_1, c=lambda x: x
+        )
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, "a", "a")
+
+        graph.make_edge("a", "b")
+        graph.make_edge("b", "a")
+
+    def test_feeding_simplest_graph(self):
+        graph = processing_graph.BatchProcessingGraph(["input1"], output=square_input)
+        graph.make_edge("input1", "output")
+        frames = dict(input1={"x": torch.tensor([2, 3])})
+
+        res = graph(frames)
+        self.assertEqual({'output'}, set(res.keys()))
+        self.assertEqual({'x'}, set(res['output'].keys()))
+        self.assertTrue(torch.allclose(torch.tensor([4, 9]), res['output']['x']))
+
+    def test_feeding_a_sequential_graph(self):
+        graph = processing_graph.BatchProcessingGraph(["input1"], x_squared=square_input, output=add_1)
+
+        graph.make_edge("input1", "x_squared")
+        graph.make_edge("x_squared", "output")
+
+        frames = dict(input1={"x": torch.tensor([2, 3])})
+        res = graph(frames)
+        self.assertEqual({'output'}, set(res.keys()))
+        self.assertEqual({'x'}, set(res['output'].keys()))
+        self.assertTrue(torch.allclose(torch.tensor([5, 10]), res['output']['x']))

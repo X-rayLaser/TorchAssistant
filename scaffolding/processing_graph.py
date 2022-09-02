@@ -134,11 +134,27 @@ class BatchProcessingGraph:
     # todo: checking arguments, raising exceptions
 
     def __init__(self, batch_input_names, **nodes):
+        """
+
+        :param batch_input_names:
+        :type batch_input_names:
+        :param nodes:
+        :type nodes:
+        """
         self.batch_input_names = set(batch_input_names)
         self.nodes = nodes
         self.ingoing_edges = {}
         self.outgoing_edges = {}
         self.cache = {}
+
+        self._check_names_collision(self.batch_input_names, nodes.keys())
+
+    def _check_names_collision(self, input_names, node_names):
+        node_names = set(node_names)
+        if node_names.intersection(input_names):
+            raise InvalidGraphError(
+                f'name collision between input nodes {input_names} and graph nodes {node_names}.'
+            )
 
     def train_mode(self):
         for node in self.nodes.values():
@@ -157,8 +173,35 @@ class BatchProcessingGraph:
             node.update()
 
     def make_edge(self, source: str, dest: str):
+        self._validate_edge(source, dest)
         self.ingoing_edges.setdefault(dest, []).append(source)
         self.outgoing_edges.setdefault(source, []).append(dest)
+
+    def _validate_edge(self, source, dest):
+        both_input_nodes = source in self.batch_input_names and dest in self.batch_input_names
+        all_names = self.batch_input_names.union(set(self.nodes.keys()))
+        missing_nodes = {source, dest} - all_names
+
+        if both_input_nodes:
+            raise InvalidEdgeError(
+                f'cannot make an edge between input nodes: "{source}"->"{dest}"'
+            )
+
+        if dest in self.batch_input_names:
+            raise InvalidEdgeError(
+                f'cannot make an edge "{source}"->"{dest}". '
+                f'Input node "{dest}" is not allowed have ingoing edges'
+            )
+
+        if missing_nodes:
+            raise InvalidEdgeError(
+                f'cannot make an edge "{source}"->"{dest}". Nodes not found in a graph: {missing_nodes}'
+            )
+
+        if source == dest:
+            raise InvalidEdgeError(
+                f'cannot make an edge "{source}"->"{dest}". Self-loops are not allowed'
+            )
 
     @property
     def leaves(self):
@@ -186,6 +229,10 @@ class BatchProcessingGraph:
             return self.cache[name]
 
         node = self.nodes[name]
+
+        if name not in self.ingoing_edges:
+            raise DisconnectedGraphError(f'There are no edges pointing to the node "{name}".')
+
         ingoing_names = self.ingoing_edges[name]
         ingoing_batches = [self.backtrace(ingoing, batches) for ingoing in ingoing_names]
 
@@ -197,6 +244,52 @@ class BatchProcessingGraph:
         result = node(merged_batch)
         self.cache[name] = result
         return result
+
+
+class DiGraph:
+    def __init__(self, vertices, ingoing_edges, outgoing_edges):
+        """Simple representation of directed graph
+
+        :param vertices: vertices or nodes comprising this graph
+        :param ingoing_edges: a dictionary that maps a vertex to all vertices pointing to it
+        :param outgoing_edges: a dictionary that maps a vertex to all vertices pointed by it
+        """
+        self.vertices = vertices
+        self.ingoing_edges = ingoing_edges
+        self.outgoing_edges = outgoing_edges
+
+    def detect_cycles(self):
+        it = self.strong_components()
+        cycles = []
+        for component in it:
+            if len(component) > 1:
+                cycles.append(component)
+        return cycles
+
+    def is_acyclic(self):
+        return not bool(self.detect_cycles())
+
+    def strong_components(self):
+        """Computes strongly connected components in a directed graph.
+
+        Implementation of Kosaraju's algorithm.
+
+        :return: a sequence of strongly connected components
+        :rtype: a sequence of sets
+        """
+        pass
+
+
+class InvalidGraphError(Exception):
+    pass
+
+
+class InvalidEdgeError(Exception):
+    pass
+
+
+class DisconnectedGraphError(Exception):
+    pass
 
 
 class Node:
