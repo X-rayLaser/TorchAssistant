@@ -203,6 +203,23 @@ class BatchProcessingGraph:
                 f'cannot make an edge "{source}"->"{dest}". Self-loops are not allowed'
             )
 
+        self._check_cycles(source, dest)
+
+    def _check_cycles(self, source, dest):
+        vertices = set(self.nodes.keys()).union(self.batch_input_names)
+        digraph = DiGraph(list(vertices))
+        for u in self.outgoing_edges:
+            for v in self.outgoing_edges[u]:
+                digraph.make_edge(u, v)
+
+        digraph.make_edge(source, dest)
+        cycles = digraph.detect_cycles()
+
+        if cycles:
+            raise InvalidEdgeError(
+                f'cannot make an edge "{source}"->"{dest}". Cycles are not allowed: {cycles}'
+            )
+
     @property
     def leaves(self):
         return [name for name in self.nodes if name not in self.outgoing_edges]

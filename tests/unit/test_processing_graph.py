@@ -410,7 +410,8 @@ class ProcessingGraphTests(unittest.TestCase):
         self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, "a", "a")
 
         graph.make_edge("a", "b")
-        graph.make_edge("b", "a")
+
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, "b", "a")
 
     def test_feeding_simplest_graph(self):
         graph = processing_graph.BatchProcessingGraph(["input1"], output=square_input)
@@ -433,6 +434,8 @@ class ProcessingGraphTests(unittest.TestCase):
         self.assertEqual({'output'}, set(res.keys()))
         self.assertEqual({'x'}, set(res['output'].keys()))
         self.assertTrue(torch.allclose(torch.tensor([5, 10]), res['output']['x']))
+
+        # todo: more complex computation graph
 
 
 class DiGraphTests(unittest.TestCase):
