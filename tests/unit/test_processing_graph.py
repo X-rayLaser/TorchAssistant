@@ -433,3 +433,90 @@ class ProcessingGraphTests(unittest.TestCase):
         self.assertEqual({'output'}, set(res.keys()))
         self.assertEqual({'x'}, set(res['output'].keys()))
         self.assertTrue(torch.allclose(torch.tensor([5, 10]), res['output']['x']))
+
+
+class DiGraphTests(unittest.TestCase):
+    def test_cannot_have_duplicate_vertices(self):
+        self.assertRaises(processing_graph.InvalidGraphError,
+                          processing_graph.DiGraph, [1, 4, 2, 1])
+
+        self.assertRaises(processing_graph.InvalidGraphError,
+                          processing_graph.DiGraph, [1, 2, 2, 2])
+
+        self.assertRaises(processing_graph.InvalidGraphError,
+                          processing_graph.DiGraph, [3, 3])
+
+    def test_cannot_create_self_loops(self):
+        digraph = processing_graph.DiGraph([1, 4])
+        self.assertRaises(processing_graph.InvalidEdgeError, digraph.make_edge, 4, 4)
+        self.assertRaises(processing_graph.InvalidEdgeError, digraph.make_edge, 1, 1)
+
+        self.assertRaises(processing_graph.InvalidEdgeError,
+                          processing_graph.DiGraph, [1, 4], [(1, 1)])
+
+    def test_cannot_create_edge_when_vertex_missing(self):
+        digraph = processing_graph.DiGraph([1, 4, 3])
+
+        self.assertRaises(processing_graph.InvalidEdgeError, digraph.make_edge, 10, 41)
+        self.assertRaises(processing_graph.InvalidEdgeError, digraph.make_edge, 1, 41)
+        self.assertRaises(processing_graph.InvalidEdgeError, digraph.make_edge, 41, 1)
+
+        self.assertRaises(processing_graph.InvalidEdgeError,
+                          processing_graph.DiGraph, [1, 4, 3], [(41, 1)])
+
+    def test_cannot_have_duplicate_edge(self):
+        digraph = processing_graph.DiGraph([1, 4], [(1, 4), (4, 1)])
+
+        self.assertRaises(processing_graph.InvalidEdgeError, digraph.make_edge, 1, 4)
+        self.assertRaises(processing_graph.InvalidEdgeError, digraph.make_edge, 4, 1)
+
+    def test_graph_without_edges(self):
+        digraph = processing_graph.DiGraph([10])
+        self.assertEqual({10: {10}}, digraph.strong_components())
+
+        digraph = processing_graph.DiGraph([10, 20])
+        self.assertEqual({10: {10}, 20: {20}}, digraph.strong_components())
+        self.assertEqual([], digraph.detect_cycles())
+
+        digraph = processing_graph.DiGraph([3, 1, 2])
+        self.assertEqual({1: {1}, 2: {2}, 3: {3}}, digraph.strong_components())
+        self.assertEqual([], digraph.detect_cycles())
+
+    def test_graph_with_bi_directional_link(self):
+        digraph = processing_graph.DiGraph([1, 2], [(1, 2), (2, 1)])
+        components = digraph.strong_components()
+        self.assertEqual({1: {1, 2}}, components)
+        self.assertEqual([{1, 2}], digraph.detect_cycles())
+
+        digraph = processing_graph.DiGraph([1, 2, 3], [(1, 2), (2, 1)])
+        components = digraph.strong_components()
+        self.assertEqual({1: {1, 2}, 3: {3}}, components)
+        self.assertEqual([{1, 2}], digraph.detect_cycles())
+
+    def test_two_strongly_connected_pairs(self):
+        digraph = processing_graph.DiGraph([1, 2, 3, 4], [(1, 2), (2, 1), (3, 4), (4, 3), (2, 3)])
+        components = digraph.strong_components()
+        self.assertEqual({1: {1, 2}, 3: {3, 4}}, components)
+        self.assertEqual([{3, 4}, {1, 2}], digraph.detect_cycles())
+
+        digraph = processing_graph.DiGraph(
+            [1, 2, 3, 4], [(1, 2), (2, 1), (3, 4), (4, 3), (2, 3), (1, 4)]
+        )
+        components = digraph.strong_components()
+        self.assertEqual({1: {1, 2}, 3: {3, 4}}, components)
+        self.assertEqual([{3, 4}, {1, 2}], digraph.detect_cycles())
+
+    def test_two_strongly_connected_triangles(self):
+        vertices = [1, 2, 3, 4, 5, 6]
+        edges = [(1, 2), (2, 3), (3, 1), (4, 5), (5, 6), (6, 4), (4, 2)]
+        digraph = processing_graph.DiGraph(vertices, edges)
+        self.assertEqual({1: {1, 2, 3}, 4: {4, 5, 6}}, digraph.strong_components())
+        self.assertEqual([{1, 2, 3}, {4, 5, 6}], digraph.detect_cycles())
+
+    def test_two_strongly_connected_triangles_and_2_isolated_vertices(self):
+        vertices = [1, 2, 3, 4, 5, 6, 7, 8]
+        edges = [(1, 5), (5, 6), (6, 1), (1, 6), (1, 8), (6, 4), (4, 2), (2, 3), (3, 4), (7, 2)]
+
+        digraph = processing_graph.DiGraph(vertices, edges)
+        self.assertEqual({1: {1, 5, 6}, 2: {2, 3, 4}, 7: {7}, 8: {8}}, digraph.strong_components())
+        self.assertEqual([{2, 3, 4}, {1, 5, 6}], digraph.detect_cycles())

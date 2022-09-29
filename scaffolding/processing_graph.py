@@ -247,21 +247,50 @@ class BatchProcessingGraph:
 
 
 class DiGraph:
-    def __init__(self, vertices, ingoing_edges, outgoing_edges):
+    def __init__(self, vertices, edges=None):
         """Simple representation of directed graph
 
         :param vertices: vertices or nodes comprising this graph
-        :param ingoing_edges: a dictionary that maps a vertex to all vertices pointing to it
-        :param outgoing_edges: a dictionary that maps a vertex to all vertices pointed by it
         """
+
+        if len(vertices) != len(set(vertices)):
+            raise InvalidGraphError(f'DiGraph not allowed to have duplicate vertices')
+
         self.vertices = vertices
-        self.ingoing_edges = ingoing_edges
-        self.outgoing_edges = outgoing_edges
+        self.ingoing_edges = {}
+        self.outgoing_edges = {}
+
+        if edges:
+            for u, v in edges:
+                self.make_edge(u, v)
+
+    def make_edge(self, u, v):
+        self._validate_edge(u, v)
+        self.outgoing_edges.setdefault(u, []).append(v)
+        self.ingoing_edges.setdefault(v, []).append(u)
+
+    def _validate_edge(self, u, v):
+        missing_nodes = {u, v} - set(self.vertices)
+
+        if u == v:
+            raise InvalidEdgeError(
+                f'cannot make an edge "{u}"->"{v}". Self-loops are not allowed'
+            )
+
+        if missing_nodes:
+            raise InvalidEdgeError(
+                f'cannot make an edge "{u}"->"{v}". Nodes not found in a graph: {missing_nodes}'
+            )
+
+        if v in self.outgoing_edges.get(u, []):
+            raise InvalidEdgeError(
+                f'cannot make an edge "{u}"->"{v}". Edge already exists'
+            )
 
     def detect_cycles(self):
-        it = self.strong_components()
+        components = self.strong_components()
         cycles = []
-        for component in it:
+        for component in components.values():
             if len(component) > 1:
                 cycles.append(component)
         return cycles
@@ -277,7 +306,43 @@ class DiGraph:
         :return: a sequence of strongly connected components
         :rtype: a sequence of sets
         """
-        pass
+        scc = SCCs(self)
+        return scc()
+
+
+class SCCs:
+    def __init__(self, digraph):
+        self.digraph = digraph
+
+        self.visited = set()
+
+        self.lifo_vertices = []  # vertices in the increasing order of finishing times
+        self.leaders = {}
+        self.leader = 0
+
+    def __call__(self):
+        self.run_dfs(self.digraph.vertices, reverse=True)
+        self.run_dfs(reversed(self.lifo_vertices), reverse=False)
+        return self.leaders
+
+    def run_dfs(self, vertices, reverse):
+        self.leaders.clear()
+        self.visited.clear()
+
+        for s in vertices:
+            if s not in self.visited:
+                self.leader = s
+                self.dfs(s, reverse=reverse)
+
+    def dfs(self, source, reverse):
+        self.visited.add(source)
+        edges = self.digraph.ingoing_edges if reverse else self.digraph.outgoing_edges
+        for v in edges.get(source, []):
+            if v not in self.visited:
+                self.dfs(v, reverse)
+
+        self.lifo_vertices.append(source)
+        self.leaders.setdefault(self.leader, set()).add(source)
 
 
 class InvalidGraphError(Exception):
