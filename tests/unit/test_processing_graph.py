@@ -413,6 +413,14 @@ class ProcessingGraphTests(unittest.TestCase):
 
         self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, "b", "a")
 
+        graph = processing_graph.BatchProcessingGraph(
+            ["inp"], a=square_input, b=add_1, c=lambda x: x
+        )
+
+        graph.make_edge("a", "b")
+        graph.make_edge("b", "c")
+        self.assertRaises(processing_graph.InvalidEdgeError, graph.make_edge, "c", "a")
+
     def test_feeding_simplest_graph(self):
         graph = processing_graph.BatchProcessingGraph(["input1"], output=square_input)
         graph.make_edge("input1", "output")
