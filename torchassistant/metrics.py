@@ -63,9 +63,7 @@ class Metric:
         :rtype: degenerate tensor of shape ()
         """
 
-        # todo: get rid of this (make it work with single argument)
         lookup_table = batch
-
         tensors = [lookup_table[arg] for arg in self.metric_args]
 
         tensors = self.change_device(tensors)

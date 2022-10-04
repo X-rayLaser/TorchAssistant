@@ -131,8 +131,6 @@ class OutputAdapterError(Exception):
 
 
 class BatchProcessingGraph:
-    # todo: checking arguments, raising exceptions
-
     def __init__(self, batch_input_names, **nodes):
         """
 
@@ -408,6 +406,7 @@ class Node:
             )
         lookup_table = data_frame.copy()
         lookup_table.update(prev_outputs)
+
         try:
             return [lookup_table[var_name] for var_name in self.inputs]
         except KeyError as e:

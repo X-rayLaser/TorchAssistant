@@ -2,8 +2,6 @@ import argparse
 import json
 import os
 
-#from scaffolding.session import TrainingSession, ConfigParser, SessionBuilder, CheckpointKeeper
-#from scaffolding import parse
 from torchassistant.session import create_and_save_session
 
 

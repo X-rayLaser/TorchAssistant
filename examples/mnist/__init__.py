@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torchvision.transforms import ToTensor
 
 
 class LeNet5(nn.Module):
@@ -21,3 +22,23 @@ class LeNet5(nn.Module):
         x = torch.tanh(self.fc2(x))
         x = self.fc3(x)
         return [x]
+
+
+def reverse_onehot(y_hat, ground_true):
+    return y_hat.argmax(dim=-1), torch.LongTensor(ground_true)
+
+
+def convert_labels(y_hat, labels):
+    labels = torch.LongTensor(labels)
+    return y_hat, labels
+
+
+class InputAdapter:
+    def __call__(self, batch: dict) -> dict:
+        images = batch["images"]
+        to_tensor = ToTensor()
+        return {
+            "LeNet5": {
+                "x": torch.stack([to_tensor(image) for image in images]) / 255.
+            }
+        }

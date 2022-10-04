@@ -28,3 +28,9 @@ class ExamplePreprocessor:
 class NullProcessor(ValuePreprocessor):
     def process(self, value):
         return value
+
+
+class SimpleNormalizer(ValuePreprocessor):
+    def process(self, value):
+        print('yes simple preprocessor')
+        return value / 255
