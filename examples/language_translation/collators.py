@@ -1,5 +1,5 @@
 import torch
-from scaffolding.collators import BaseCollator, BatchDivide
+from torchassistant.collators import BaseCollator, BatchDivide
 
 
 class MyCollator(BatchDivide):

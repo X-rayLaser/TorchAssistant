@@ -1,7 +1,7 @@
 import unittest
-from scaffolding import utils
-from scaffolding.data import MultiSplitter, DatasetSlice
-from scaffolding.session import Session
+from torchassistant import utils
+from torchassistant.data import MultiSplitter, DatasetSlice
+from torchassistant.session import Session
 
 
 class InstantiateClassTests(unittest.TestCase):
@@ -18,21 +18,21 @@ class InstantiateClassTests(unittest.TestCase):
                                'Invalid import path: "  contains spaces    and tabs"', utils.instantiate_class,
                                '  contains spaces    and tabs')
 
-        msg = 'Failed to import and instantiate a class "utils" from "scaffolding": \'module\' object is not callable'
-        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'scaffolding.utils')
+        msg = 'Failed to import and instantiate a class "utils" from "torchassistant": \'module\' object is not callable'
+        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'torchassistant.utils')
 
         msg = 'Failed to import and instantiate a class "" from ' \
-              '"scaffolding.utils": module \'scaffolding.utils\' has no attribute \'\''
-        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'scaffolding.utils.')
+              '"torchassistant.utils": module \'torchassistant.utils\' has no attribute \'\''
+        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'torchassistant.utils.')
 
         msg = 'Failed to import and instantiate a class "Foo" from ' \
-              '"scaffolding.utils": module \'scaffolding.utils\' has no attribute \'Foo\''
+              '"torchassistant.utils": module \'torchassistant.utils\' has no attribute \'Foo\''
 
-        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'scaffolding.utils.Foo')
+        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'torchassistant.utils.Foo')
 
-        msg = 'Failed to import and instantiate a class "Foo" from "scaffolding.missing": ' \
-              'No module named \'scaffolding.missing\''
-        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'scaffolding.missing.Foo')
+        msg = 'Failed to import and instantiate a class "Foo" from "torchassistant.missing": ' \
+              'No module named \'torchassistant.missing\''
+        self.assertRaisesRegex(utils.ClassImportError, msg, utils.instantiate_class, 'torchassistant.missing.Foo')
 
     def test_with_wrong_arguments(self):
         self.assertRaises(utils.ClassImportError,
@@ -42,11 +42,11 @@ class InstantiateClassTests(unittest.TestCase):
                           lambda: utils.instantiate_class('scaffolding.session.Session', 1, 2))
 
     def test_correct_instantiation(self):
-        session = utils.instantiate_class('scaffolding.session.Session')
+        session = utils.instantiate_class('torchassistant.session.Session')
         self.assertTrue(hasattr(session, 'datasets'))
 
         metric = utils.instantiate_class(
-            'scaffolding.metrics.Metric', 'name', 'metric_fn', metric_args=[], transform_fn='', device=''
+            'torchassistant.metrics.Metric', 'name', 'metric_fn', metric_args=[], transform_fn='', device=''
         )
 
         self.assertEqual('name', metric.name)
@@ -62,12 +62,12 @@ class TestImportFunction(unittest.TestCase):
         self.assertRaises(self.exception_class, self.function_to_test, '  ')
         self.assertRaises(self.exception_class, self.function_to_test, 'missing_module')
         self.assertRaises(self.exception_class, self.function_to_test, '  contains spaces    and tabs')
-        self.assertRaises(self.exception_class, self.function_to_test, 'scaffolding.utils.')
-        self.assertRaises(self.exception_class, self.function_to_test, 'scaffolding.foo')
-        self.assertRaises(self.exception_class, self.function_to_test, 'scaffolding.missing.import_function')
+        self.assertRaises(self.exception_class, self.function_to_test, 'torchassistant.utils.')
+        self.assertRaises(self.exception_class, self.function_to_test, 'torchassistant.foo')
+        self.assertRaises(self.exception_class, self.function_to_test, 'torchassistant.missing.import_function')
 
     def test_correct_import(self):
-        fn = self.function_to_test('scaffolding.utils.import_function')
+        fn = self.function_to_test('torchassistant.utils.import_function')
         self.assertTrue(callable(fn))
 
 

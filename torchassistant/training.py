@@ -3,7 +3,7 @@ import itertools
 import torch
 from .metrics import MovingAverage
 from .formatters import Formatter
-from scaffolding.session import StopTrainingError
+from torchassistant.session import StopTrainingError
 from .data import DataBlueprint
 from .utils import Debugger
 

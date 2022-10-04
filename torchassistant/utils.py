@@ -2,8 +2,8 @@ import importlib
 
 import torch
 
-from scaffolding.data import DataBlueprint
-from scaffolding.exceptions import ClassImportError, FunctionImportError, EntityImportError
+from torchassistant.data import DataBlueprint
+from torchassistant.exceptions import ClassImportError, FunctionImportError, EntityImportError
 
 
 class Serializable:

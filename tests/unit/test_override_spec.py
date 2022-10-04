@@ -1,7 +1,7 @@
 import unittest
-from scaffolding.data import MultiSplitter, BadSplitError
-from scaffolding.session import override_spec
-from scaffolding.session.override_spec import MetaDict, MetaList, parse_object, override_dict, override_list, \
+from torchassistant.data import MultiSplitter, BadSplitError
+from torchassistant.session import override_spec
+from torchassistant.session.override_spec import MetaDict, MetaList, parse_object, override_dict, override_list, \
     InvalidNumberOfMatchesError
 
 

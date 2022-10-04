@@ -1,7 +1,7 @@
 import argparse
 import json
-from scaffolding.training import train
-from scaffolding.session import SessionSaver
+from torchassistant.training import train
+from torchassistant.session import SessionSaver
 
 
 def load_config(path):

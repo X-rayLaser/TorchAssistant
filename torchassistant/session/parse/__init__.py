@@ -4,12 +4,12 @@ import torch
 from torch import nn
 import torchmetrics
 
-from scaffolding.utils import instantiate_class, import_function, import_entity, GradientClipper, \
+from torchassistant.utils import instantiate_class, import_function, import_entity, GradientClipper, \
     OptimizerWithLearningRateScheduler, get_dataset
 from .loaders import Loader, BadSpecificationError, Loader, BatchProcessorLoader, BackwardHookLoader
 from ...data import WrappedDataset, MergedDataset, MultiSplitter, LoaderFactory
-from scaffolding.preprocessors import NullProcessor
-from scaffolding.metrics import metric_functions, Metric
+from torchassistant.preprocessors import NullProcessor
+from torchassistant.metrics import metric_functions, Metric
 from ..registry import register
 from ...processing_graph import BatchProcessingGraph
 

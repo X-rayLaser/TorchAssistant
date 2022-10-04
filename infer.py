@@ -1,9 +1,9 @@
 import argparse
-from scaffolding.utils import instantiate_class
+from torchassistant.utils import instantiate_class
 import torch
 from train import load_config
-from scaffolding.session import SessionSaver
-from scaffolding.data import WrappedDataset, DataBlueprint
+from torchassistant.session import SessionSaver
+from torchassistant.data import WrappedDataset, DataBlueprint
 
 
 def parse_input_adapter(config_dict):

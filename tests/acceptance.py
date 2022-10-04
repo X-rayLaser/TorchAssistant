@@ -9,13 +9,13 @@ from torchvision.transforms import transforms
 
 from torchmetrics import Accuracy
 
-from scaffolding.training import train
-from scaffolding.session import Session
-from scaffolding.session.data_classes import TrainingPipeline, InputLoader
-from scaffolding.collators import StackTensors
-from scaffolding.data import LoaderFactory
-from scaffolding.processing_graph import NeuralBatchProcessor, BatchProcessingGraph, Node
-from scaffolding.output_adapters import IdentityAdapter
+from torchassistant.training import train
+from torchassistant.session import Session
+from torchassistant.session.data_classes import TrainingPipeline, InputLoader
+from torchassistant.collators import StackTensors
+from torchassistant.data import LoaderFactory
+from torchassistant.processing_graph import NeuralBatchProcessor, BatchProcessingGraph, Node
+from torchassistant.output_adapters import IdentityAdapter
 
 
 class TestModel(nn.Module):

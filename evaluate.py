@@ -1,9 +1,9 @@
 import argparse
 import json
 
-from scaffolding.training import evaluate_pipeline
-from scaffolding.session import SessionSaver
-from scaffolding.formatters import Formatter
+from torchassistant.training import evaluate_pipeline
+from torchassistant.session import SessionSaver
+from torchassistant.formatters import Formatter
 
 
 def load_config(path):

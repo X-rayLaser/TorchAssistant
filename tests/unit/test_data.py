@@ -1,7 +1,7 @@
 import unittest
-from scaffolding import data
-from scaffolding.preprocessors import ValuePreprocessor
-from scaffolding.collators import BatchDivide
+from torchassistant import data
+from torchassistant.preprocessors import ValuePreprocessor
+from torchassistant.collators import BatchDivide
 
 
 class MergedDatasetTests(unittest.TestCase):

@@ -2,11 +2,11 @@ from collections import namedtuple
 
 import torch
 
-from scaffolding.output_adapters import IdentityAdapter
-from scaffolding.output_devices import Printer
-from scaffolding.processing_graph import NeuralBatchProcessor, Node
-from scaffolding.session.data_classes import InputLoader, TrainingPipeline, DebugPipeline, Stage
-from scaffolding.utils import instantiate_class, import_function, BackwardHookInstaller, Debugger
+from torchassistant.output_adapters import IdentityAdapter
+from torchassistant.output_devices import Printer
+from torchassistant.processing_graph import NeuralBatchProcessor, Node
+from torchassistant.session.data_classes import InputLoader, TrainingPipeline, DebugPipeline, Stage
+from torchassistant.utils import instantiate_class, import_function, BackwardHookInstaller, Debugger
 
 
 class SpecParser:

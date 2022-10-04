@@ -1,5 +1,5 @@
-from scaffolding.preprocessors import ValuePreprocessor
-from scaffolding.utils import Serializable
+from torchassistant.preprocessors import ValuePreprocessor
+from torchassistant.utils import Serializable
 from torchvision.transforms import ToTensor
 
 

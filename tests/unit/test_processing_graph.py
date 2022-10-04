@@ -1,5 +1,5 @@
 import unittest
-from scaffolding import processing_graph
+from torchassistant import processing_graph
 import torch
 from operator import mul
 

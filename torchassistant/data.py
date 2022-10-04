@@ -1,6 +1,6 @@
 import math
 from itertools import zip_longest
-from scaffolding.preprocessors import NullProcessor
+from torchassistant.preprocessors import NullProcessor
 
 import torch
 

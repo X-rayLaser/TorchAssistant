@@ -1,5 +1,5 @@
 import torch
-from scaffolding.utils import Serializable
+from torchassistant.utils import Serializable
 
 
 class BaseCollator(Serializable):
