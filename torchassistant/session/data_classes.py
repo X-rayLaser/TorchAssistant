@@ -23,5 +23,11 @@ class Stage:
         self.stop_condition = stop_condition
 
 
-InputLoader = namedtuple("InputLoader", ["input_alias", "loader_factory", "variable_names"])
+class InputLoader:
+    def __init__(self, input_alias, loader_factory, variable_names=None):
+        self.input_alias = input_alias
+        self.loader_factory = loader_factory
+        self.variable_names = variable_names
+
+
 TrainingPipeline = namedtuple('TrainingPipeline', ["graph", "input_loaders", "loss_fns", "metric_fns"])

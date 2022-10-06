@@ -276,7 +276,12 @@ class BatchLoader:
 
     def __iter__(self):
         for batch in self.data_loader:
-            yield data_frame(self.var_names, batch)
+            num_names = len(batch)
+            var_names = self.var_names or self.default_names(num_names)
+            yield data_frame(var_names, batch)
+
+    def default_names(self, num_names):
+        return [f'input_{i + 1}' for i in range(num_names)]
 
     def __len__(self):
         return len(self.data_loader)

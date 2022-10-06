@@ -98,7 +98,7 @@
                 "name": "cross_entropy",
                 "spec": {
                     "class": "CrossEntropyLoss",
-                    "inputs": ["y_hat", "y"],
+                    "inputs": ["y_hat", "input_2"],
                     "transform": "examples.mnist.convert_labels"
                 }
             },
@@ -107,7 +107,7 @@
                 "name": "accuracy",
                 "spec": {
                     "class": "Accuracy",
-                    "inputs": ["y_hat", "y"],
+                    "inputs": ["y_hat", "input_2"],
                     "transform": "examples.mnist.reverse_onehot"
                 }
             },
@@ -129,7 +129,6 @@
                 "input_factories": [
                     {
                         "input_alias": "input_batch",
-                        "variable_names": ["images", "y"],
                         "loader_factory": "training_factory"
                     }
                 ],
@@ -153,7 +152,6 @@
                 "input_factories": [
                     {
                         "input_alias": "input_batch",
-                        "variable_names": ["images", "y"],
                         "loader_factory": "test_factory"
                     }
                 ],
