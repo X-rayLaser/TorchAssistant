@@ -284,7 +284,7 @@
                 "training_pipelines": ["train"],
                 "validation_pipelines": ["train", "evaluate"],
                 "stop_condition": {
-                    "class": "scaffolding.stop_conditions.EpochsCompleted",
+                    "class": "torchassistant.stop_conditions.EpochsCompleted",
                     "kwargs": {
                         "num_epochs": 20
                     }
@@ -295,7 +295,7 @@
                 "training_pipelines": ["train"],
                 "validation_pipelines": ["train"],
                 "stop_condition": {
-                    "class": "scaffolding.stop_conditions.EpochsCompleted",
+                    "class": "torchassistant.stop_conditions.EpochsCompleted",
                     "kwargs": {
                         "num_epochs": 20
                     }

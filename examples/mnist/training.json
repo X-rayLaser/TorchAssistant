@@ -3,13 +3,6 @@
     "initialize": {
         "definitions": [
             {
-                "group": "preprocessors",
-                "name": "normalizer",
-                "spec": {
-                    "class": "torchassistant.preprocessors.SimpleNormalizer"
-                }
-            },
-            {
                 "group": "datasets",
                 "name": "train_ds",
                 "spec": {
@@ -83,24 +76,6 @@
                 }
             },
             {
-                "group": "losses",
-                "name": "cross_entropy",
-                "spec": {
-                    "class": "CrossEntropyLoss",
-                    "inputs": ["y_hat", "y"],
-                    "transform": "examples.mnist.convert_labels"
-                }
-            },
-            {
-                "group": "metrics",
-                "name": "accuracy",
-                "spec": {
-                    "class": "Accuracy",
-                    "inputs": ["y_hat", "y"],
-                    "transform": "examples.mnist.reverse_onehot"
-                }
-            },
-            {
                 "group": "batch_processors",
                 "name": "LeNet_processor",
                 "spec": {
@@ -116,6 +91,24 @@
                         }
                     ],
                     "device": "cpu"
+                }
+            },
+            {
+                "group": "losses",
+                "name": "cross_entropy",
+                "spec": {
+                    "class": "CrossEntropyLoss",
+                    "inputs": ["y_hat", "y"],
+                    "transform": "examples.mnist.convert_labels"
+                }
+            },
+            {
+                "group": "metrics",
+                "name": "accuracy",
+                "spec": {
+                    "class": "Accuracy",
+                    "inputs": ["y_hat", "y"],
+                    "transform": "examples.mnist.reverse_onehot"
                 }
             },
             {
@@ -189,7 +182,7 @@
             "stop_condition": {
                 "class": "torchassistant.stop_conditions.EpochsCompleted",
                 "kwargs": {
-                    "num_epochs": 20
+                    "num_epochs": 3
                 }
             }
         }]

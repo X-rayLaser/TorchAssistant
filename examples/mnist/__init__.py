@@ -34,8 +34,8 @@ def convert_labels(y_hat, labels):
 
 
 class InputAdapter:
-    def __call__(self, batch: dict) -> dict:
-        images = batch["images"]
+    def __call__(self, dataframe: dict) -> dict:
+        images = dataframe["images"]
         to_tensor = ToTensor()
         return {
             "LeNet5": {
