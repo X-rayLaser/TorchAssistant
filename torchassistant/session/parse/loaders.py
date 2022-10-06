@@ -4,7 +4,7 @@ import torch
 
 from torchassistant.output_adapters import IdentityAdapter
 from torchassistant.output_devices import Printer
-from torchassistant.processing_graph import NeuralBatchProcessor, Node
+from torchassistant.processing_graph import NeuralBatchProcessor, BatchProcessingGraph, Node
 from torchassistant.session.data_classes import InputLoader, TrainingPipeline, DebugPipeline, Stage
 from torchassistant.utils import instantiate_class, import_function, BackwardHookInstaller, Debugger
 
@@ -124,12 +124,24 @@ class BatchProcessorLoader(Loader):
 
 class PipelineLoader(Loader):
     def load(self, session, spec, object_name=None):
-        graph = session.batch_graphs[spec["graph"]]
         input_loaders = []
         for d in spec["input_factories"]:
             kwargs = dict(d)
             kwargs["loader_factory"] = session.loader_factories[kwargs["loader_factory"]]
             input_loaders.append(InputLoader(**kwargs))
+
+        if "graph" not in spec and len(session.batch_graphs) > 1:
+            raise BadSpecificationError(
+                f'You must specify which graph to use for the pipeline. '
+                f'Options are: {list(session.batch_graphs.keys())}'
+            )
+        elif "graph" not in spec and session.batch_graphs:
+            graph = next(iter(session.batch_graphs.values()))
+        elif "graph" not in spec:
+            # create a default graph here
+            graph = self.infer_graph(session, input_loaders)
+        else:
+            graph = session.batch_graphs[spec["graph"]]
 
         metric_fns = self.parse_metrics(session, spec)
 
@@ -147,6 +159,26 @@ class PipelineLoader(Loader):
                 metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
 
         return TrainingPipeline(graph, input_loaders, loss_fns, metric_fns)
+
+    def infer_graph(self, session, input_loaders):
+        input_ports = [loader.input_alias for loader in input_loaders]
+
+        if len(session.batch_processors) > 1 or len(set(input_ports)) != 1:
+            raise BadSpecificationError(
+                f'Cannot automatically infer processing graph topology. Please, specify it.'
+            )
+
+        if len(session.batch_processors) == 0:
+            raise BadSpecificationError(
+                f'Cannot automatically infer processing graph topology. Missing batch proceessors.'
+            )
+
+        node_name = next(iter(session.batch_processors))
+        nodes = {node_name: session.batch_processors[node_name]}
+
+        graph = BatchProcessingGraph(input_ports, **nodes)
+        graph.make_edge(input_ports[0], node_name)
+        return graph
 
     def parse_metrics(self, session, pipeline_spec):
         metrics = {}

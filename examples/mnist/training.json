@@ -110,22 +110,10 @@
                     "inputs": ["y_hat", "input_2"],
                     "transform": "examples.mnist.reverse_onehot"
                 }
-            },
-            {
-                "group": "batch_graphs",
-                "name": "batch_processing_graph",
-                "spec": {
-                    "nodes": ["LeNet_processor"],
-                    "input_aliases": ["input_batch"],
-                    "ingoing_edges": {
-                        "LeNet_processor": ["input_batch"]
-                    }
-                }
             }
         ],
         "pipelines": {
             "training_pipeline": {
-                "graph": "batch_processing_graph",
                 "input_factories": [
                     {
                         "input_alias": "input_batch",
@@ -148,7 +136,6 @@
                 ]
             },
             "evaluation_pipeline": {
-                "graph": "batch_processing_graph",
                 "input_factories": [
                     {
                         "input_alias": "input_batch",
