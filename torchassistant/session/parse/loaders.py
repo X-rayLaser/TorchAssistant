@@ -7,6 +7,7 @@ from torchassistant.output_devices import Printer
 from torchassistant.processing_graph import NeuralBatchProcessor, BatchProcessingGraph, Node
 from torchassistant.session.data_classes import InputLoader, TrainingPipeline, DebugPipeline, Stage
 from torchassistant.utils import instantiate_class, import_function, BackwardHookInstaller, Debugger
+from torchassistant.adapters import DefaultInputAdapter
 
 
 class SpecParser:
@@ -148,7 +149,7 @@ class PipelineLoader(Loader):
         loss_fns = {}
         for loss_spec in spec.get("losses", []):
             loss_name = loss_spec["loss_name"]
-            node_name = loss_spec["node_name"]
+            node_name = self.get_node_name(session, loss_spec)
 
             loss_fn = (node_name, session.losses[loss_name])
             loss_fns[loss_name] = loss_fn
@@ -168,28 +169,83 @@ class PipelineLoader(Loader):
                 f'Cannot automatically infer processing graph topology. Please, specify it.'
             )
 
-        if len(session.batch_processors) == 0:
-            raise BadSpecificationError(
-                f'Cannot automatically infer processing graph topology. Missing batch proceessors.'
-            )
-
-        node_name = next(iter(session.batch_processors))
-        nodes = {node_name: session.batch_processors[node_name]}
+        if session.batch_processors:
+            node_name = next(iter(session.batch_processors))
+            nodes = {node_name: session.batch_processors[node_name]}
+        else:
+            node_name = "default_processor"
+            nodes = {node_name: self.infer_batch_processor(session)}
 
         graph = BatchProcessingGraph(input_ports, **nodes)
         graph.make_edge(input_ports[0], node_name)
         return graph
+
+    def infer_batch_processor(self, session):
+        if len(session.models) > 1:
+            raise BadSpecificationError(
+                f'Cannot automatically infer batch processor when multiple models are defined.'
+            )
+
+        if len(session.optimizers) > 1:
+            raise BadSpecificationError(
+                f'Cannot automatically infer batch processor when multiple optimizers are defined.'
+            )
+
+        if not session.models:
+            raise BadSpecificationError(
+                f'Cannot automatically infer batch processor. Please, define model.'
+            )
+
+        model_name = next(iter(session.models))
+        model = session.models[model_name]
+
+        optimizer = next(iter(session.optimizers.values())) if session.optimizers else None
+
+        inputs = ["input_1"]
+        outputs = ["y_hat"]
+        neural_nodes = [
+            Node(name=model_name, model=model, optimizer=optimizer, inputs=inputs, outputs=outputs)
+        ]
+
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+        input_adapter = DefaultInputAdapter(model_name)
+        output_adapter = IdentityAdapter()
+        return NeuralBatchProcessor(neural_nodes, input_adapter, output_adapter, device)
 
     def parse_metrics(self, session, pipeline_spec):
         metrics = {}
         for spec in pipeline_spec.get("metrics", []):
             name = spec["metric_name"]
             display_name = spec["display_name"]
-            node_name = spec["node_name"]
+            node_name = self.get_node_name(session, spec)
             metric = session.metrics[name].rename_and_clone(display_name)
             metrics[display_name] = (node_name, metric)
 
         return metrics
+
+    def get_node_name(self, session, spec):
+        options = list(session.batch_processors.keys())
+        if len(session.batch_processors) > 1 and "node_name" not in spec:
+            raise BadSpecificationError(
+                f'You must specify which batch processor outputs to use to compute loss/metric.'
+                f'Please, provide a value for "node_name". Options: {options}'
+            )
+        elif len(session.batch_processors) > 1:
+            choice = spec["node_name"]
+        elif session.batch_processors:
+            default_choice = next(iter(session.batch_processors))
+            options = [default_choice]
+            choice = spec.get("node_name", default_choice)
+        else:
+            options = ["default_processor"]
+            choice = spec.get("node_name", "default_processor")
+
+        if choice not in options:
+            raise BadSpecificationError(
+                f'Invalid value for "node_name". Must be one of: {options}'
+            )
+        return choice
 
 
 class BackwardHookLoader(Loader):

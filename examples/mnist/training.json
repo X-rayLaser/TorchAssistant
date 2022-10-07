@@ -30,7 +30,7 @@
                 "group": "collators",
                 "name": "my_collator",
                 "spec": {
-                    "class": "torchassistant.collators.BatchDivide"
+                    "class": "examples.mnist.MyCollator"
                 }
             },
             {
@@ -76,24 +76,6 @@
                 }
             },
             {
-                "group": "batch_processors",
-                "name": "LeNet_processor",
-                "spec": {
-                    "input_adapter": {
-                        "class": "examples.mnist.InputAdapter"
-                    },
-                    "neural_graph": [
-                        {
-                            "model_name": "LeNet5",
-                            "inputs": ["x"],
-                            "outputs": ["y_hat"],
-                            "optimizer_name": "optimizer"
-                        }
-                    ],
-                    "device": "cpu"
-                }
-            },
-            {
                 "group": "losses",
                 "name": "cross_entropy",
                 "spec": {
@@ -122,14 +104,12 @@
                 ],
                 "losses": [
                     {
-                        "node_name": "LeNet_processor",
                         "loss_name": "cross_entropy",
                         "loss_display_name": "loss"
                     }
                 ],
                 "metrics": [
                     {
-                        "node_name": "LeNet_processor",
                         "metric_name": "accuracy",
                         "display_name": "acc"
                     }
@@ -144,14 +124,12 @@
                 ],
                 "losses": [
                     {
-                        "node_name": "LeNet_processor",
                         "loss_name": "cross_entropy",
                         "loss_display_name": "val loss"
                     }
                 ],
                 "metrics": [
                     {
-                        "node_name": "LeNet_processor",
                         "metric_name": "accuracy",
                         "display_name": "val acc"
                     }

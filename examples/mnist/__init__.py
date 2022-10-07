@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torchvision.transforms import ToTensor
+from torchassistant.collators import BatchDivide
 
 
 class LeNet5(nn.Module):
@@ -33,12 +34,12 @@ def convert_labels(y_hat, labels):
     return y_hat, labels
 
 
-class InputAdapter:
-    def __call__(self, dataframe: dict) -> dict:
-        images = dataframe["input_1"]
+class MyCollator(BatchDivide):
+    def __call__(self, batch):
         to_tensor = ToTensor()
-        return {
-            "LeNet5": {
-                "x": torch.stack([to_tensor(image) for image in images]) / 255.
-            }
-        }
+
+        images, labels = super().__call__(batch)
+
+        x = torch.stack([to_tensor(image) for image in images])
+        x = x / 255
+        return x, labels
