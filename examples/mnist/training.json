@@ -34,8 +34,8 @@
                 }
             },
             {
-                "group": "loader_factories",
-                "name": "training_factory",
+                "group": "data_loaders",
+                "name": "training_loader",
                 "spec": {
                     "dataset": "train_ds",
                     "collator": "my_collator",
@@ -46,8 +46,8 @@
                 }
             },
             {
-                "group": "loader_factories",
-                "name": "test_factory",
+                "group": "data_loaders",
+                "name": "test_loader",
                 "spec": {
                     "dataset": "test_ds",
                     "collator": "my_collator",
@@ -96,10 +96,9 @@
         ],
         "pipelines": {
             "training_pipeline": {
-                "input_factories": [
+                "input_injector": [
                     {
-                        "input_alias": "input_batch",
-                        "loader_factory": "training_factory"
+                        "data_loader": "training_loader"
                     }
                 ],
                 "losses": [
@@ -116,10 +115,9 @@
                 ]
             },
             "evaluation_pipeline": {
-                "input_factories": [
+                "input_injector": [
                     {
-                        "input_alias": "input_batch",
-                        "loader_factory": "test_factory"
+                        "data_loader": "test_loader"
                     }
                 ],
                 "losses": [

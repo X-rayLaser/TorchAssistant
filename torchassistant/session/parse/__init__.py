@@ -49,17 +49,6 @@ def load_preprocessor(session, spec, object_name=None):
 
 
 @register("data_loaders")
-def load_data_loader(session, spec, object_name=None):
-    dataset = session.datasets[spec["dataset"]]
-    collator = session.collators[spec["collator"]]
-
-    kwargs = dict(shuffle=True, num_workers=2)
-    kwargs.update(spec.get("kwargs", {}))
-
-    return torch.utils.data.DataLoader(dataset, collate_fn=collator, **kwargs)
-
-
-@register("loader_factories")
 def load_data_factory(session, spec, object_name=None):
     dataset = session.datasets[spec["dataset"]]
     collator = session.collators[spec["collator"]]
@@ -81,7 +70,7 @@ def load_batch_processing_graph(session, spec, object_name=None):
     for node_name in spec["nodes"]:
         nodes[node_name] = session.batch_processors[node_name]
 
-    batch_input_names = spec["input_aliases"]
+    batch_input_names = spec["input_ports"]
     graph = BatchProcessingGraph(batch_input_names, **nodes)
     for destination, sources in spec["ingoing_edges"].items():
         for src in sources:

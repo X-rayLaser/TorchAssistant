@@ -110,74 +110,11 @@ As the name suggests, this class prepares data to be consumed by
 neural pipeline. 
 
 
-After implementing all the pieces, we can begin writing a configuration file which
+After implementing all the pieces, we can begin writing a specification file which
  is just a normal json file. Here we are not going to discuss all
-the syntax details, but rather focus on the essential structure of the file.
-
-The general structure of the config file is shown below: 
-```
-{
-  "session_dir": "pretrained",
-  "initialize": {
-    "definitions": [
-      {
-        "group": "some_group",
-        "name": "some_name",
-        "spec": {...}
-      },
-      ...
-    ],
-    "pipelines": {
-      "pipeline1": {
-        "graph": "...",
-        "input_factories": [
-          {
-              "input_alias": "....",
-              "variable_names": ["...", "..."],
-              "loader_factory": "..."
-          },
-          ...
-        ]
-      },
-      "pipeline2": {...},
-      "pipeline10": {...}
-    }
-  },
-  "train": {
-    "stages": [
-      {
-        "mode": "...",
-        "training_pipelines": ["..."],
-        "validation_pipelines": ["...", "..."],
-        "stop_condition": {
-            "class": "...",
-        }
-      },
-      {...}
-    ]
-  }
-}
-```
-
-"session_dir" specifies a relative path to a folder used to store session data
-(including model checkpoints).
-
-"definitions" represents a list of different entities that can be referred to 
-in later sections of the config file (e.g. in "pipelines" or "train" blocks).
-Each definition has the following fields:
-- name (name or id of the entity)
-- group (which group the entity belongs to)
-- spec (specification consisting of a few fields used to create entity)
-
-"pipelines" defines concrete pipelines which will be used during training. 
-A neat feature of TorchAssistant is that one can construct multiple pipelines 
-sharing the same model(s) and interleave those pipelines during training.
-
-Finally, there is "stages" entry.
-It allows to create highly flexible multi-stage training setup where
-different stages may use different pipelines.
-Each stage needs to specify training pipeline, evaluation pipeline and 
-stopping condition.
+the syntax details, but rather focus on the essential elements of the file. 
+The specification file we are about to create can be adopted 
+for many relatively simple training setups.
 
 Open training.json file and copy the following text as shown below
 ```
@@ -412,6 +349,174 @@ dictionary of the form
 }
 ```
 
+# How it works
+
+Before getting to details of specification format, it is useful to 
+understand the inner workings of TorchAssistant and glance
+over its major components and concepts. Many of those (such as loss functions,
+optimizers, models, etc.) will look familiar, while others will not.
+
+Let's discuss those concepts starting from the lowest level first.
+
+First, let's look at data related entities.
+Very briefly, datasets provide individual examples as tuples.
+A data split can be defined to split dataset into training, 
+validation and test datasets.
+Collators turn a collection of examples into batches.
+By giving names to columns of batches, the latter become data frames.
+Finally, data injectors group data frames coming from different datasets 
+and convert them to data frame dicts. We will discuss them later.
+
+Dataset is any object that implements a sequence protocol. Concretely, 
+dataset class needs to implement `__len__` and `__getitem__`. Naturally,
+iny built-in dataset class from torchvision package is a valid dataset.
+Moreover, datasets can wrap/decorate other datasets and have 
+associated data transformations/preprocessors.
+
+Data split is used to randomly split a given dataset into 2 or more slices.
+One can control relative size of each slice in the split.
+Upon creation, one can access slices of a given dataset via a dot notation.
+For instance, if a dataset called `mnist` was split into 2 parts, we can
+refer to training slice with ```mnist.train```.
+Each slice is a special kind of dataset. That means, data slice can be used
+anywhere where dataset is needed.
+
+Preprocessor is any object which implement `process(value)` method.
+Implementing an optional method `fit(dataset)` makes a give preprocessor
+learnable. Whether it's learnable or not, once defined, it can be applied
+to a given dataset or a dataset slice.
+
+Collator is a callable object which turns a list of tuples (examples) 
+into a tuple of collections (lists, tensors, etc.). It is useful, when
+one needs to apply extra preprocessing on a collection of examples rather than
+individually 1 example at a time. For example, in Machine Translation
+datasets often contain sentences with variable length. This makes training 
+with batch size > 1 problematic. One possible solution is to 
+pad a collection of examples in a collator.
+
+Data frame is dict-like data structure which essentially associates names with
+data collections (lists or tensors). Note that it has nothing to do with 
+entities called data frames in other libraries such as Pandas.
+For example, this is a valid data frame:
+```
+data_frame = {
+  "x1": [1, 2, 3],
+  "x2": [10, 20, 30]
+}
+```
+
+Data loader represents Pytorch DataLoader class.
+
+Data injector is an iterator yielding data frames ready to be injected into 
+a processing graph. Data injector is used on every training iteration to
+provide training examples to learn from and compute loss/metrics.
+It's purpose will become more clear when we look at remaining pieces.
+
+Batch processor is a graph of nodes where each node is a neural network.
+This abstraction allows to create quite sophisticated computational graphs
+where output from one or more neural nets becomes an input for others.
+
+
+For example, it is easy to create an encoder-decoder RNN architecture.
+
+Data injector is glorified data loader
+
+
+
+
+# Specification format
+
+Specification (or spec) file is an ordinary json file that is used by the framework
+to configure it to perform training, evaluation, inference and other tasks.
+For every task there needs to be a separate json file.
+You will want to create at least 2 specs: 1 for training and the
+other for inference.
+
+## Training spec
+
+The overall structure of training spec file is as follows:
+```
+{
+  "session_dir": "pretrained",
+  "initialize": {
+    "definitions": [
+      {
+        "group": "some_group",
+        "name": "some_name",
+        "spec": {...}
+      },
+      ...
+    ],
+    "pipelines": {
+      "pipeline1": {
+        "graph": "...",
+        "input_factories": [
+          {
+              "input_alias": "....",
+              "variable_names": ["...", "..."],
+              "loader_factory": "..."
+          },
+          ...
+        ]
+      },
+      "pipeline2": {...},
+      "pipeline10": {...}
+    }
+  },
+  "train": {
+    "stages": [
+      {
+        "mode": "...",
+        "training_pipelines": ["..."],
+        "validation_pipelines": ["...", "..."],
+        "stop_condition": {
+            "class": "...",
+        }
+      },
+      {...}
+    ]
+  }
+}
+```
+
+Any training spec file has to have the following blocks/options filled in:
+"session_dir", "initialize", and "train".
+
+"session_dir" specifies a relative path to a folder used to store session data
+(including model checkpoints).
+
+"initialize" block is where the bulk of configuration options is stored.
+It consists of 2 sub blocks: "definitions" and "pipelines".
+The former defines an individual pieces such as datasets, preprocessing,
+models, optimizers and more. The latter, as the name suggests, defines pipelines
+by combining and referring to pieces in "definitions" block.
+Pipelines are self-contained entities containing all the information necessary
+to form a training loop.
+
+Finally, there is "train" block which has only one entry "stages".
+"stages" defines a list of stages. Each stage specifies which pipeline 
+to use for training and validation and when to stop.
+
+The most important sections of the file are "session_dir", "definitions",
+"pipelines" and "stages".
+
+
+"definitions" represents a list of different entities that can be referred to 
+in later sections of the config file (e.g. in "pipelines" or "train" blocks).
+Each definition has the following fields:
+- name (name or id of the entity)
+- group (which group the entity belongs to)
+- spec (specification consisting of a few fields used to create entity)
+
+"pipelines" defines concrete pipelines which will be used during training. 
+A neat feature of TorchAssistant is that one can construct multiple pipelines 
+sharing the same model(s) and interleave those pipelines during training.
+
+Finally, there is "stages" entry.
+It allows to create highly flexible multi-stage training setup where
+different stages may use different pipelines.
+Each stage needs to specify training pipeline, evaluation pipeline and 
+stopping condition.
 
 
 

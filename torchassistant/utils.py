@@ -2,7 +2,7 @@ import importlib
 
 import torch
 
-from torchassistant.data import DataBlueprint
+from torchassistant.data import InputInjector
 from torchassistant.exceptions import ClassImportError, FunctionImportError, EntityImportError
 
 
@@ -178,7 +178,7 @@ class Debugger:
                 self.debug()
 
     def debug(self):
-        it = iter(DataBlueprint(self.pipeline.input_loaders))
+        it = iter(InputInjector(self.pipeline.input_loaders))
 
         for _ in range(self.pipeline.num_iterations):
 

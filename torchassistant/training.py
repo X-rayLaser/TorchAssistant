@@ -4,7 +4,7 @@ import torch
 from .metrics import MovingAverage
 from .formatters import Formatter
 from torchassistant.session import StopTrainingError
-from .data import DataBlueprint
+from .data import InputInjector
 from .utils import Debugger
 
 
@@ -110,7 +110,7 @@ def interleave_training(session, pipelines):
 def prepare_trainers(session, pipelines):
     trainers = []
     for pipeline in pipelines:
-        data_generator = DataBlueprint(pipeline.input_loaders)
+        data_generator = InputInjector(pipeline.input_loaders)
         trainers.append(
             Trainer(pipeline.graph, data_generator, pipeline.loss_fns, session.gradient_clippers)
         )
@@ -123,7 +123,7 @@ def evaluate_pipeline(pipeline, num_batches=10):
 
     graph.eval_mode()
 
-    data_generator = DataBlueprint(pipeline.input_loaders)
+    data_generator = InputInjector(pipeline.input_loaders)
 
     moving_averages = {name: MovingAverage() for name in metrics}
 

@@ -24,8 +24,8 @@ class Stage:
 
 
 class InputLoader:
-    def __init__(self, input_alias, loader_factory, variable_names=None):
-        self.input_alias = input_alias
+    def __init__(self, input_port, loader_factory, variable_names=None):
+        self.input_port = input_port
         self.loader_factory = loader_factory
         self.variable_names = variable_names
 

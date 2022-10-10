@@ -125,12 +125,42 @@ class BatchProcessorLoader(Loader):
 
 class PipelineLoader(Loader):
     def load(self, session, spec, object_name=None):
-        input_loaders = []
-        for d in spec["input_factories"]:
-            kwargs = dict(d)
-            kwargs["loader_factory"] = session.loader_factories[kwargs["loader_factory"]]
-            input_loaders.append(InputLoader(**kwargs))
+        input_loaders = self.parse_input_loaders(session, spec)
 
+        graph = self.parse_graph(session, spec, input_loaders)
+
+        metric_fns = self.parse_metrics(session, spec)
+
+        loss_fns = {}
+        self.parse_loss_functions(session, spec, loss_fns, metric_fns)
+
+        return TrainingPipeline(graph, input_loaders, loss_fns, metric_fns)
+
+    def parse_input_loaders(self, session, spec):
+        input_loaders = []
+        for d in spec["input_injector"]:
+            kwargs = dict(d)
+            kwargs["loader_factory"] = session.data_loaders[kwargs["data_loader"]]
+            del kwargs["data_loader"]
+
+            if "input_port" not in kwargs:
+                input_ports = set()
+                for g in session.batch_graphs.values():
+                    input_ports = input_ports.union(g.batch_input_names)
+
+                if not input_ports:
+                    kwargs["input_port"] = "default_port"
+                elif len(input_ports) == 1:
+                    kwargs["input_port"] = input_ports.pop()
+                else:
+                    raise BadSpecificationError(
+                        f'Cannot build a pipeline. The value for "input_port" missing.'
+                    )
+
+            input_loaders.append(InputLoader(**kwargs))
+        return input_loaders
+
+    def parse_graph(self, session, spec, input_loaders):
         if "graph" not in spec and len(session.batch_graphs) > 1:
             raise BadSpecificationError(
                 f'You must specify which graph to use for the pipeline. '
@@ -143,26 +173,10 @@ class PipelineLoader(Loader):
             graph = self.infer_graph(session, input_loaders)
         else:
             graph = session.batch_graphs[spec["graph"]]
-
-        metric_fns = self.parse_metrics(session, spec)
-
-        loss_fns = {}
-        for loss_spec in spec.get("losses", []):
-            loss_name = loss_spec["loss_name"]
-            node_name = self.get_node_name(session, loss_spec)
-
-            loss_fn = (node_name, session.losses[loss_name])
-            loss_fns[loss_name] = loss_fn
-
-            if 'loss_display_name' in loss_spec:
-                loss_display_name = loss_spec.get('loss_display_name', loss_name)
-                renamed_loss_fn = loss_fn[1].rename_and_clone(loss_display_name)
-                metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
-
-        return TrainingPipeline(graph, input_loaders, loss_fns, metric_fns)
+        return graph
 
     def infer_graph(self, session, input_loaders):
-        input_ports = [loader.input_alias for loader in input_loaders]
+        input_ports = [loader.input_port for loader in input_loaders]
 
         if len(session.batch_processors) > 1 or len(set(input_ports)) != 1:
             raise BadSpecificationError(
@@ -223,6 +237,19 @@ class PipelineLoader(Loader):
             metrics[display_name] = (node_name, metric)
 
         return metrics
+
+    def parse_loss_functions(self, session, spec, loss_fns, metric_fns):
+        for loss_spec in spec.get("losses", []):
+            loss_name = loss_spec["loss_name"]
+            node_name = self.get_node_name(session, loss_spec)
+
+            loss_fn = (node_name, session.losses[loss_name])
+            loss_fns[loss_name] = loss_fn
+
+            if 'loss_display_name' in loss_spec:
+                loss_display_name = loss_spec.get('loss_display_name', loss_name)
+                renamed_loss_fn = loss_fn[1].rename_and_clone(loss_display_name)
+                metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
 
     def get_node_name(self, session, spec):
         options = list(session.batch_processors.keys())

@@ -3,7 +3,7 @@ from torchassistant.utils import instantiate_class
 import torch
 from train import load_config
 from torchassistant.session import SessionSaver
-from torchassistant.data import WrappedDataset, DataBlueprint
+from torchassistant.data import WrappedDataset, InputInjector
 
 
 def parse_input_adapter(config_dict):
@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
     graph = pipeline.graph
     loaders = pipeline.input_loaders
-    data_generator = DataBlueprint(loaders)
+    data_generator = InputInjector(loaders)
 
     inputs_meta = config["inputs_meta"]
 
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
     for s, meta in zip(input_strings, inputs_meta):
         input_adapter = parse_input_adapter(meta)
-        input_alias = meta["input_alias"]
+        input_alias = meta["input_port"]
         new_datasets[input_alias] = WrappedDataset([input_adapter(s)], [])
 
     data_generator.override_datasets(new_datasets)

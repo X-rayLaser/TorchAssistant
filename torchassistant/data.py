@@ -230,18 +230,17 @@ class DatasetSlice(BaseDataset):
         return self.ds.get_preprocessors() if isinstance(self.ds, BaseDataset) else []
 
 
-# todo: consider renaming it (e.g. DataFactory, BatchFactory, TrainingBatchGenerator)
-class DataBlueprint:
+class InputInjector:
     def __init__(self, input_loaders):
         self.input_loaders = input_loaders
 
-        frame_names = [input_loader.input_alias for input_loader in self.input_loaders]
+        frame_names = [input_loader.input_port for input_loader in self.input_loaders]
         self.frame_names = frame_names
         self.batch_loaders = self.refresh_batch_loaders(self.input_loaders)
 
     def override_datasets(self, new_datasets: dict):
         for input_loader in self.input_loaders:
-            dataset = new_datasets[input_loader.input_alias]
+            dataset = new_datasets[input_loader.input_port]
             input_loader.loader_factory.swap_dataset(dataset)
 
         self.batch_loaders = self.refresh_batch_loaders(self.input_loaders)
