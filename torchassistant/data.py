@@ -231,6 +231,21 @@ class DatasetSlice(BaseDataset):
 
 
 class InputInjector:
+    """
+    An object that generates inputs for ProcessingGraph.
+
+    It uses a collection of named data loader factories as a source of data.
+    Upon instantiation, loader factories build actual instances of data loaders decorated so
+    that each data loader yields a data frame (map name->data_collection).
+
+    InputInjector instance yields a dictionary. Each value in the dictionary represents
+    a data frame. Each corresponding key represents an input port specifying which input
+    node of the processing graph the data frame should be fed to.
+
+    On each iteration step, InputInjector gets the next data frame from all data loaders in order.
+    Then, it associates these data frames with their corresponding input ports.
+    Note that the generator becomes exhausted as soon as at least one of data loaders finishes.
+    """
     def __init__(self, input_loaders):
         self.input_loaders = input_loaders
 
