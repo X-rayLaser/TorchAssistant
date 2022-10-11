@@ -16,7 +16,7 @@ if __name__ == '__main__':
         description='Train ML pipeline according to a specified configuration file'
     )
     parser.add_argument('session_path', type=str, help='Path to the session file')
-    parser.add_argument('--ivl', default=1, type=int,
+    parser.add_argument('--ivl', default=100, type=int,
                         help='# of most recent iterations used to compute metrics')
 
     cmd_args = parser.parse_args()

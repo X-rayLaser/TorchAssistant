@@ -4,39 +4,43 @@ import torch
 from train import load_config
 from torchassistant.session import SessionSaver
 from torchassistant.data import WrappedDataset, InputInjector
+from torchassistant.output_devices import Printer
 
 
-def parse_input_adapter(config_dict):
-    adapter_dict = config_dict["input_adapter"]
+class DefaultPostProcessor:
+    def __call__(self, predictions):
+        return predictions
+
+
+def parse_input_converter(config_dict):
+    spec = config_dict["input_converter"]
 
     return instantiate_class(
-        adapter_dict["class"], *adapter_dict.get("args", []), **adapter_dict.get("kwargs", {})
+        spec["class"], *spec.get("args", []), **spec.get("kwargs", {})
     )
 
 
 def parse_post_processor(session, config_dict):
+    if "post_processor" not in config_dict:
+        return DefaultPostProcessor()
+
     post_processor_dict = config_dict["post_processor"]
 
     post_processor_args = [session] + post_processor_dict.get("args", [])
+
     return instantiate_class(post_processor_dict["class"],
                              *post_processor_args,
                              **post_processor_dict.get("kwargs", {}))
 
 
 def parse_output_device(config_dict):
+    if "output_device" not in config_dict:
+        return Printer()
+
     device_dict = config_dict["output_device"]
     return instantiate_class(
         device_dict["class"], *device_dict.get("args", []), **device_dict.get("kwargs", {})
     )
-
-
-def process_input(pipeline, input_adapter, input_string):
-    ds = [input_adapter(input_string)]
-
-    if pipeline.preprocessors:
-        ds = WrappedDataset(ds, pipeline.preprocessors)
-
-    return pipeline.collator.collate_inputs(ds[0])
 
 
 if __name__ == '__main__':
@@ -60,26 +64,27 @@ if __name__ == '__main__':
     pipeline = session.pipelines[config["inference_pipeline"]]
 
     graph = pipeline.graph
-    loaders = pipeline.input_loaders
-    data_generator = InputInjector(loaders)
+    input_injector = InputInjector(pipeline.input_loaders)
 
     inputs_meta = config["inputs_meta"]
 
     new_datasets = {}
 
     for s, meta in zip(input_strings, inputs_meta):
-        input_adapter = parse_input_adapter(meta)
-        input_alias = meta["input_port"]
-        new_datasets[input_alias] = WrappedDataset([input_adapter(s)], [])
+        input_converter = parse_input_converter(meta)
+        input_port = meta.get("input_port")
+        if not input_port:
+            input_port = next(iter(graph.batch_input_names))
+        new_datasets[input_port] = WrappedDataset([input_converter(s)], [])
 
-    data_generator.override_datasets(new_datasets)
+    input_injector.override_datasets(new_datasets)
 
-    graph_inputs = next(iter(data_generator))
+    graph_inputs = next(iter(input_injector))
 
     post_processor = parse_post_processor(session, config)
     output_device = parse_output_device(config)
 
-    outputs_keys = config["results"]
+    outputs_keys = config.get("results", ["y_hat"])
 
     print('Running inference on: ', input_strings)
 

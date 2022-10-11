@@ -13,6 +13,7 @@ def load_config(path):
     return json.loads(s)
 
 
+# todo: support overrides
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Evaluate a model using a specified set of metrics'

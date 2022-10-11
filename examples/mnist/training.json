@@ -137,7 +137,6 @@
     },
     "train": {
         "stages": [{
-            "mode": "interleave",
             "training_pipelines": ["training_pipeline"],
             "validation_pipelines": ["training_pipeline", "evaluation_pipeline"],
             "stop_condition": {

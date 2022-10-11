@@ -1,0 +1,11 @@
+{
+    "session_dir": "pretrained",
+    "inference_pipeline": "evaluation_pipeline",
+    "inputs_meta": [
+        {
+            "input_converter": {
+                "class": "examples.mnist.InputConverter"
+            }
+        }
+    ]
+}
