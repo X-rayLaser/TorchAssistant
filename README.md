@@ -463,9 +463,98 @@ the "spec" should look as follows:
 }
 ```
 
-### splits
+#### splits
 
-As the name suggests, this group is used to define data splits. 
+As the name suggests, "splits" group is used to define data splits to
+randomly split a dataset into multiple slices. 
+Defining a data split is simple. It requires to set 2 fields: 
+"dataset_name" and "ratio". The former specifies the name of previously
+defined dataset, the latter sets relative size of the split slices.
+"ratio" value must be an array of non-negative value that add to 1.
+Suppose, we already defined a dataset named "my_dataset". Then,
+data split definition might look like this:
+```
+{
+    "group": "splits",
+    "name": "my_split",
+    "spec": {
+        "dataset_name": "my_dataset",
+        "ratio": [0.7, 0.2, 0.1]
+    }
+}
+```
+
+This will define a data split where about 70% of examples in "my_dataset"
+will go into training slice, another 20% will make up validation slice,
+and remaining 10% will be allocated to test slice. Now that the split is
+defined, we can refer to its slices using the dot notation:
+- "my_split.train" refers to the first (training) slice
+- "my_split.val" refers to the second (validation) slice
+- "my_split.test" refers to the third (test) slice
+
+Each slice in the data split behaves as a normal dataset. Therefore,
+it is possible to use a slice anywhere where a dataset is expected,
+or decorate slice to build higher-order dataset-wrapper. 
+
+#### preprocessors
+
+Entities defined as having "preprocessors" group are called preprocessors.
+These objects are used to apply transformations to dataset objects.
+Preprocessor is any class inheriting preprocessors.ValuePreprocessor
+class. Here is a valid preprocessor class:
+```
+from preprocessors import ValuePreprocessor
+
+class MyPreprocessor(ValuePreprocessor):
+    def process(self, value):
+        return value / 255
+```
+
+Preprocessor definition looks almost exactly like the one 
+of datasets, except there is an extra optional field "fit".
+Providing a value for this field makes this preprocessor trainable
+(and untrainable otherwise).
+"fit" value has to be the name of the dataset that will be used to train
+the preprocessor on. Here is one possible definition of preprocessor:
+```
+{
+    "group": "preprocessors",
+    "name": "my_preprocessor",
+    "spec": {
+        "class": "my_module.MyPreprocessor",
+        "fit": "my_split.train"
+    }
+}
+```
+
+After specifying 1 or more preprocessors, they can be used to
+create a new dataset by decorating existing ones:
+```
+{
+    "group": "datasets",
+    "name": "transformed_ds",
+    "spec": {
+        "link": "my_split.train",
+        "preprocessors": ["my_preprocessor"]
+    }
+}
+```
+
+Remember that each dataset is supposed to return examples as tuples.
+Then, each preprocessor transforms only one element of the example.
+More precisely, a preprocessor sitting in i-th index in the
+"preprocessors" array transforms i-th element of the tuple. 
+This allows to set a separate preprocessor for every element 
+in the example. For instance, if our dataset returns pairs (x, y), 
+then we can fill "preprocessors" field with ```["p1", "p2"]```
+which will apply preprocessors "p1" and "p2" to the values x and y 
+respectively.
+
+When # of elements in an example is greater than # of preprocessors, 
+redundant elements will be left unchanged. Otherwise, redundant
+preprocessors will be ignored. 
+
+#### collators
 
 "pipelines" defines concrete pipelines which will be used during training. 
 A neat feature of TorchAssistant is that one can construct multiple pipelines 
