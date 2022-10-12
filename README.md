@@ -25,17 +25,58 @@ TorchAssistant to train different kinds of neural networks.
 # Usage
 
 The typical workflow consists of the following steps:
-- run init.py to parse a specification file for the training session 
-and save the session data in a particular directory
-- run train.py to take a training session directory and begins/resumes training
-- run evaluate.py to validate a trained model performance against a 
+- write Python/Pytorch code to implement custom models, datasets, etc.
+- write a specification (a spec) file that configures the training process
+(by defining optimizers, loss functions, metrics and other parameters)
+- run init.py to parse that file and create a training session 
+saved in a chosen directory
+- run train.py to take a training session directory and begin/resume 
+training
+- write another specification file that configures evaluation of models
+- run evaluate.py to validate performance of a trained model against a 
 given set of metrics
+- write yet another specification file configuring inference process
 - run infer.py to manually test the model by feeding it raw input data and
 observing predicted output
 
-Scripts init.py, evaluate.py and infer.py require their own configuration files.
-See specification format section to learn more about the format of these
-files.
+Once you have a training spec file, create a training session by 
+running a command:
+```
+python init.py <path_to_specification_file>
+```
+
+This should create a training session folder in a location specified in
+a spec file.
+
+Start training by running a command (pass a location of the training
+session folder as an argument):
+```
+python train.py <path_to_training_session_folder>
+```
+
+States of all models and optimizers are saved automatically whenever
+another epoch of training ends.
+That means, at any moment you may safely interrupt the script by 
+pressing Ctrl+C. You can then resume training picking up from where 
+you left off (from the last epoch that was interrupted)
+by executing the above command.
+
+To compute metrics on a trained model, run this command:
+```
+python evaluate.py <path_to_evaluation_specification_file>
+```
+
+Finally, to test model predictions on your own data, run the command:
+```
+python infer.py <path_to_inference_specification_file> input1 input2 ... inputn
+```
+First argument is the path to specification file for inference, 
+the rest are variable number of user inputs. Usually, you have to 
+write a converter class for each of those inputs that specifies how to
+turn them into a format consumable by the prediction pipeline.
+
+To learn more about the details of the format of different specification
+files, see the section on specification format below.
 
 # How it works
 
