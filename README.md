@@ -101,7 +101,7 @@ In fact, different set of metrics can be applied to different leaf nodes.
 
 Input injector sends prepared pieces of training batch to the right 
 input nodes of the processing graph. Essentially, it wraps a bunch of 
-torch decorated DataLoader instances to combine their values generated on every 
+decorated torch DataLoader instances to combine their values generated on every 
 iteration step.
 
 Input injector does its work by delegating it to the data loaders.
@@ -148,7 +148,8 @@ processing graphs, datasets, metrics, etc.
 The stage will finish when the stopping condition checked after every epoch
 returns True.
 
-Let's discuss those concepts starting from the lowest level first.
+That was a high level intro. Now let's discuss in detail different 
+entities participating in the training process.
 
 ## Data related entities
 First, let's look at data related entities.
@@ -160,12 +161,15 @@ By giving names to columns of batches, the latter become data frames.
 Finally, input injector groups data frames coming from different datasets 
 and convert them to data frame dicts. We will discuss it later.
 
+### Dataset
 Dataset can be any object that implements a sequence protocol. Concretely, 
 dataset class needs to implement `__len__` and `__getitem__`. Naturally,
-iny built-in dataset class from torchvision package is a valid dataset.
+any built-in dataset class from torchvision package is a valid dataset.
 Moreover, datasets can wrap/decorate other datasets and have 
 associated data transformations/preprocessors.
 
+
+### Data split
 Data split is used to randomly split a given dataset into 2 or more slices.
 One can control relative size of each slice in the split.
 After creation, one can access slices of a given dataset via a dot notation.
@@ -174,11 +178,14 @@ refer to a training slice with ```mnist.train```.
 Each slice is a special kind of dataset. That means, data slice can be used
 anywhere where dataset is needed.
 
+### Preprocessor
 Preprocessor is any object which implements `process(value)` method.
 Implementing an optional method `fit(dataset)` makes a given preprocessor
 learnable. Whether it's learnable or not, once defined, it can be applied
 to a given dataset or a dataset slice.
 
+
+### Collator
 Collator is a callable object which turns a list of tuples (examples) 
 into a tuple of collections (lists, tensors, etc.). It is useful, when
 one needs to apply extra preprocessing on a collection of examples rather than
@@ -187,6 +194,7 @@ datasets often contain sentences with variable length. This makes training
 with batch size > 1 problematic. One possible solution is to 
 pad sentences of a collection of examples in a collator.
 
+### Data frame
 Data frame is dict-like data structure which essentially associates names with
 data collections (lists or tensors). Note that it has nothing to do with 
 entities called data frames in other libraries such as Pandas.
@@ -198,35 +206,42 @@ data_frame = {
 }
 ```
 
+### Data loader
 Data loader represents Pytorch DataLoader class.
 
+### Input injector 
 Input injector is an iterator yielding data frames ready to be injected into 
-a processing graph. Data injector is used on every training iteration to
+a processing graph. Input injector is used on every training iteration to
 provide training examples to learn from and compute loss/metrics.
 It's purpose will become more clear when we look at remaining pieces.
 
-## Entities related for training
+## Entities related to training
 
-Let's go over familiar ones first.
+Let's go over familiar ones first and 
+discuss entities specific to TorchAssistant later.
 
+### Model
 Model is a subclass of torch.nn.Module class.
 
+### Optimizer
 Optimizer is a built-in optimizer class in torch.optim module.
 
+### Loss
 Loss is a built-in loss function class (e.g. CrossEntropyLoss) in torch.nn
 module.
 
+### Metric
 Metric is a built-in class from torchmetrics package.
 
-Now let's look entities specific to TorchAssistant.
-
+### Batch processor
 Batch processor performs a particular computation on its inputs and produces
-some outputs. Typically (but not always), 
+some outputs. Typically, (but not always), 
 it is a graph of nodes where each node is a model (neural network).
 This abstraction allows to create quite sophisticated computational graphs
 where output from one or more neural nets becomes an input to others.
 For example, it is easy to create an encoder-decoder RNN architecture.
 
+### Processing graph
 Processing graph is a higher-level graph whose nodes are batch processors.
 Since each batch processor is itself a graph, processing graph is graph 
 of graphs. Processing graph has special input nodes that are called 
@@ -237,12 +252,14 @@ to the appropriate input ports.
 Processing graphs allow to create even complex training pipelines.
 But in simple cases, they may be omitted.
 
+### Pipeline
 Pipeline is a self-contained specification that describes computational
 graph, source of training data, which losses and metrics to compute.
 In other words, it fully describes a single iteration in a training loop.
 It is easy to create multiple pipelines where different pipelines may
 use different processing graphs, datasets, losses and metrics.
 
+### Training stage
 A (training) stage is a self-contained specification of the entire training
 process. Basically, it specifies which pipeline to use for training and 
 validation and a stopping condition. The latter serves to determine
