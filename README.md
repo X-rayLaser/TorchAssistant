@@ -239,7 +239,7 @@ some outputs. Typically, (but not always),
 it is a graph of nodes where each node is a model (neural network).
 This abstraction allows to create quite sophisticated computational graphs
 where output from one or more neural nets becomes an input to others.
-For example, it is easy to create an encoder-decoder RNN architecture.
+For example, it makes it easy to create an encoder-decoder RNN architecture.
 
 ### Processing graph
 Processing graph is a higher-level graph whose nodes are batch processors.
@@ -253,21 +253,20 @@ Processing graphs allow to create even complex training pipelines.
 But in simple cases, they may be omitted.
 
 ### Pipeline
-Pipeline is a self-contained specification that describes computational
-graph, source of training data, which losses and metrics to compute.
-In other words, it fully describes a single iteration in a training loop.
+Pipeline is a self-contained entity that describes computational
+graph, the source of training data, which losses and metrics to compute.
+In other words, it fully describes a single iteration of a training loop.
 It is easy to create multiple pipelines where different pipelines may
 use different processing graphs, datasets, losses and metrics.
 
 ### Training stage
 A (training) stage is a self-contained specification of the entire training
 process. Basically, it specifies which pipeline to use for training and 
-validation and a stopping condition. The latter serves to determine
+validation as well as a stopping condition. The latter serves to determine
 when the stage is done. The simplest stopping condition just sets the 
-number of epochs for completion.
-It is possible to create multiple stages, each of them with different
+number of epochs before completion.
+It is possible to create multiple stages, each of them having different
 pipelines and stopping conditions.
-
 
 # Specification format
 
@@ -298,7 +297,7 @@ The overall structure of training spec file is as follows:
         "input_factories": [
           {
               "input_alias": "....",
-              "variable_names": ["...", "..."],
+              "variable_names": [...],
               "loader_factory": "..."
           },
           ...
@@ -312,8 +311,8 @@ The overall structure of training spec file is as follows:
     "stages": [
       {
         "mode": "...",
-        "training_pipelines": ["..."],
-        "validation_pipelines": ["...", "..."],
+        "training_pipelines": [...],
+        "validation_pipelines": [...],
         "stop_condition": {
             "class": "...",
         }
@@ -336,22 +335,137 @@ The former defines an individual pieces such as datasets, preprocessing,
 models, optimizers and more. The latter, as the name suggests, defines pipelines
 by combining and referring to pieces in "definitions" block.
 Pipelines are self-contained entities containing all the information necessary
-to form a training loop.
+to run a single training iteration.
 
-Finally, there is "train" block which has only one entry "stages".
+Finally, there is "train" block which has only one entry: "stages".
 "stages" defines a list of stages. Each stage specifies which pipeline 
-to use for training and validation and when to stop.
+to use for training and validation as well as a stopping criterion.
 
-The most important sections of the file are "session_dir", "definitions",
-"pipelines" and "stages".
+We are going to start with "definitions" section.
 
+### Definitions section
 
 "definitions" represents a list of different entities that can be referred to 
 in later sections of the config file (e.g. in "pipelines" or "train" blocks).
 Each definition has the following fields:
-- name (name or id of the entity)
-- group (which group the entity belongs to)
-- spec (specification consisting of a few fields used to create entity)
+- name 
+- group
+- spec
+
+"name" defines a name/id of the entity. It is used as a lookup key
+to find and refer to this entity from other sections of the spec file.
+
+"group" defines a group the entity belongs to. The group also determines
+the type of the entity.
+
+"spec" stores a set of fields actually configuring 
+the entity. In most cases, "spec" describes how to instantiate 
+a particular class. The format of the "spec" section is determined by the 
+"group" field. Different types of entities may have different format 
+of the "spec" section.
+
+The format of "spec" field of every type of entities is shown below.
+
+#### datasets
+
+This group defines and build dataset instances. As a reminder, any
+class implementing methods ```__len__``` and ```__getitem__``` is a valid
+datasets.
+
+In the simplest case, "spec" only requires to fill a mandatory field 
+"class". "class" value has to be a fully-qualified path to
+the Python class relative to the current working directory from which
+init.py script will be executed. For instance, if the current working
+directory contains a Python module ```my_module``` where a dataset class
+MyDataset is defined, then the "spec" should look as follows:
+```
+{
+    "class": "my_module.MyDataset"
+}
+```
+
+If an ```__init__``` method of a
+Python class takes positional or keyword arguments, those have to 
+specified by the "spec". You can pass positional arguments by providing
+them in an array to optional "args" field of "spec":
+```
+"args": ["arg1", "arg2"]
+```
+
+Or you can pass parameters as named keyword arguments 
+by filling an optional field "kwargs":
+```
+"kwargs": {
+    "a": 1,
+    "b": 2
+}
+```
+
+Here is a complete example of a dataset definition:
+```
+{
+    "group": "datasets"
+    "name": "my_dataset",
+    "spec": {
+      "class": "my_module.MyDataset",
+      "args": ["arg1", "arg2"],
+      "kwargs": {
+        "a": 1,
+        "b": 2
+      }
+    }
+}
+```
+
+But that's not all. As was mentioned, we can define a new dataset by
+wrapping (decorating) previously defined one.
+To do so we can use fields "link" and "preprocessors". 
+"link" value should contain a name of the dataset we decorate.
+"preprocessors" value is an array of preprocessor names (to that we
+have to first define each preprocessor). 
+The definition for such a decorated dataset could look like this
+(provided that entities named "my_dataset", "my_preprocessor1", 
+"my_preprocessor2" were already defined):
+```
+{
+    "group": "datasets",
+    "name": "decorated_dataset",
+    "spec": {
+        "link": "my_dataset",
+        "preprocessors": ["my_preprocessor1", "my_preprocessor2"]
+    }
+}
+```
+
+In some cases, parameters that we need to pass to some entity are
+unknown because their values are computed dynamically by 
+previously instantiated entities. In such a case, we need to 
+programmatically configure an entity based on state of 
+previously defined one. In order to accomplish that fill "factory_fn" 
+field instead of "class" field. "factory_fn" value has to be a fully
+qualified path to a factory function that is function that builds and
+returns an object. Upon invocation, this function always receives
+an instance of Session as a first argument. Session object gives
+access to all the entities that were defined before the entity currently
+being created. The rest of the signature can be empty, contain 
+positional or keyword arguments.
+
+Assuming that you have the factory function, 
+```
+def some_factory_fn(session, arg1, a=1):
+```
+the "spec" should look as follows: 
+```
+"spec": {
+    "factory_fn": "my_module.some_factory_fn",
+    "args": ["arg1"]
+    "kwargs": {"a": 1}
+}
+```
+
+### splits
+
+As the name suggests, this group is used to define data splits. 
 
 "pipelines" defines concrete pipelines which will be used during training. 
 A neat feature of TorchAssistant is that one can construct multiple pipelines 
