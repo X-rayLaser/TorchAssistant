@@ -500,7 +500,7 @@ or decorate slice to build higher-order dataset-wrapper.
 
 Entities defined as having "preprocessors" group are called preprocessors.
 These objects are used to apply transformations to dataset objects.
-Preprocessor is any class inheriting preprocessors.ValuePreprocessor
+Preprocessor is any class inheriting from preprocessors.ValuePreprocessor
 class. Here is a valid preprocessor class:
 ```
 from preprocessors import ValuePreprocessor
@@ -555,6 +555,210 @@ redundant elements will be left unchanged. Otherwise, redundant
 preprocessors will be ignored. 
 
 #### collators
+
+Entities defined in "collators" correspond
+to callable objects that can be passed to DataLoader objects
+via "collate_fn" argument. A collator's job is to
+aggregate a collection of individual training examples into a batch.
+Typically, a list of tuples of examples is turned into a tuple of 
+lists/tensors. It is also a good place to perform a batch level 
+preprocessing.
+
+The format of the "spec" field is quite similar to the format of entities in
+"datasets" group. Concretely, it expects a fully-qualified name of a 
+callable class supplied via "class" field.
+Alternatively, "factory_fn" field has to set to a fully-qualified name of
+a factory function that builds the collator. Arguments can be passed as 
+positional via "args" field or as keyword arguments via "kwargs" field.
+Here is one valid collator class:
+```
+class MyCollator:
+    def __call__(self, examples):
+        all_xs = []
+        all_ys = []
+        for x, y in examples:
+            all_xs.append(x)
+            all_ys.append(y)
+        return all_xs, all_ys
+```
+And here is a corresponding definition of the collator in the json file:
+```
+{
+    "group": "collators",
+    "name": "my_collator",
+    "spec": {"class": "my_module.MyCollator"}
+}
+```
+
+#### data_loaders
+
+Entities defined in "data_loaders" group correspond to DataLoader
+objects in torch.utils.data module of PyTorch.
+
+The "spec" format:
+
+| Field name | Is mandatory |  Type  |                      Meaning                      |
+|------------|:------------:|:------:|:-------------------------------------------------:|
+| "dataset"  |     Yes      | String |     Reference to the dataset/data split slice     |
+| "collator" |     Yes      | String |             Reference to the collator             |
+ | "args"     |      No      | Array  | Positional arguments for a DataLoader constructor |
+| "kwargs"   |      No      | Object |  Keyword arguments for a DataLoader constructor   |     
+
+
+The definition requires to provide value for 2 mandatory fields "dataset" and "collator".
+"dataset" value has to be a name of already defined object in "datasets" group.
+Alternatively, the value can be a name of the data split slice.
+Similarly, "collator" value has to be a name of already defined object in "collators" group.
+Optional argument "args" specifies extra arguments for the DataLoader constructor that 
+will be passed as positional arguments.
+Optional argument "Kwargs" specifies extra arguments for the DataLoader constructor that 
+will be passed as keyword arguments.
+
+Example of data loader definition:
+```
+{
+    "group": "data_loaders",
+    "name": "train_loader",
+    "spec": {
+        "dataset": "my_split.train",
+        "collator": "my_collator"
+    }
+}
+```
+
+#### models
+
+Entities defined in "models" group correspond to instances of torch.nn.Module 
+subclass of PyTorch.
+
+The "spec" format:
+
+| Field name   | Is mandatory |  Type  |                               Meaning                                |
+|--------------|:------------:|:------:|:--------------------------------------------------------------------:|
+| "class"      |      No      | String |               Fully-qualified path to the model class                |
+| "factory_fn" |      No      | String | Fully-qualified path to the factory function building model instance |
+ | "args"       |      No      | Array  |    Positional arguments for a model constructor/factory function     |
+| "kwargs"     |      No      | Object |      Keyword arguments for a model constructor/factory function      |
+
+Either "class" or "factory_fn" field has to be filled.
+
+Example of a model definition:
+```
+{
+    "group": "models",
+    "name": "my_model",
+    "spec": {
+        "class": "my_module.MyModel",
+        "kwargs": {
+            "hidden_size": 32
+        }
+    }
+}
+```
+
+#### optimizers
+
+Entities defined in "optimizers" group correspond to optimizers, 
+instances of various optimizer classes in torch.optim module of 
+PyTorch.
+
+The "spec" format:
+
+| Field name       | Is mandatory |  Type  |                      Meaning                      |
+|------------------|:------------:|:------:|:-------------------------------------------------:|
+| "class"          |     Yes      | String |    Name of the optimizer class in torch.optim     |
+| "model"          |     Yes      | String |      Reference to the model to be optimized       |
+ | "args"           |      No      | Array  | Positional arguments for an optimizer constructor |
+| "kwargs"         |      No      | Object |  Keyword arguments for an optimizer constructor   |
+| "lr_scheduler"   |      No      | Object |          Learning rate scheduler options          |
+
+The "lr_scheduler" format:
+
+| Field name  | Is mandatory |  Type  |                      Meaning                       |
+|-------------|:------------:|:------:|:--------------------------------------------------:|
+| "class"     |     Yes      | String |    Fully-qualified path to the scheduler class     |
+ | "args"      |      No      | Array  | Positional arguments for the scheduler constructor |
+| "kwargs"    |      No      | Object |  Keyword arguments for the scheduler constructor   |
+
+Example of definition:
+```
+{
+    "group": "optimizers",
+    "name": "my_optimizer",
+    "spec": {
+        "class": "SGD",
+        "kwargs": {
+            "lr": 0.001,
+            "momentum": 0.9
+        },
+        "model": "my_model"
+    }
+}
+```
+
+#### losses
+
+Entities defined in "losses" group configure loss function.
+
+The "spec" format:
+
+| Field name   | Is mandatory |  Type  |                             Meaning                              |
+|--------------|:------------:|:------:|:----------------------------------------------------------------:|
+| "class"      |     Yes      | String |           Name of the loss function class in torch.nn            |
+| "inputs"     |     Yes      | Array  |   Names of tensors/variables participating in loss calculation   |
+| "transform"  |      No      | String |  Fully-qualified path to the function used to transform inputs   |
+ | "args"       |      No      | Array  |      Positional arguments for the loss function constructor      |
+| "kwargs"     |      No      | Object |       Keyword arguments for the loss function constructor        |
+
+"inputs" allow to select which data from data frame has to participated 
+in the loss computation. Optional "transform" sets a transformation 
+function which will transform given inputs before computing
+the loss.
+
+
+Example of definition:
+```
+{
+    "group": "losses",
+    "name": "cross_entropy",
+    "spec": {
+        "class": "CrossEntropyLoss",
+        "kwargs": {
+            "reduction": "sum"
+        },
+        "inputs": ["y_hat", "y"],
+        "transform": "my_module.transform"
+    }
+}
+```
+
+#### metrics
+
+Entities defined in "metrics" group configure a metric function.
+
+The "spec" format:
+
+| Field name   | Is mandatory |  Type  |                            Meaning                             |
+|--------------|:------------:|:------:|:--------------------------------------------------------------:|
+| "class"      |     Yes      | String |        Name of the metric class in torchmetrics package        |
+| "inputs"     |     Yes      | Array  | Names of tensors/variables participating in metric calculation |
+| "transform"  |      No      | String | Fully-qualified path to the function used to transform inputs  |
+
+The "class" field has to contain the name of the metric class in torchmetrics 
+package.
+
+Example of definition:
+```
+{
+    "group": "metrics",
+    "name": "CER",
+    "spec": {
+        "class": "CharErrorRate",
+        "inputs": ["y_hat", "y"],
+        "transform": "examples.language_translation.transforms.DecodeClassesTransform"
+    }
+}
+```
 
 "pipelines" defines concrete pipelines which will be used during training. 
 A neat feature of TorchAssistant is that one can construct multiple pipelines 
