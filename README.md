@@ -21,7 +21,16 @@ across many projects.
 1. [Examples](#examples)
 2. [Usage](#usage)
 3. [How it works](#how-it-works)
+   * [Data related entities](#data-related-entities)
+   * [Entities related to training](#entities-for-training)
 4. [Specification format](#specification-format)
+   * [Training spec](#training-spec)
+     + [Definitions section](#definitions-section)
+     + [Pipelines section](#pipelines-section)
+     + [Train section](#train-section)
+   * [Evaluation spec](#evaluation-spec)
+   * [Inference spec](#inference-spec)
+5. [License](#license)
 
 <a name="examples"></a>
 # Examples
@@ -160,6 +169,7 @@ returns True.
 That was a high level intro. Now let's discuss in detail different 
 entities participating in the training process.
 
+<a name="data-related-entities"></a>
 ## Data related entities
 First, let's look at data related entities.
 Very briefly, datasets provide individual examples as tuples.
@@ -170,6 +180,7 @@ By giving names to columns of batches, the latter become data frames.
 Finally, input injector groups data frames coming from different datasets 
 and convert them to data frame dicts. We will discuss it later.
 
+<a name="dataset-entity"></a>
 ### Dataset
 Dataset can be any object that implements a sequence protocol. Concretely, 
 dataset class needs to implement `__len__` and `__getitem__`. Naturally,
@@ -177,7 +188,7 @@ any built-in dataset class from torchvision package is a valid dataset.
 Moreover, datasets can wrap/decorate other datasets and have 
 associated data transformations/preprocessors.
 
-
+<a name="data-split-entity"></a>
 ### Data split
 Data split is used to randomly split a given dataset into 2 or more slices.
 One can control relative size of each slice in the split.
@@ -187,13 +198,14 @@ refer to a training slice with ```mnist.train```.
 Each slice is a special kind of dataset. That means, data slice can be used
 anywhere where dataset is needed.
 
+<a name="preprocessor-entity"></a>
 ### Preprocessor
 Preprocessor is any object which implements `process(value)` method.
 Implementing an optional method `fit(dataset)` makes a given preprocessor
 learnable. Whether it's learnable or not, once defined, it can be applied
 to a given dataset or a dataset slice.
 
-
+<a name="collator-entity"></a>
 ### Collator
 Collator is a callable object which turns a list of tuples (examples) 
 into a tuple of collections (lists, tensors, etc.). It is useful, when
@@ -203,6 +215,7 @@ datasets often contain sentences with variable length. This makes training
 with batch size > 1 problematic. One possible solution is to 
 pad sentences of a collection of examples in a collator.
 
+<a name="data-frame-entity"></a>
 ### Data frame
 Data frame is dict-like data structure which essentially associates names with
 data collections (lists or tensors). Note that it has nothing to do with 
@@ -215,33 +228,41 @@ data_frame = {
 }
 ```
 
+<a name="data-loader-entity"></a>
 ### Data loader
 Data loader represents Pytorch DataLoader class.
 
+<a name="input-injector-entity"></a>
 ### Input injector 
 Input injector is an iterator yielding data frames ready to be injected into 
 a processing graph. Input injector is used on every training iteration to
 provide training examples to learn from and compute loss/metrics.
 It's purpose will become more clear when we look at remaining pieces.
 
+<a name="entities-for-training"></a>
 ## Entities related to training
 
 Let's go over familiar ones first and 
 discuss entities specific to TorchAssistant later.
 
+<a name="model-entity"></a>
 ### Model
 Model is a subclass of torch.nn.Module class.
 
+<a name="optimizer-entity"></a>
 ### Optimizer
 Optimizer is a built-in optimizer class in torch.optim module.
 
+<a name="loss-entity"></a>
 ### Loss
 Loss is a built-in loss function class (e.g. CrossEntropyLoss) in torch.nn
 module.
 
+<a name="metric-entity"></a>
 ### Metric
 Metric is a built-in class from torchmetrics package.
 
+<a name="batch-processor-entity"></a>
 ### Batch processor
 Batch processor performs a particular computation on its inputs and produces
 some outputs. Typically, (but not always), 
@@ -250,6 +271,7 @@ This abstraction allows to create quite sophisticated computational graphs
 where output from one or more neural nets becomes an input to others.
 For example, it makes it easy to create an encoder-decoder RNN architecture.
 
+<a name="processing-graph-entity"></a>
 ### Processing graph
 Processing graph is a higher-level graph whose nodes are batch processors.
 Since each batch processor is itself a graph, processing graph is graph 
@@ -261,6 +283,7 @@ to the appropriate input ports.
 Processing graphs allow to create even complex training pipelines.
 But in simple cases, they may be omitted.
 
+<a name="pipeline-entity"></a>
 ### Pipeline
 Pipeline is a self-contained entity that describes computational
 graph, the source of training data, which losses and metrics to compute.
@@ -268,6 +291,7 @@ In other words, it fully describes a single iteration of a training loop.
 It is easy to create multiple pipelines where different pipelines may
 use different processing graphs, datasets, losses and metrics.
 
+<a name="training-stage-entity"></a>
 ### Training stage
 A (training) stage is a self-contained specification of the entire training
 process. Basically, it specifies which pipeline to use for training and 
@@ -286,6 +310,7 @@ For every task there needs to be a separate json file.
 You will want to create at least 2 specs: 1 for training and the
 other for inference.
 
+<a name="training-spec"></a>
 ## Training spec
 
 The overall structure of training spec file is as follows:
@@ -353,6 +378,7 @@ to use for training and validation as well as a stopping criterion.
 
 We are going to start with "definitions" section.
 
+<a name="definitions-section"></a>
 ### Definitions section
 
 "definitions" represents a list of different entities that can be referred to 
@@ -376,6 +402,7 @@ of the "spec" section.
 
 The format of "spec" field of every type of entities is shown below.
 
+<a name="datasets-definition"></a>
 #### datasets
 
 This group defines and build dataset instances. As a reminder, any
@@ -484,6 +511,7 @@ the "spec" should look as follows:
 }
 ```
 
+<a name="splits-definition"></a>
 #### splits
 
 As the name suggests, "splits" group is used to define data splits to
@@ -525,6 +553,8 @@ Each slice in the data split behaves as a normal dataset. Therefore,
 it is possible to use a slice anywhere where a dataset is expected,
 or decorate slice to build higher-order dataset-wrapper. 
 
+
+<a name="preprocessors-definition"></a>
 #### preprocessors
 
 Entities defined as having "preprocessors" group are called preprocessors.
@@ -594,6 +624,7 @@ When # of elements in an example is greater than # of preprocessors,
 redundant elements will be left unchanged. Otherwise, redundant
 preprocessors will be ignored. 
 
+<a name="collators-definition"></a>
 #### collators
 
 Entities defined in "collators" correspond
@@ -639,6 +670,7 @@ And here is a corresponding definition of the collator in the json file:
 }
 ```
 
+<a name="data-loaders-definition"></a>
 #### data_loaders
 
 Entities defined in "data_loaders" group correspond to DataLoader
@@ -675,6 +707,7 @@ Example of data loader definition:
 }
 ```
 
+<a name="models-definition"></a>
 #### models
 
 Entities defined in "models" group correspond to instances of torch.nn.Module 
@@ -705,6 +738,7 @@ Example of a model definition:
 }
 ```
 
+<a name="optimizers-definition"></a>
 #### optimizers
 
 Entities defined in "optimizers" group correspond to optimizers, 
@@ -745,6 +779,7 @@ Example of definition:
 }
 ```
 
+<a name="losses-definition"></a>
 #### losses
 
 Entities defined in "losses" group configure loss function.
@@ -781,6 +816,7 @@ Example of definition:
 }
 ```
 
+<a name="metrics-definition"></a>
 #### metrics
 
 Entities defined in "metrics" group configure a metric function.
@@ -809,12 +845,18 @@ Example of definition:
 }
 ```
 
+<a name="batch-processors-definition"></a>
 #### batch_processors
+
+<a name="pipelines-section></a>
+### Pipelines section
 
 "pipelines" defines concrete pipelines which will be used during training. 
 A neat feature of TorchAssistant is that one can construct multiple pipelines 
 sharing the same model(s) and interleave those pipelines during training.
 
+<a name="train-section></a>
+### Train section
 Finally, there is "stages" entry.
 It allows to create highly flexible multi-stage training setup where
 different stages may use different pipelines.
@@ -915,6 +957,13 @@ Now we can initiate a new training session by issuing a command
 python init.py my_examples/mnist/training.json
 ```
 
+<a name="evaluation spec"></a>
+## Evaluation spec
+
+<a name="inference spec"></a>
+## Inference spec
+
+<a name="license"></a>
 # License
 
 This project is licensed under MIT license.
