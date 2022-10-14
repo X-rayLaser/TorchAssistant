@@ -848,14 +848,14 @@ Example of definition:
 <a name="batch-processors-definition"></a>
 #### batch_processors
 
-<a name="pipelines-section></a>
+<a name="pipelines-section"></a>
 ### Pipelines section
 
 "pipelines" defines concrete pipelines which will be used during training. 
 A neat feature of TorchAssistant is that one can construct multiple pipelines 
 sharing the same model(s) and interleave those pipelines during training.
 
-<a name="train-section></a>
+<a name="train-section"></a>
 ### Train section
 Finally, there is "stages" entry.
 It allows to create highly flexible multi-stage training setup where
