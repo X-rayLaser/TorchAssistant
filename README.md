@@ -17,11 +17,19 @@ across many projects.
 - highly flexibility and customizable
 - support for building complex training pipelines
 
+# Table of Contents
+1. [Examples](#examples)
+2. [Usage](#usage)
+3. [How it works](#how-it-works)
+4. [Specification format](#specification-format)
+
+<a name="examples"></a>
 # Examples
 
 Examples directory contains projects that demonstrate how to use
 TorchAssistant to train different kinds of neural networks.
 
+<a name="usage"></a>
 # Usage
 
 The typical workflow consists of the following steps:
@@ -78,6 +86,7 @@ turn them into a format consumable by the prediction pipeline.
 To learn more about the details of the format of different specification
 files, see the section on specification format below.
 
+<a name="how-it-works"></a>
 # How it works
 
 Before getting to details of specification format, it is useful to 
@@ -268,6 +277,7 @@ number of epochs before completion.
 It is possible to create multiple stages, each of them having different
 pipelines and stopping conditions.
 
+<a name="specification-format"></a>
 # Specification format
 
 Specification (or spec) file is an ordinary json file that is used by the framework
@@ -372,6 +382,17 @@ This group defines and build dataset instances. As a reminder, any
 class implementing methods ```__len__``` and ```__getitem__``` is a valid
 datasets.
 
+The "spec" format:
+
+| Field name       | Is mandatory |  Type  |                       Meaning                        |
+|------------------|:------------:|:------:|:----------------------------------------------------:|
+| "class"          |      No      | String |      Fully-qualified path to the dataset class       |
+| "factory_fn"     |      No      | String | Fully-qualified path to the dataset factory function |
+ | "args"           |      No      | Array  |    Positional arguments for a dataset constructor    |
+| "kwargs"         |      No      | Object |     Keyword arguments for a dataset constructor      |
+| "link"           |      No      | String |  A reference to a dataset or a slice of data split   |
+| "preprocessors"  |      No      | Array  |       An array of references to preprocessors        |
+
 In the simplest case, "spec" only requires to fill a mandatory field 
 "class". "class" value has to be a fully-qualified path to
 the Python class relative to the current working directory from which
@@ -466,7 +487,15 @@ the "spec" should look as follows:
 #### splits
 
 As the name suggests, "splits" group is used to define data splits to
-randomly split a dataset into multiple slices. 
+randomly split a dataset into multiple slices.
+
+The "spec" format:
+
+| Field name     | Is mandatory |  Type  |               Meaning                |
+|----------------|:------------:|:------:|:------------------------------------:|
+| "dataset_name" |     Yes      | String |  A reference to dataset definition   |
+| "ratio"        |     Yes      | String | An array of relative sizes of slices |
+
 Defining a data split is simple. It requires to set 2 fields: 
 "dataset_name" and "ratio". The former specifies the name of previously
 defined dataset, the latter sets relative size of the split slices.
@@ -500,6 +529,17 @@ or decorate slice to build higher-order dataset-wrapper.
 
 Entities defined as having "preprocessors" group are called preprocessors.
 These objects are used to apply transformations to dataset objects.
+
+The "spec" format:
+
+| Field name     | Is mandatory |  Type  |                          Meaning                          |
+|----------------|:------------:|:------:|:---------------------------------------------------------:|
+| "class"        |      No      | String |      Fully-qualified path to the preprocessor class       |
+| "factory_fn"   |      No      | String | Fully-qualified path to the preprocessor factory function |
+ | "args"         |      No      | Array  |    Positional arguments for a preprocessor constructor    |
+| "kwargs"       |      No      | Object |     Keyword arguments for a preprocessor constructor      |
+| "fit"          |      No      | String |     A reference to a dataset or a slice of data split     |
+
 Preprocessor is any class inheriting from preprocessors.ValuePreprocessor
 class. Here is a valid preprocessor class:
 ```
@@ -563,6 +603,15 @@ aggregate a collection of individual training examples into a batch.
 Typically, a list of tuples of examples is turned into a tuple of 
 lists/tensors. It is also a good place to perform a batch level 
 preprocessing.
+
+The "spec" format:
+
+| Field name     | Is mandatory |  Type  |                        Meaning                         |
+|----------------|:------------:|:------:|:------------------------------------------------------:|
+| "class"        |      No      | String |       Fully-qualified path to the collator class       |
+| "factory_fn"   |      No      | String | Fully-qualified path to the collator factory function  |
+ | "args"         |      No      | Array  |    Positional arguments for a collator constructor     |
+| "kwargs"       |      No      | Object |      Keyword arguments for a collator constructor      | 
 
 The format of the "spec" field is quite similar to the format of entities in
 "datasets" group. Concretely, it expects a fully-qualified name of a 
@@ -759,6 +808,8 @@ Example of definition:
     }
 }
 ```
+
+#### batch_processors
 
 "pipelines" defines concrete pipelines which will be used during training. 
 A neat feature of TorchAssistant is that one can construct multiple pipelines 
