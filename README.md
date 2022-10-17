@@ -271,17 +271,63 @@ This abstraction allows to create quite sophisticated computational graphs
 where output from one or more neural nets becomes an input to others.
 For example, it makes it easy to create an encoder-decoder RNN architecture.
 
+To specify a batch processor, we need to specify "input_adapter" and 
+"neural_graph". We may also optionally specify "output_adapter" and 
+"device" (CPU or CUDA).
+
+Batch processor takes a data frame (name->tensor mapping) of inputs and
+produces a data frame of outputs.
+Normally, input data frame will contain all the information needed to extract 
+input tensors
+expected by corresponding nodes (neural networks). Inputs extraction is done by
+input adapter. Input adapter takes a dataframe and constructs 
+from it input tensors for every node in the batch processor.
+Output adapter can do some extra processing on the resulting data frame,
+add or exclude some tensors to/from it.
+
+The graph topology is defined by providing an ordered list of nodes such 
+that dependent node should be listed after the node(s) it depends on. To 
+specify each node, we need to provide:
+- a name of a neural network defined earlier,
+- names of input tensors used as inputs to the network
+- names of output tensors predicted by the network
+- a name of an optimizer defined earlier
+
+A node may have both multiple inputs and multiple outputs.
+When a neural network of the corresponding node produces a tuple of tensors,
+each of these tensors gets a name as specified by an array of 
+output tensor names in the node config. 
+
+Forward pass through the graph respects dependency. That is,
+each node runs computation only after all nodes it depends on finished 
+computation. Outputs from previous nodes can become inputs to the 
+dependent ones. Some nodes can receive inputs directly from a data frame,
+other nodes use outputs from previous nodes as their inputs. It is also
+possible to form inputs by combining tensors from a data frame and 
+tensors from outputs computed by earlier nodes.
+
+When a particular node finishes, it's outputs are added to the
+dictionary of results (for example, if node defines its outputs as 
+out1, out2, out3, the results dictionary will contain tensors for each 
+of these output names).
+When leaf nodes finish, we are done and forward pass through the whole batch 
+processor object completes. All computation results are aggregated and saved 
+in a dictionary (that includes computations on intermediate nodes too).
+
 <a name="processing-graph-entity"></a>
 ### Processing graph
 Processing graph is a higher-level graph whose nodes are batch processors.
 Since each batch processor is itself a graph, processing graph is graph 
-of graphs. Processing graph has special input nodes that are called 
-input ports. Each port has a name. In order to run a computation on this graph,
-one needs to send a dictionary that maps port names to corresponding data frames.
-Input injector is the entity that generates inputs and sends them
+of graphs. Processing graphs allow to create even more complex 
+training pipelines. But in simple cases, they may be omitted.
+
+A processing graph consists of 2 types of nodes/vertices:
+computational nodes (batch processors) and input ports.
+Input ports serve as entry points supplying input tensors to
+the graph to carry out a computation. Each port has a name. Before 
+running a computation, each input port binds with a concrete batch of data. 
+Input injector is the entity that generates inputs and sends them 
 to the appropriate input ports.
-Processing graphs allow to create even complex training pipelines.
-But in simple cases, they may be omitted.
 
 <a name="pipeline-entity"></a>
 ### Pipeline
@@ -419,6 +465,8 @@ The "spec" format:
 | "kwargs"         |      No      | Object |     Keyword arguments for a dataset constructor      |
 | "link"           |      No      | String |  A reference to a dataset or a slice of data split   |
 | "preprocessors"  |      No      | Array  |       An array of references to preprocessors        |
+
+**Note:** Either "class" or "factory_fn" must be provided, but not both.
 
 In the simplest case, "spec" only requires to fill a mandatory field 
 "class". "class" value has to be a fully-qualified path to
@@ -570,6 +618,8 @@ The "spec" format:
 | "kwargs"       |      No      | Object |     Keyword arguments for a preprocessor constructor      |
 | "fit"          |      No      | String |     A reference to a dataset or a slice of data split     |
 
+**Note:** Either "class" or "factory_fn" must be provided, but not both.
+
 Preprocessor is any class inheriting from preprocessors.ValuePreprocessor
 class. Here is a valid preprocessor class:
 ```
@@ -643,6 +693,8 @@ The "spec" format:
 | "factory_fn"   |      No      | String | Fully-qualified path to the collator factory function  |
  | "args"         |      No      | Array  |    Positional arguments for a collator constructor     |
 | "kwargs"       |      No      | Object |      Keyword arguments for a collator constructor      | 
+
+**Note:** Either "class" or "factory_fn" must be provided, but not both.
 
 The format of the "spec" field is quite similar to the format of entities in
 "datasets" group. Concretely, it expects a fully-qualified name of a 
@@ -722,7 +774,7 @@ The "spec" format:
  | "args"       |      No      | Array  |    Positional arguments for a model constructor/factory function     |
 | "kwargs"     |      No      | Object |      Keyword arguments for a model constructor/factory function      |
 
-Either "class" or "factory_fn" field has to be filled.
+**Note:** Either "class" or "factory_fn" must be provided, but not both.
 
 Example of a model definition:
 ```
@@ -847,6 +899,191 @@ Example of definition:
 
 <a name="batch-processors-definition"></a>
 #### batch_processors
+Entities defined in "metrics" group correspond to batch processor objects.
+
+The "spec" format:
+
+| Field name       | Is mandatory |  Type  |                            Meaning                            |
+|------------------|:------------:|:------:|:-------------------------------------------------------------:|
+| "input_adapter"  |      No      | Object |       Name of the metric class in torchmetrics package        |
+| "neural_graph"   |     Yes      | Array  |     Batch processor nodes (defined as javascript objects)     |
+| "output_adapter" |      No      | Object | Fully-qualified path to the function used to transform inputs |
+| "device"         |      No      | String | Specifies which device to use for computation ("cpu", "cuda") |
+
+"input_adapter" format:
+
+| Field name   | Is mandatory |  Type  |                       Meaning                        |
+|--------------|:------------:|:------:|:----------------------------------------------------:|
+| "class"      |      No      | String |      Fully-qualified path to the adapter class       |
+| "factory_fn" |      No      | String | Fully-qualified path to the adapter factory function |
+ | "args"       |      No      | Array  |   Positional arguments for the adapter constructor   |
+| "kwargs"     |      No      | Object |    Keyword arguments for the adapter constructor     |
+
+**Note:** Either "class" or "factory_fn" must be provided, but not both.
+
+Format of every batch processor node:
+
+| Field name       | Is mandatory |  Type  |                   Meaning                    |
+|------------------|:------------:|:------:|:--------------------------------------------:|
+| "model_name"     |     Yes      | String |      A reference to a model definition       |
+| "inputs"         |     Yes      | Array  | Names of input tensors expected by the node  |
+ | "outputs"        |     Yes      | Array  | Names of output tensors produced by the node |
+| "optimizer_name" |      No      | String | A reference to an optimizer used by the node |
+
+**Note:** Each output name gets paired with a corresponding item of the tuple
+returned from the node/neural network.
+
+**Note:** Omitting "optimizer_name" field has an effect of making the node 
+untrainable.
+
+**Note:** "outputs" length has to equal to the # of tensors returned by a
+neural network corresponding to the node (for instance, if a forward method of 
+the neural net returns a tuple (y_hat1, y_hat2), then "outputs" could be an
+array ```["y1", "y2"]```).
+
+"output_adapter" format:
+
+| Field name   | Is mandatory |  Type  |                       Meaning                        |
+|--------------|:------------:|:------:|:----------------------------------------------------:|
+| "class"      |      No      | String |      Fully-qualified path to the adapter class       |
+| "factory_fn" |      No      | String | Fully-qualified path to the adapter factory function |
+ | "args"       |      No      | Array  |   Positional arguments for the adapter constructor   |
+| "kwargs"     |      No      | Object |    Keyword arguments for the adapter constructor     |
+
+**Note:** Either "class" or "factory_fn" must be provided, but not both.
+
+"input_adapter" field specifies an input adapter object. Its purpose is
+to connect different pieces of data in a data frame with the right nodes in
+the neural graph. Input adapter is a callable which turns a data frame into a
+nested dictionary where each key matches the name of corresponding 
+node in the neural graph and each value represents a data frame. 
+Each data frame contains names of input tensors expected by the node and 
+their actual values. Input adapter has to provide all inputs to each
+node that expects them.
+
+Here is an example of some input adapter class:
+```
+class InputAdapter:
+    def __call__(self, data_frame):
+        return {
+            "model1": {
+                "input1": data_frame["x1"],
+                "input2": data_frame["x2"],
+                "input3": data_frame["x3"]
+            },
+            "model2: {
+                "input4": data_frame["x2"]
+            }
+        }
+```
+
+"neural_graph" field specifies a neural graph object as an array of nodes.
+During training, each node will become an instance of nn.Module subclass
+that you defined.
+
+"output_adapter" is an optional field that specifies an output adapter object.
+Output adapters can be used to do some postprocessing, remove or add
+entries to the resulting data frame object.
+On a level of implementation, it is a callable object that converts one
+data frame into the other. Here is an example of an output adapter class:
+
+By default, the framework will use built-in IdentityAdapter class
+in the torchassistant.output_adapters module
+that does nothing and returns a data frame without modification.
+Here is its implementation:
+```
+class IdentityAdapter(OutputAdapter):
+    def __call__(self, all_outputs):
+        return all_outputs
+```
+
+In practice, it can be useful to have an adapter that simply selects a few
+tensors to retain and discards everything else in a data frame.
+TorchAssistant has a built-in class that does just that: SelectVariables
+class of the torchassistant.output_adapters module. Here is its 
+implementation:
+```
+class SelectVariables(OutputAdapter):
+    def __init__(self, variable_names):
+        self.variable_names = variable_names
+
+    def __call__(self, all_outputs):
+        return {var_name: all_outputs[var_name] for var_name in self.variable_names}
+```
+
+Example of batch processor:
+```
+{
+    "group": "batch_processors",
+    "name": "neural_translator",
+    "spec": {
+        "input_adapter": {
+            "class": "examples.language_translation.adapters.BatchAdapter",
+            "kwargs": {
+                "hidden_size": 32
+            }
+        },
+        "neural_graph": [
+            {
+                "model_name": "encoder_model",
+                "inputs": ["x", "h"],
+                "outputs": ["outputs", "h_e"],
+                "optimizer_name": "encoder_optimizer"
+            },
+            {
+                "model_name": "decoder_model",
+                "inputs": ["y_shifted", "h_e"],
+                "outputs": ["y_hat", "h_d"],
+                "optimizer_name": "decoder_optimizer"
+            }
+        ],
+        "output_adapter": {
+            "class": "examples.language_translation.adapters.OutputAdapter"
+        },
+        "device": "cpu"
+    }
+}
+```
+
+#### batch_graphs
+
+Entities defined in "batch_graphs" group correspond to batch processing graphs.
+
+The format:
+
+| Field name      | Is mandatory |  Type  |                           Meaning                            |
+|-----------------|:------------:|:------:|:------------------------------------------------------------:|
+| "nodes"         |     Yes      | Array  |  Graph vertices as array of references to batch processors   |
+| "input_ports"   |     Yes      | Array  |     Additional vertices representing inputs to the graph     |
+ | "ingoing_edges" |     Yes      | Object |                    Edges between vertices                    |
+
+Each element of "nodes" array has to be a name of the batch processor
+defined earlier. Elements of "input_ports" array are names of input ports
+that will supply data to the graph. "ingoing_edges" maps
+a node to all other node in the graph pointing to it (as the name suggests).
+Concretely, each key/property must be the name of node in the graph. 
+Each value must be an array of names of vertices (or input ports) in 
+the graph that point to this node. For example, the following entry
+specifies 2 edges, node1->multiplier and node2->multiplier:
+```"multiplier": ["node1", "node2"]```
+
+Here is an example of a processing graph:
+```
+{
+    "group": "batch_graphs",
+    "name": "batch_processing_graph",
+    "spec": {
+        "nodes": ["fakes_generator", "detach_fakes", "discriminator", "trainable_discriminator"],
+        "input_ports": ["noise", "real_images"],
+        "ingoing_edges": {
+            "discriminator": ["fakes_generator"],
+            "trainable_discriminator": ["detach_fakes", "real_images"],
+            "detach_fakes": ["fakes_generator"],
+            "fakes_generator": ["noise"]
+        }
+    }
+}
+```
 
 <a name="pipelines-section"></a>
 ### Pipelines section
@@ -854,107 +1091,121 @@ Example of definition:
 "pipelines" defines concrete pipelines which will be used during training. 
 A neat feature of TorchAssistant is that one can construct multiple pipelines 
 sharing the same model(s) and interleave those pipelines during training.
+This section is a mapping that maps a name of the pipeline to the
+pipeline definition. One can create as many pipelines as necessary, 
+however, each pipeline has to have a unique name.
 
-<a name="train-section"></a>
-### Train section
-Finally, there is "stages" entry.
-It allows to create highly flexible multi-stage training setup where
-different stages may use different pipelines.
-Each stage needs to specify training pipeline, evaluation pipeline and 
-stopping condition.
+Pipeline format:
 
-### Batch processor
-The next definition looks mysterious.
-It defines a so-called batch processor object.
-Essentially, it is a network of nodes where each node is a neural net. In other words,
-batch processor is a network of neural nets. In our simple example, there is only one neural net.
-But in more complex scenarios there may be a graph where each node may depend on a number of
-other nodes and/or have many output tensors.
+| Field name       | Is mandatory |  Type   |                            Meaning                             |
+|------------------|:------------:|:-------:|:--------------------------------------------------------------:|
+| "graph"          |      No      | String  |                A reference to graph definition                 |
+| "input_injector" |     Yes      |  Array  | Configures which data to send to which input port of the graph |
+ | "losses"         |      No      |  Array  |           Configures which loss functions to compute           |
+| "metrics"        |      No      |  Array  |              Configures which metrics to compute               |
 
-To specify a batch processor, we need to specify "input_adapter" and 
-"neural_graph". We may also optionally specify "output_adapter" and 
-"device" (CPU or CUDA).
+Each element of "input_injector" array is a javascript object with following format:
 
-Batch processor is passed inputs as a name->tensor mapping (or a data frame).
-Normally, this dataframe will contain all the information needed to extract 
-input tensors
-expected by corresponding nodes (neural networks). Input adapter does this job.
-It takes a dataframe and constructs from it input tensors for every neural network in the batch
-processor.
+| Field name         | Is mandatory |  Type   |                     Meaning                      |
+|--------------------|:------------:|:-------:|:------------------------------------------------:|
+| "input_port"       |      No      | String  |  An input port of the graph to bind batches to   |
+| "variable_names"   |      No      |  Array  | Names of tuple items yielded by the data loader  |
+ | "data_loader"      |     Yes      | String  |    A reference to the data loader definition     |
 
-The graph topology is defined by providing an ordered list of nodes such 
-that dependent node should be listed after the node(s) it depends on. To 
-specify each node, we need to provide:
-- a name of a neural network defined earlier,
-- a list of names of tensors used as inputs to the network
-- a list of names of tensors predicted by the network
-- a name of an optimizer defined earlier
-
-Forward pass through the graph respects dependency. That is,
-each node runs computation only after all nodes it depends on finished 
-computation. Outputs from previous node become inputs to the dependent ones.
-When a particular node finishes, it's outputs are added to the
-dictionary of results (for example, if node defines its outputs as 
-out1, out2, out3, the results dictionary will contain tensors for each 
-of these output names).
-When leaf nodes finish, we are done and forward pass through the whole batch 
-processor object completes. All computation results are aggregated and saved 
-in a dictionary (that includes computations on intermediate nodes too).
-
-Here is how the definition of batch processor looks like for our example:
-```
-            {
-                "group": "batch_processors",
-                "name": "LeNet_processor",
-                "spec": {
-                    "input_adapter": {
-                        "class": "my_examples.mnist.InputAdapter"
-                    },
-                    "neural_graph": [
-                        {
-                            "model_name": "LeNet5",
-                            "inputs": ["x"],
-                            "outputs": ["y_hat"],
-                            "optimizer_name": "optimizer"
-                        }
-                    ],
-                    "device": "cpu"
-                }
-            },
-```
-
-We use InputAdapter class that we implemented earlier as input adapter.
-As a reminder, this is how it is implemented:
-```
-class InputAdapter:
-    def __call__(self, dataframe: dict) -> dict:
-        images = dataframe["images"]
-        to_tensor = ToTensor()
-        return {
-            "LeNet5": {
-                "x": torch.stack([to_tensor(image) for image in images]) / 255.
-            }
-        }
-```
-
-InputAdapter class has to return a nested dictionary. It should be a mapping
-from a name of node to a dataframe containing named input tensors
-expected by this node. Our network consists of just one node which is neural
-network with named "LeNet5". It takes only one tensor named "x" and
-outputs a single tensor named "y_hat". Therefore, we need to return a nested
-dictionary of the form
+"data_loader" specifies which DataLoader instance to use
+to inject data into a specified input port of a given graph.
+"input_port" sets which input port of the graph should a batch be sent to.
+"variable_names" associates names with a tuple yielded by
+the data loader. # of names in "variable_names" field has to match the 
+size of the tuple. For example, suppose that a data loader yields 3 tensors as
+a tuple (x1, x2, x3) and "variable_names" is set to ["input_1", "input_2", "input_3"].
+Then, the data loader is decorated such that it yields data frames:
 ```
 {
-    "LeNet5: {
-        "x": ...
-    }
+    "input_1": x1,
+    "input_2": x2,
+    "input_3": x3
 }
 ```
 
-Now we can initiate a new training session by issuing a command
 
+Each element of "losses" array is a javascript object with following format:
+
+| Field name          | Is mandatory |  Type  |                  Meaning                  |
+|---------------------|:------------:|:------:|:-----------------------------------------:|
+| "node_name"         |      No      | String |  A name of node in the processing graph   |
+| "loss_name"         |     Yes      | String | A reference to a loss function definition |
+ | "loss_display_name" |      No      | String |       A displayed name of the loss        |
+
+Each element of "metrics" array is a javascript object with following format:
+
+| Field name      | Is mandatory |  Type  |                   Meaning                   |
+|-----------------|:------------:|:------:|:-------------------------------------------:|
+| "node_name"     |      No      | String |   A name of node in the processing graph    |
+| "metric_name"   |     Yes      | String | A reference to a metric function definition |
+ | "display_name"  |      No      | String |       A displayed name of the metric        |
+
+Each loss object defines 3 things:
+- "node_name" sets which node in the processing graph to use to compute loss
+(by default, it is set to "input_batch")
+- "loss_name" sets a loss function to apply
+- "loss_display_name" configures how computed loss will be displayed 
+when showing loss/metrics (by default, it is equal to the value of "loss_name")
+
+Each metrics object has very similar semantics. 
+
+<a name="train-section"></a>
+### Train section
+Finally, there is "stages" entry that defines training stages.
+Stages allow to create highly flexible multi-stage training setup where
+different stages may use different pipelines.
+
+"stages" is an array of objects each of them having the following format:
+
+| Field name             | Is mandatory |  Type  |                      Meaning                      |
+|------------------------|:------------:|:------:|:-------------------------------------------------:|
+| "mode"                 |      No      | String |          Must take a value "interleave"           |
+| "training_pipelines"   |     Yes      | Array  |            Pipelines used for training            |
+ | "validation_pipelines" |      No      | Array  |       Pipelines used for metrics evaluation       |
+| "debug_pipelines"      |      No      | Array  |       Pipelines used for debugging purposes       |
+| "stop_condition"       |     Yes      | Object | A callable object serving as a stopping condition |
+
+"stop_condition" format:
+
+| Field name  | Is mandatory |  Type  |                        Meaning                        |
+|-------------|:------------:|:------:|:-----------------------------------------------------:|
+| "class"     |      No      | String |   Fully-qualified path to the stop condition class    |
+ | "args"      |      No      | Array  | Positional arguments for a stop condition constructor |
+| "kwargs"    |      No      | Object |  Keyword arguments for a stop condition constructor   |
+
+"mode" determines the strategy of combining multiple training pipelines.
+Currently, the only option is "interleave". Using this strategy, 
+TorchAssistant will run multiple training pipelines concurrently.
+That is, it will train for 1 iteration using first pipeline,
+then it will train for 1 iteration using second pipeline and so on.
+Each pipeline is linked with their own input injector, which
+means all input injectors too will be iterated over concurrently.
+
+Pipelines listed in "validation_pipelines" and "debug_pipelines" 
+will be executed in a given order after every training epoch.
+The resulting set of metrics computed by each of validation
+pipeline is combined into a single set before displaying them.
+
+A stop condition is called after ending every epoch.
+Stop condition is a callable which takes 2 arguments: 
+current epoch number and metrics history. It has to return
+True or False. If it returns True, the training stage will be ended
+and a next stage (if such exists) will begin. Otherwise, the current
+stage will continue.
+
+Example of a stop condition implementation:
 ```
-python init.py my_examples/mnist/training.json
+class EpochsCompleted:
+    def __init__(self, num_epochs):
+        self.num_epochs = num_epochs
+
+    def __call__(self, epoch, history):
+        return epoch >= self.num_epochs
 ```
 
 <a name="evaluation spec"></a>

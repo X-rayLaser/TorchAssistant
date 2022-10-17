@@ -107,7 +107,7 @@ class BatchProcessorLoader(Loader):
             model_name = node_dict['model_name']
             inputs = node_dict['inputs']
             outputs = node_dict['outputs']
-            optimizer_name = node_dict['optimizer_name']
+            optimizer_name = node_dict.get('optimizer_name', '')
 
             NodeSpec = namedtuple('NodeSpec', ['model_name', 'inputs', 'outputs', 'optimizer_name'])
             node_spec = NodeSpec(model_name, inputs, outputs, optimizer_name)
@@ -231,7 +231,7 @@ class PipelineLoader(Loader):
         metrics = {}
         for spec in pipeline_spec.get("metrics", []):
             name = spec["metric_name"]
-            display_name = spec["display_name"]
+            display_name = spec.get("display_name", name)
             node_name = self.get_node_name(session, spec)
             metric = session.metrics[name].rename_and_clone(display_name)
             metrics[display_name] = (node_name, metric)
