@@ -117,13 +117,15 @@ def prepare_trainers(session, pipelines):
     return trainers
 
 
-def evaluate_pipeline(pipeline, num_batches=10):
+def evaluate_pipeline(pipeline, num_batches=None):
     graph = pipeline.graph
     metrics = pipeline.metric_fns
 
     graph.eval_mode()
 
     data_generator = InputInjector(pipeline.input_loaders)
+
+    num_batches = num_batches or max(10, len(data_generator) // 10)
 
     moving_averages = {name: MovingAverage() for name in metrics}
 
@@ -217,7 +219,3 @@ class Trainer:
             losses[node_name] = loss
 
         return losses, results
-
-
-# todo: consider to redesign this whole module using simple notification system
-# todo: extend this approach to processing_graph module

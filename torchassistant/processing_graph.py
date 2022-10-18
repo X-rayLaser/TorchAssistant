@@ -67,7 +67,6 @@ class NeuralBatchProcessor(BatchProcessor):
         :return: results of processing
         :rtype: data_frame
         """
-        # todo: rename batch to data_frame
         try:
             inputs = self.input_adapter(data_frame)
         except Exception as e:

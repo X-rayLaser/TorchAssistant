@@ -22,12 +22,9 @@ if __name__ == '__main__':
     path = cmd_args.config
 
     config_dict = load_config(path)
-    #session_config = ConfigParser(config_dict).get_config()
 
-    # todo: take this from session_config
     session_dir = config_dict["session_dir"]
 
-    # todo: consider to move this code inside session object
     if os.path.exists(session_dir):
         print(f"Session already exists under {session_dir}")
     else:

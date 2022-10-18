@@ -30,16 +30,3 @@ if __name__ == '__main__':
 
     train(session, log_metrics=saver.log_metrics, save_checkpoint=save_checkpoint,
           stat_ivl=cmd_args.ivl)
-
-
-# todo: support registration of forward hooks (specify model, layer name and hook function)
-# todo: training loops with unequal number of iterations
-# todo: session can export best checkpoint according to a criterion
-# todo: separate processing of inputs and targets
-# todo: allow to change inference device
-# todo; support training GANs (e.g. DCGAN)
-# todo: support training GANs with growing neural nets
-# todo: greedy search vs beam search decoding for seq2seq inference
-# todo: extra scripts to fine tune and export
-# todo: debug tool (show predictions for input as well as all inputs, outputs and transformations)
-# todo: test suite

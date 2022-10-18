@@ -119,7 +119,6 @@ class Session:
         self.stages = []
 
         # tracks progress
-        # todo: store stage number
         self.progress = Progress([])
 
     def initialize_state(self):
@@ -210,7 +209,6 @@ class SessionSaver:
         session.progress.from_list(checkpoint["progress"])
 
     def log_metrics(self, stage_number, epoch, train_metrics):
-        # todo: log metrics to csv file
         history_path = os.path.join(self.history_dir, f'{stage_number}.csv')
         history = TrainingHistory(history_path)
         history.add_entry(epoch, train_metrics)
@@ -222,11 +220,9 @@ class TrainingHistory:
 
     def add_entry(self, epoch, train_metrics):
         # todo: make sure the ordering is right
-        #val_metrics = {f'val {k}': v for k, v in val_metrics.items()}
 
         all_metrics = {}
         all_metrics.update(train_metrics)
-        #all_metrics.update(val_metrics)
 
         row_dict = {'epoch': epoch}
         row_dict.update({k: self.scalar(v) for k, v in all_metrics.items()})

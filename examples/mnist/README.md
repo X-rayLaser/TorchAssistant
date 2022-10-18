@@ -259,14 +259,14 @@ Here we specify an optimizer to use during the training:
                 "spec": {
                     "class": "Adam",
                     "kwargs": {
-                        "lr": 0.01
+                        "lr": 0.001
                     },
                     "model": "LeNet5"
                 }
             },
 ```
 This definition says that we want to use Adam optimizer class optimizing
-parameters of the model LeNet5 using learning rate 0.01. If we had
+parameters of the model LeNet5 using learning rate 0.001. If we had
 a multiple models, each of them could have distinct optimizer.
 Note this line:
 ```
