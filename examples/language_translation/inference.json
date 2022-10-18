@@ -35,11 +35,11 @@
         "pipelines": {
             "inference": {
                 "graph": "batch_processing_graph",
-                "input_factories": [
+                "input_injector": [
                     {
-                        "input_alias": "input_batch",
+                        "input_port": "input_batch",
                         "variable_names": ["french_batch"],
-                        "loader_factory": "training_factory"
+                        "data_loader": "training_loader"
                     }
                 ]
             }
@@ -48,9 +48,9 @@
     "inference_pipeline": "inference",
     "inputs_meta": [
         {
-            "input_alias": "input_batch",
-            "input_adapter": {
-                "class": "examples.language_translation.adapters.InputAdapter"
+            "input_port": "input_batch",
+            "input_converter": {
+                "class": "examples.language_translation.adapters.InputConverter"
             }
         }
     ],
@@ -59,8 +59,5 @@
     ],
     "post_processor": {
         "class": "examples.language_translation.postprocessors.PostProcessor"
-    },
-    "output_device": {
-        "class": "examples.language_translation.output_devices.Printer"
     }
 }

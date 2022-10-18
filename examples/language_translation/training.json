@@ -258,7 +258,7 @@
             {
                 "mode": "interleave",
                 "training_pipelines": ["train"],
-                "validation_pipelines": ["train", "evaluate"],
+                "validation_pipelines": ["train"],
                 "stop_condition": {
                     "class": "torchassistant.stop_conditions.EpochsCompleted",
                     "kwargs": {
@@ -269,11 +269,11 @@
             {
                 "mode": "interleave",
                 "training_pipelines": ["train"],
-                "validation_pipelines": ["train"],
+                "validation_pipelines": ["train", "evaluate"],
                 "stop_condition": {
                     "class": "torchassistant.stop_conditions.EpochsCompleted",
                     "kwargs": {
-                        "num_epochs": 20
+                        "num_epochs": 200
                     }
                 }
             }

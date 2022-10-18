@@ -2,7 +2,7 @@ import torch
 from examples.language_translation.datasets import normalize_string
 
 
-class InputAdapter:
+class InputConverter:
     def __call__(self, x):
         return normalize_string(x)
 

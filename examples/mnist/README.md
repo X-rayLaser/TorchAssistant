@@ -314,7 +314,7 @@ Finally, we define an accuracy metric:
                     "transform": "my_examples.mnist.reverse_onehot"
                 }
             }
-        ]
+        ],
 ```
 Here, "Accuracy" is a metrics class from torchmetrics package. "inputs"
 here is the same as in the previous definition. Now in order to compute
