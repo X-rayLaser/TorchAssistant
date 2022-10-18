@@ -26,7 +26,7 @@ metric_functions = {
 
 
 class Metric:
-    def __init__(self, name, metric_fn, metric_args, transform_fn, device):
+    def __init__(self, name, metric_fn, metric_args, transform_fn):
         """
 
         :param name: A string that identifies the metric
@@ -34,17 +34,14 @@ class Metric:
         :param metric_args: tensor names of batch that are used to compute the metric on
         :type metric_args: iterable of type str
         :param transform_fn: a callable that transforms/reduces # of the metrics arguments
-        :param device: compute device to run the metric computation on
-        :type device: torch.device
         """
         self.name = name
         self.metric_fn = metric_fn
         self.metric_args = metric_args
         self.transform_fn = transform_fn
-        self.device = device
 
     def rename_and_clone(self, new_name):
-        return self.__class__(new_name, self.metric_fn, self.metric_args, self.transform_fn, self.device)
+        return self.__class__(new_name, self.metric_fn, self.metric_args, self.transform_fn)
 
     def __call__(self, batch):
         """Given the batch of predictions and targets, compute the metric.
@@ -64,23 +61,38 @@ class Metric:
         """
 
         lookup_table = batch
-        tensors = [lookup_table[arg] for arg in self.metric_args]
+        inputs = [lookup_table[arg] for arg in self.metric_args]
 
-        tensors = self.change_device(tensors)
-        tensors = self.transform_fn(*tensors)
-        # the above operation could change devices
-        tensors = self.change_device(tensors)
-        return self.metric_fn(*tensors)
+        device = self.fastest_device(inputs)
 
-    def change_device(self, tensors):
+        inputs = self.change_device(inputs, device)
+        inputs = self.transform_fn(*inputs)
+        inputs = self.change_device(inputs, device)  # the above operation could change devices
+
+        fn = self.metric_fn.to(device) if hasattr(self.metric_fn, 'to') else self.metric_fn
+
+        return fn(*inputs)
+
+    def fastest_device(self, inputs):
+        """Returns cuda device if at least 1 input tensor is on cuda,
+        otherwise return cpu device"""
+        devices = [v.device for v in inputs if hasattr(v, 'device')]
+
+        for d in devices:
+            if 'cuda' in str(d):
+                return d
+        return torch.device('cpu')
+
+    def change_device(self, tensors, device):
         """Moves all tensors that participate in metric calculation to a given device
 
         :param tensors: a list of tensors
+        :param device: torch.device instance
         :return: a list of tensors
         """
 
         # some tensor may already be on the right device, if so they kept unchanged
-        return [arg if not hasattr(arg, 'device') or arg.device == self.device else arg.to(self.device)
+        return [arg if not hasattr(arg, 'device') or arg.device == device else arg.to(device)
                 for arg in tensors]
 
 

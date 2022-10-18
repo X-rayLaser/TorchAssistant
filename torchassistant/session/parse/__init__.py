@@ -129,9 +129,7 @@ def load_loss(session, spec, object_name=None):
     args = spec.get("args", [])
     kwargs = spec.get("kwargs", {})
 
-    # todo: set device later
-    device = torch.device('cpu')
-    return Metric('loss', criterion_class(*args, **kwargs), spec["inputs"], transform_fn, device)
+    return Metric('loss', criterion_class(*args, **kwargs), spec["inputs"], transform_fn)
 
 
 @register("metrics")
@@ -150,6 +148,4 @@ def load_metric(session, spec, object_name=None):
     else:
         metric = metric_functions[metric_class]
 
-    # todo: set device later
-    device = torch.device('cpu')
-    return Metric(object_name, metric, spec["inputs"], transform_fn, device=device)
+    return Metric(object_name, metric, spec["inputs"], transform_fn)
