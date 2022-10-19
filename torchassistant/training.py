@@ -6,6 +6,7 @@ from .formatters import Formatter
 from torchassistant.session import StopTrainingError
 from .data import InputInjector
 from .utils import Debugger
+from torchassistant.formatters import ProgressBar
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=1):
@@ -76,7 +77,7 @@ def compute_and_log_metrics(stage, stage_number, epoch, log_fn):
 
     computed_metrics = {}
     for pipeline in stage.validation_pipelines:
-        train_metrics = evaluate_pipeline(pipeline)
+        train_metrics = evaluate_pipeline(pipeline, stage.eval_steps)
         computed_metrics.update(train_metrics)
 
     final_metrics_string = formatter.format_metrics(computed_metrics, validation=False)
@@ -117,7 +118,15 @@ def prepare_trainers(session, pipelines):
     return trainers
 
 
-def evaluate_pipeline(pipeline, num_batches=None):
+def evaluate_pipeline(pipeline, num_batches=1.0):
+    """Compute metrics specified for this pipeline.
+
+    :param pipeline: instance of TrainingPipeline
+    :param num_batches: Number of batches used to compute metrics on.
+    Integer value is interpreted as precise number batches.
+    Floating point number in 0-1 range is interpreted as a fraction of all batches in the pipeline.
+    :return: a dictionary mapping names of metrics to their computed values
+    """
     graph = pipeline.graph
     metrics = pipeline.metric_fns
 
@@ -125,9 +134,17 @@ def evaluate_pipeline(pipeline, num_batches=None):
 
     data_generator = InputInjector(pipeline.input_loaders)
 
-    num_batches = num_batches or max(10, len(data_generator) // 10)
+    if isinstance(num_batches, float):
+        fraction = num_batches
+        batches_total = len(data_generator)
+        num_batches = int(round(batches_total * fraction))
 
     moving_averages = {name: MovingAverage() for name in metrics}
+
+    whitespaces = ' ' * 150
+    print(f'\r{whitespaces}', end='')
+
+    progress_bar = ProgressBar()
 
     with torch.no_grad():
         for i, graph_inputs in enumerate(data_generator):
@@ -136,6 +153,10 @@ def evaluate_pipeline(pipeline, num_batches=None):
 
             results_batch = graph(graph_inputs)
             update_running_metrics(moving_averages, metrics, results_batch)
+
+            step_number = i + 1
+            progress = progress_bar.updated(step_number, num_batches, cols=50)
+            print(f'\rEvaluating metrics: {progress} {step_number}/{num_batches}', end='')
 
     return {metric_name: avg.value for metric_name, avg in moving_averages.items()}
 

@@ -340,4 +340,8 @@ class StageLoader(Loader):
         debug_pipelines = [session.debug_pipelines[name] for name in debug_pipelines]
 
         stop_condition = Loader().load(session, stop_condition_dict)
-        return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines, stop_condition)
+
+        eval_steps = spec.get("eval_steps", 1.0)
+
+        return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines,
+                     stop_condition, eval_steps)

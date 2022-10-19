@@ -144,7 +144,8 @@
                 "kwargs": {
                     "num_epochs": 20
                 }
-            }
+            },
+            "eval_steps": 0.1
         }]
     }
 }

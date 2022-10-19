@@ -32,11 +32,14 @@ if __name__ == '__main__':
 
     new_pipelines_spec = config.get("pipelines", {})
 
+    num_eval_steps = config.get("eval_steps", 1.0)
+
     metrics = {}
     for name in config["validation_pipelines"]:
         pipeline = session.pipelines[name]
-        metrics.update(evaluate_pipeline(pipeline))
+        metrics.update(evaluate_pipeline(pipeline, num_eval_steps))
 
     formatter = Formatter()
     final_metrics_string = formatter.format_metrics(metrics, validation=False)
-    print(final_metrics_string)
+    spaces = ' ' * 150
+    print(f'\r{spaces}\r{final_metrics_string}')
