@@ -41,7 +41,6 @@ class MyCollator(BatchDivide):
         images, labels = super().__call__(batch)
 
         x = torch.stack([to_tensor(image) for image in images])
-        x = x / 255
         return x, labels
 
 
