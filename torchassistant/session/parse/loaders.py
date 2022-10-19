@@ -99,12 +99,8 @@ class BatchProcessorLoader(Loader):
         graph_spec = spec["neural_graph"]
         neural_graph = self.parse_neural_graph(session, graph_spec)
 
-        if "device" in spec:
-            device = torch.device(spec["device"])
-        else:
-            device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-        return NeuralBatchProcessor(neural_graph, input_adapter, output_adapter, device)
+        device = session.device
+        return NeuralBatchProcessor(neural_graph, input_adapter, output_adapter, device=device)
 
     def parse_neural_graph(self, session, graph_spec):
         nodes = []
@@ -226,10 +222,10 @@ class PipelineLoader(Loader):
             Node(name=model_name, model=model, optimizer=optimizer, inputs=inputs, outputs=outputs)
         ]
 
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
         input_adapter = DefaultInputAdapter(model_name)
         output_adapter = IdentityAdapter()
+
+        device = session.device
         return NeuralBatchProcessor(neural_nodes, input_adapter, output_adapter, device)
 
     def parse_metrics(self, session, pipeline_spec):

@@ -64,6 +64,7 @@ if __name__ == '__main__':
     pipeline = session.pipelines[config["inference_pipeline"]]
 
     graph = pipeline.graph
+    graph.eval_mode()
     input_injector = InputInjector(pipeline.input_loaders)
 
     inputs_meta = config["inputs_meta"]

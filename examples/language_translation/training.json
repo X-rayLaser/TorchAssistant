@@ -186,8 +186,7 @@
                     ],
                     "output_adapter": {
                         "class": "examples.language_translation.adapters.OutputAdapter"
-                    },
-                    "device": "cpu"
+                    }
                 }
             },
             {

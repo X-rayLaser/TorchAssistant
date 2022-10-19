@@ -187,6 +187,9 @@ class Trainer:
         self.losses = losses
         self.gradient_clippers = gradient_clippers
 
+        # calls train() on every model object in the graph
+        self.graph.train_mode()
+
     def __iter__(self):
         num_iterations = len(self.data_generator)
 

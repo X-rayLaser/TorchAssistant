@@ -118,6 +118,8 @@ class Session:
 
         self.stages = []
 
+        self.device = torch.device("cpu")
+
         # tracks progress
         self.progress = Progress([])
 
@@ -174,12 +176,15 @@ class SessionSaver:
 
     def save_checkpoint(self, session):
         state_dir = self.checkpoints_dir
-        # todo: map locations when needed
         state = session.initialize_state()
 
         checkpoint_dir = os.path.join(state_dir, str(session.progress.epochs_done_total))
         os.makedirs(checkpoint_dir)
-        save_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
+        checkpoint_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
+        device_path = os.path.join(checkpoint_dir, 'device.txt')
+
+        with open(device_path, 'w', encoding='utf-8') as f:
+            f.write(str(session.device))
 
         models_dict = {name: model.state_dict() for name, model in state.models.items()}
 
@@ -189,7 +194,7 @@ class SessionSaver:
             'models': models_dict,
             'optimizers': optimizers_dict,
             'progress': session.progress.to_list()
-        }, save_path)
+        }, checkpoint_path)
 
     def load_checkpoint(self, session, name):
         state_dir = self.checkpoints_dir
@@ -197,11 +202,19 @@ class SessionSaver:
 
         checkpoint_dir = os.path.join(state_dir, name)
         state_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
+        device_path = os.path.join(checkpoint_dir, 'device.txt')
 
-        checkpoint = torch.load(state_path)
+        with open(device_path, encoding='utf-8') as f:
+            checkpoint_device = torch.device(f.read())
+
+        if checkpoint_device == session.device:
+            checkpoint = torch.load(state_path)
+        else:
+            checkpoint = torch.load(state_path, map_location=session.device)
 
         for name, model_state in checkpoint['models'].items():
             state.models[name].load_state_dict(model_state)
+            state.models[name].to(session.device)
 
         for name, optimizer_state in checkpoint['optimizers'].items():
             state.optimizers[name].load_state_dict(optimizer_state)
@@ -283,6 +296,8 @@ class SessionInitializer:
     })
 
     def __call__(self, session, spec):
+        self.parse_device(session, spec)
+
         init_dict = spec["initialize"]
 
         definitions = init_dict["definitions"]
@@ -302,6 +317,13 @@ class SessionInitializer:
         self.load_stages(session, spec)
 
         self.initialize_progress(session)
+
+    def parse_device(self, session, spec):
+        if "device" not in spec:
+            device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        else:
+            device = spec["device"]
+        session.device = device
 
     def prepare_pipelines(self, session, spec, loader, section):
         pipelines = {}
