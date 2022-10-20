@@ -46,7 +46,7 @@ class InstantiateClassTests(unittest.TestCase):
         self.assertTrue(hasattr(session, 'datasets'))
 
         metric = utils.instantiate_class(
-            'torchassistant.metrics.Metric', 'name', 'metric_fn', metric_args=[], transform_fn='', device=''
+            'torchassistant.metrics.Metric', 'name', 'metric_fn', metric_args=[], transform_fn=''
         )
 
         self.assertEqual('name', metric.name)
