@@ -1,20 +1,27 @@
 # Introduction
 
-TorchAssistant is a deep learning framework built on top of PyTorch intended 
-to accelerate prototyping (and training) of neural networks as well as testing new ideas. 
-It provides a set of tools to automate training and evaluation of models. 
-It also reduces the amount of stereotypical code that is typically reinvented 
-across many projects.
+**TorchAssistant** is a deep learning framework built on top of **PyTorch**. 
+It provides a set of tools to automate the training and evaluation of models. 
+It also reduces the amount of trivial code one usually needs to write.
+
+Just create a specification file configuring the training session and let 
+the framework do everything else for you.
 
 Main features:
-- scripts for training, evaluation and inference
-- training loop
-- progress bar
-- metrics
-- automatic saving and resuming of training session
-- saving metrics history to csv files
-- highly flexibility and customizable
+- scripts for training, evaluation, and inference
+- automatically calculating metrics
+- automatically saving training session
+- resuming the interrupted training session
+- automatically saving metrics history to CSV files
+- nicely formatted information about the training session: epoch, iteration, loss, metrics, etc.
+- highly flexible and customizable
 - support for building complex training pipelines
+
+# Status: Early development stage
+
+This project is in the early stage of development.
+Features and functionality provided here are subject to change.
+Furthermore, the code is not yet extensively tested and may contain bugs.
 
 # Installation
 ```
@@ -23,70 +30,52 @@ pip install torchassistant
 
 # Examples
 
-Examples directory contains projects that demonstrate how to use
+The examples directory contains projects that demonstrate how to use
 TorchAssistant to train different kinds of neural networks.
 
 # Documentation
 
-The documentation for the project can be found 
+You can find all the documentation for the project 
 [here](https://github.com/X-rayLaser/TorchAssistant/wiki).
 
 # Usage
 
-The typical workflow consists of the following steps:
-- write Python/Pytorch code to implement custom models, datasets, etc.
-- write a specification (a spec) file that configures the training process
-(by defining optimizers, loss functions, metrics and other parameters)
-- run init.py to parse that file and create a training session 
-saved in a chosen directory
-- run train.py to take a training session directory and begin/resume 
-training
-- write another specification file that configures evaluation of models
-- run evaluate.py to validate performance of a trained model against a 
-given set of metrics
-- write yet another specification file configuring inference process
-- run infer.py to manually test the model by feeding it raw input data and
-observing predicted output
-
-Once you have a training spec file, create a training session by 
-running a command:
+### Create a new training session configured by a training spec file:
 ```
 python init.py <path_to_specification_file>
 ```
-
-This should create a training session folder in a location specified in
+It should create a training session folder in a location specified in
 a spec file.
 
-Start training by running a command (pass a location of the training
-session folder as an argument):
+### Start training (pass a location of the training session folder as an argument):
 ```
 python train.py <path_to_training_session_folder>
 ```
 
-States of all models and optimizers are saved automatically whenever
-another epoch of training ends.
-That means, at any moment you may safely interrupt the script by 
-pressing Ctrl+C. You can then resume training picking up from where 
-you left off (from the last epoch that was interrupted)
-by executing the above command.
+The script automatically saves the states of all models and optimizers 
+at the end of every training epoch. That means that you may safely 
+interrupt this script. You can then resume training picking up from 
+where you left off by executing the above command.
 
-To compute metrics on a trained model, run this command:
+### Compute metrics on a trained model (pass a path to a specification file for evaluation):
 ```
 python evaluate.py <path_to_evaluation_specification_file>
 ```
+The script expects the specification file to contain the location of the 
+training session directory.
 
-Finally, to test model predictions on your own data, run the command:
+### Test model predictions on your data:
 ```
 python infer.py <path_to_inference_specification_file> input1 input2 ... inputn
 ```
-First argument is the path to specification file for inference, 
-the rest are variable number of user inputs. Usually, you have to 
-write a converter class for each of those inputs that specifies how to
+The first argument is the path to the specification file for inference.
+The rest are a variable number of user inputs. Usually, for each of those inputs, 
+you have to write a converter class that specifies how to
 turn them into a format consumable by the prediction pipeline.
 
 To learn more about the details of the format of different specification
-files, see the section on specification in documentation.
+files, see the section on the specification in the documentation.
 
 # License
 
-This project is licensed under MIT license.
+This project has an MIT license.
