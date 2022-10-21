@@ -1,5 +1,7 @@
 import importlib
-
+import sys
+import os
+import json
 import torch
 
 from torchassistant.data import InputInjector
@@ -55,6 +57,18 @@ def split_import_path(dotted_path):
     module_path = dotted_path[:idx]
     name = dotted_path[idx + 1:]
     return module_path, name
+
+
+def load_config(path):
+    with open(path, encoding='utf-8') as f:
+        s = f.read()
+
+    return json.loads(s)
+
+
+def add_cwd_to_python_path():
+    """Adds a current working directory to Python path"""
+    sys.path.insert(0, os.getcwd())
 
 
 class GradientClipper:

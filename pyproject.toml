@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "torchassistant"
+version = "0.1.0"
+authors = [
+  { name="Evgenii Dolotov", email="supernovaprotocol@gmail.com" },
+]
+description = "A deep learning framework and automation tool built on top of PyTorch"
+readme = "README.md"
+requires-python = ">=3.6.9"
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Utilities",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/X-rayLaser/TorchAssistant"
+"Documentation" = "https://github.com/X-rayLaser/TorchAssistant/wiki"
+
+[project.scripts]
+tainit = "torchassistant.cmd_api.init:run_init"
+tatrain = "torchassistant.cmd_api.train:run_train"
+taevaluate = "torchassistant.cmd_api.evaluate:run_evaluate"
+tainfer = "torchassistant.cmd_api.infer:run_infer"
