@@ -93,53 +93,6 @@
                     "transform": "examples.mnist.reverse_onehot"
                 }
             }
-        ],
-        "pipelines": {
-            "training_pipeline": {
-                "input_injector": [
-                    {
-                        "data_loader": "training_loader"
-                    }
-                ],
-                "losses": [
-                    {
-                        "loss_name": "cross_entropy",
-                        "loss_display_name": "loss"
-                    }
-                ],
-                "metrics": [
-                    {
-                        "metric_name": "accuracy",
-                        "display_name": "acc"
-                    }
-                ]
-            },
-            "evaluation_pipeline": {
-                "input_injector": [
-                    {
-                        "data_loader": "test_loader"
-                    }
-                ],
-                "losses": [
-                    {
-                        "loss_name": "cross_entropy",
-                        "loss_display_name": "val loss"
-                    }
-                ],
-                "metrics": [
-                    {
-                        "metric_name": "accuracy",
-                        "display_name": "val acc"
-                    }
-                ]
-            }
-        }
-    },
-    "train": {
-        "stages": [{
-            "training_pipelines": ["training_pipeline"],
-            "validation_pipelines": ["training_pipeline", "evaluation_pipeline"],
-            "eval_steps": 0.1
-        }]
+        ]
     }
 }

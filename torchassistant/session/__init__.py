@@ -10,6 +10,8 @@ from . import parse
 from .override_spec import override_spec
 from ..utils import get_dataset
 from .registry import group_to_loader
+from .data_classes import Stage
+from .parse.loaders import PipelineLoader, StageLoader
 
 
 def create_session(spec):
@@ -305,9 +307,13 @@ class SessionInitializer:
         for d in definitions:
             self.build_object(session, d)
 
-        self.prepare_pipelines(
-            session, init_dict["pipelines"], parse.loaders.PipelineLoader(), 'pipelines'
-        )
+        pipelines_dict = init_dict.get("pipelines")
+        if pipelines_dict:
+            self.prepare_pipelines(
+                session, pipelines_dict, parse.loaders.PipelineLoader(), 'pipelines'
+            )
+        else:
+            self.build_pipelines(session)
 
         self.prepare_pipelines(
             session, init_dict.get("debug_pipelines", {}),
@@ -333,10 +339,80 @@ class SessionInitializer:
 
         setattr(session, section, pipelines)
 
+    def build_pipelines(self, session):
+        loaders_iterator = iter(session.data_loaders.keys())
+        training_data_loader = next(loaders_iterator)
+        test_data_loader = next(loaders_iterator)
+
+        def make_pipeline_spec(data_loader, loss, loss_display, metrics):
+            return {
+                "input_injector": [{"data_loader": data_loader}],
+                "losses": [{"loss_name": loss, "loss_display_name": loss_display}],
+                "metrics": [dict(metric_name=name, display_name=display_name)
+                            for name, display_name in metrics]
+            }
+
+        pipelines = {}
+
+        loss_name = next(iter(session.losses.keys()))
+        train_loss_display = "loss"
+        train_metric_fns = [(name, name.lower()) for name in session.metrics.keys()]
+
+        val_loss_display = "val loss"
+        val_metric_fns = [(name, 'val ' + name.lower()) for name in session.metrics.keys()]
+
+        pipelines["training"] = make_pipeline_spec(
+            training_data_loader, loss_name, train_loss_display, train_metric_fns
+        )
+
+        pipelines["validation"] = make_pipeline_spec(
+            test_data_loader, loss_name, val_loss_display, val_metric_fns
+        )
+
+        pipelines = {name: PipelineLoader().load(session, spec) for name, spec in pipelines.items()}
+        session.pipelines = pipelines
+
     def load_stages(self, session, spec):
-        stages_spec = spec["train"]["stages"]
-        stage_loader = parse.loaders.StageLoader()
-        session.stages = [stage_loader.load(session, stage) for stage in stages_spec]
+        try:
+            stages_spec = spec["train"]["stages"]
+        except KeyError:
+            self.build_stages(session)
+        else:
+            stage_loader = parse.loaders.StageLoader()
+            session.stages = [stage_loader.load(session, stage) for stage in stages_spec]
+
+    def build_stages(self, session):
+        training_pipeline = self.get_pipeline(session, training=True)
+        validation_pipeline = self.get_pipeline(session, training=False)
+
+        training_pipelines = [training_pipeline]
+        validation_pipelines = [training_pipeline, validation_pipeline]
+        debug_pipelines = []
+        stop_condition = StageLoader().build_stop_condition(session)
+        eval_steps = 0.1
+
+        session.stages = [
+            Stage("interleave", training_pipelines, validation_pipelines, debug_pipelines,
+                  stop_condition, eval_steps)
+        ]
+
+    def get_pipeline(self, session, training=True):
+        if len(session.pipelines) > 2:
+            raise Exception(
+                f'Bad specification. Cannot autocomplete stages section: '
+                f'cannot decide which pipelines to use for training and validation'
+            )
+        for pipeline in session.pipelines.values():
+            if len(pipeline.input_loaders) != 1:
+                raise Exception(f'Bad specification')
+
+            data_loader = pipeline.input_loaders[0].loader_factory
+            for i, k in enumerate(session.data_loaders.values()):
+                if k == data_loader:
+                    if (training and i == 0) or (not training and i != 0):
+                        return pipeline
+
+        raise Exception(f'Bad specification')
 
     def initialize_progress(self, session):
         bars = [ProgressBar(idx, 0, completed=False) for idx in range(len(session.stages))]

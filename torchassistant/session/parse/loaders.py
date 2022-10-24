@@ -336,18 +336,19 @@ class StageLoader(Loader):
         debug_pipelines = spec.get("debug_pipelines", [])
         debug_pipelines = [session.debug_pipelines[name] for name in debug_pipelines]
 
-        stop_condition = self.build_stop_condition(session, spec)
+        stop_condition_dict = spec.get("stop_condition")
+        if stop_condition_dict:
+            stop_condition = Loader().load(session, stop_condition_dict)
+        else:
+            stop_condition = self.build_stop_condition(session)
 
         eval_steps = spec.get("eval_steps", 1.0)
 
         return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines,
                      stop_condition, eval_steps)
 
-    def build_stop_condition(self, session, spec):
-        stop_condition_dict = spec.get("stop_condition")
-        if stop_condition_dict:
-            return Loader().load(session, stop_condition_dict)
-        elif session.pipelines:
+    def build_stop_condition(self, session):
+        if session.pipelines:
             val_loss_fns = []
             for pipeline in session.pipelines.values():
                 if len(pipeline.input_loaders) != 1:
