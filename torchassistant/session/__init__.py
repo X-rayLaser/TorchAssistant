@@ -1,6 +1,6 @@
 import os
 import json
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from random import shuffle
 import csv
 
@@ -98,7 +98,7 @@ class Session:
         self.splits = {}
         self.preprocessors = {}
         self.collators = {}
-        self.data_loaders = {}
+        self.data_loaders = OrderedDict()
         self.loader_factories = {}
         self.models = {}
         self.gradient_clippers = {}

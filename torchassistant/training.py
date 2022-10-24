@@ -31,17 +31,21 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
     debuggers = [Debugger(pipeline) for pipeline in stage.debug_pipelines]
 
+    history = []
     for epoch in range(start_epoch, start_epoch + 1000):
         calculators = [MetricsSetCalculator(metrics, stat_ivl) for metrics in metric_dicts]
 
         train_on_data(session, stage.training_pipelines, debuggers, calculators, epoch)
 
-        compute_and_log_metrics(stage, stage_number, epoch, log_metrics)
+        computed_metrics = compute_and_log_metrics(stage)
+        history.append(computed_metrics)
+
+        log_computed_metrics(computed_metrics, stage_number, epoch, log_metrics)
 
         session.progress.increment_progress()
 
         # todo; more sophisticated stop condition that can look at number of iterations and more
-        should_stop = stage.stop_condition(session.progress[stage_number].epochs_done, [])
+        should_stop = stage.stop_condition(session.progress[stage_number].epochs_done, history)
 
         if should_stop:
             session.progress.mark_completed()
@@ -72,13 +76,17 @@ def train_on_data(session, training_pipelines, debuggers, metric_calculators, ep
             debug(log_entries)
 
 
-def compute_and_log_metrics(stage, stage_number, epoch, log_fn):
-    formatter = Formatter()
-
+def compute_and_log_metrics(stage):
     computed_metrics = {}
     for pipeline in stage.validation_pipelines:
-        train_metrics = evaluate_pipeline(pipeline, stage.eval_steps)
-        computed_metrics.update(train_metrics)
+        metrics = evaluate_pipeline(pipeline, stage.eval_steps)
+        computed_metrics.update(metrics)
+
+    return computed_metrics
+
+
+def log_computed_metrics(computed_metrics, stage_number, epoch, log_fn):
+    formatter = Formatter()
 
     final_metrics_string = formatter.format_metrics(computed_metrics, validation=False)
 

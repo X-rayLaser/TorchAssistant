@@ -1,13 +1,12 @@
 from collections import namedtuple
 
-import torch
-
 from torchassistant.output_adapters import IdentityAdapter
 from torchassistant.output_devices import Printer
 from torchassistant.processing_graph import NeuralBatchProcessor, BatchProcessingGraph, Node
 from torchassistant.session.data_classes import InputLoader, TrainingPipeline, DebugPipeline, Stage
 from torchassistant.utils import instantiate_class, import_function, BackwardHookInstaller, Debugger
 from torchassistant.adapters import DefaultInputAdapter
+from torchassistant.stop_conditions import EarlyStopping, EpochsCompleted
 
 
 class SpecParser:
@@ -247,10 +246,9 @@ class PipelineLoader(Loader):
             loss_fn = (node_name, session.losses[loss_name])
             loss_fns[loss_name] = loss_fn
 
-            if 'loss_display_name' in loss_spec:
-                loss_display_name = loss_spec.get('loss_display_name', loss_name)
-                renamed_loss_fn = loss_fn[1].rename_and_clone(loss_display_name)
-                metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
+            loss_display_name = loss_spec.get('loss_display_name', loss_name)
+            renamed_loss_fn = loss_fn[1].rename_and_clone(loss_display_name)
+            metric_fns[loss_display_name] = (node_name, renamed_loss_fn)
 
     def get_node_name(self, session, spec):
         options = list(session.batch_processors.keys())
@@ -328,7 +326,6 @@ class DebuggerLoader(Loader):
 class StageLoader(Loader):
     def load(self, session, spec, object_name=None):
         mode = spec.get("mode", "interleave")
-        stop_condition_dict = spec.get("stop_condition")
 
         training_pipelines = spec["training_pipelines"]
         training_pipelines = [session.pipelines[name] for name in training_pipelines]
@@ -339,9 +336,43 @@ class StageLoader(Loader):
         debug_pipelines = spec.get("debug_pipelines", [])
         debug_pipelines = [session.debug_pipelines[name] for name in debug_pipelines]
 
-        stop_condition = Loader().load(session, stop_condition_dict)
+        stop_condition = self.build_stop_condition(session, spec)
 
         eval_steps = spec.get("eval_steps", 1.0)
 
         return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines,
                      stop_condition, eval_steps)
+
+    def build_stop_condition(self, session, spec):
+        stop_condition_dict = spec.get("stop_condition")
+        if stop_condition_dict:
+            return Loader().load(session, stop_condition_dict)
+        elif session.pipelines:
+            val_loss_fns = []
+            for pipeline in session.pipelines.values():
+                if len(pipeline.input_loaders) != 1:
+                    return EpochsCompleted(20)
+
+                data_loader = pipeline.input_loaders[0].loader_factory
+                for i, k in enumerate(session.data_loaders.values()):
+                    loss_names = self.get_loss_fns(pipeline)
+
+                    if k == data_loader and i != 0:
+                        val_loss_fns.extend(loss_names)
+
+            if not val_loss_fns:
+                return EpochsCompleted(20)
+
+            monitored_loss = val_loss_fns[0]
+            return EarlyStopping(monitored_loss)
+        else:
+            return EpochsCompleted(20)
+
+    def get_loss_fns(self, pipeline):
+        res = set()
+        for metric_name, (_, metric_obj) in pipeline.metric_fns.items():
+            for _, loss_obj in pipeline.loss_fns.values():
+                if metric_obj.metric_fn is loss_obj.metric_fn:
+                    res.add(metric_name)
+
+        return list(res)

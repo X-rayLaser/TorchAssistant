@@ -6,6 +6,7 @@ class Formatter:
         return f'Epoch {epoch:5}'
 
     def format_metrics(self, metrics, validation=False):
+        # todo: seems method is never called with validation flag=True
         if validation:
             metrics = {f'val {k}': v for k, v in metrics.items()}
 
