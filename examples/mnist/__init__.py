@@ -25,15 +25,6 @@ class LeNet5(nn.Module):
         return [x]
 
 
-def reverse_onehot(y_hat, ground_true):
-    return y_hat.argmax(dim=-1), torch.LongTensor(ground_true)
-
-
-def convert_labels(y_hat, labels):
-    labels = torch.LongTensor(labels)
-    return y_hat, labels
-
-
 class MyCollator(BatchDivide):
     def __call__(self, batch):
         to_tensor = ToTensor()
@@ -41,7 +32,7 @@ class MyCollator(BatchDivide):
         images, labels = super().__call__(batch)
 
         x = torch.stack([to_tensor(image) for image in images])
-        return x, labels
+        return x, torch.LongTensor(labels)
 
 
 class InputConverter:

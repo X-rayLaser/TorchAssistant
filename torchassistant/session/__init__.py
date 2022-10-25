@@ -11,7 +11,7 @@ from .override_spec import override_spec
 from ..utils import get_dataset
 from .registry import group_to_loader
 from .data_classes import Stage
-from .parse.loaders import PipelineLoader, StageLoader
+from .parse.loaders import PipelineLoader, StageLoader, BadSpecificationError
 
 
 def create_session(spec):
@@ -307,6 +307,8 @@ class SessionInitializer:
         for d in definitions:
             self.build_object(session, d)
 
+        DefinitionAutoCompleter().autocomplete(session)
+
         pipelines_dict = init_dict.get("pipelines")
         if pipelines_dict:
             self.prepare_pipelines(
@@ -431,6 +433,50 @@ class SessionInitializer:
         section = getattr(session, group)
         section[name] = instance
         return instance
+
+
+class DefinitionAutoCompleter:
+    def autocomplete(self, session):
+        self.autocomplete_loss_and_metrics(session)
+
+    def autocomplete_loss_and_metrics(self, session):
+        target_type = self.get_target_type(session)
+        if target_type is int:
+            if not session.losses:
+                loader = group_to_loader["losses"]
+                loss_spec = {"class": "CrossEntropyLoss", "inputs": ["y_hat", "input_2"]}
+                session.losses["cross_entropy"] = loader(session, loss_spec)
+
+            if not session.metrics:
+                loader = group_to_loader["metrics"]
+                metrics_spec = {"class": "Accuracy", "inputs": ["y_hat", "input_2"],
+                                "transform": "torchassistant.transforms.reverse_onehot"}
+                session.metrics["accuracy"] = loader(session, metrics_spec, object_name="accuracy")
+        else:
+            raise BadSpecificationError(
+                f'Cannot automatically pick loss/metric function for examples '
+                f'with target type "{target_type}"'
+            )
+
+    def get_target_type(self, session):
+        datasets = session.datasets.values()
+
+        signatures = set()
+        for ds in datasets:
+            signatures.add(self.get_example_signature(ds))
+
+        if len(signatures) != 1:
+            raise BadSpecificationError(
+                f'Cannot automatically pick loss function or metric: '
+                f'example signatures returned by datasets differ. '
+                f'All signatures: {list(signatures)}'
+            )
+
+        signature = next(iter(signatures))
+        return signature[-1]
+
+    def get_example_signature(self, dataset):
+        return tuple(type(element) for element in dataset[0])
 
 
 class SessionRestorer(SessionInitializer):

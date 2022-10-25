@@ -74,24 +74,6 @@
                     },
                     "model": "LeNet5"
                 }
-            },
-            {
-                "group": "losses",
-                "name": "cross_entropy",
-                "spec": {
-                    "class": "CrossEntropyLoss",
-                    "inputs": ["y_hat", "input_2"],
-                    "transform": "examples.mnist.convert_labels"
-                }
-            },
-            {
-                "group": "metrics",
-                "name": "accuracy",
-                "spec": {
-                    "class": "Accuracy",
-                    "inputs": ["y_hat", "input_2"],
-                    "transform": "examples.mnist.reverse_onehot"
-                }
             }
         ]
     }

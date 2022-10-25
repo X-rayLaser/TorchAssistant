@@ -70,7 +70,6 @@ class Metric:
         inputs = self.change_device(inputs, device)  # the above operation could change devices
 
         fn = self.metric_fn.to(device) if hasattr(self.metric_fn, 'to') else self.metric_fn
-
         return fn(*inputs)
 
     def fastest_device(self, inputs):
