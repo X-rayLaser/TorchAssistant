@@ -12,6 +12,9 @@ from ..utils import get_dataset
 from .registry import group_to_loader
 from .data_classes import Stage
 from .parse.loaders import PipelineLoader, StageLoader, BadSpecificationError
+from .. import collators
+from ..collators import ColumnWiseCollator
+from PIL.Image import Image
 
 
 def create_session(spec):
@@ -437,8 +440,34 @@ class SessionInitializer:
 
 class DefinitionAutoCompleter:
     def autocomplete(self, session):
+        self.autocomplete_collator(session)
         self.autocomplete_data_loaders(session)
         self.autocomplete_loss_and_metrics(session)
+
+    def autocomplete_collator(self, session):
+        if session.collators:
+            return
+
+        signature = self.get_consistent_signature(session)
+
+        column_transforms = [self.type_transform(data_type) for data_type in signature]
+
+        session.collators["default_collator"] = ColumnWiseCollator(column_transforms)
+
+    def type_transform(self, data_type):
+        if data_type is int:
+            return collators.to_long_tensor
+        elif data_type is float:
+            return collators.to_float_tensor
+        elif data_type is list:
+            return collators.seq_to_tensor
+        elif data_type is Image:
+            return collators.img_to_tensor
+        else:
+            raise BadSpecificationError(
+                f'Cannot automatically build a collator.'
+                f'Unsupported data type in example tuple: "{data_type}"'
+            )
 
     def autocomplete_data_loaders(self, session):
         if session.data_loaders:
@@ -460,6 +489,9 @@ class DefinitionAutoCompleter:
             session.data_loaders[loader_name] = loader(session, spec)
 
     def autocomplete_loss_and_metrics(self, session):
+        if session.losses and session.metrics:
+            return
+
         target_type = self.get_target_type(session)
         if target_type is int:
             if not session.losses:
@@ -479,6 +511,10 @@ class DefinitionAutoCompleter:
             )
 
     def get_target_type(self, session):
+        signature = self.get_consistent_signature(session)
+        return signature[-1]
+
+    def get_consistent_signature(self, session):
         datasets = session.datasets.values()
 
         signatures = set()
@@ -492,8 +528,7 @@ class DefinitionAutoCompleter:
                 f'All signatures: {list(signatures)}'
             )
 
-        signature = next(iter(signatures))
-        return signature[-1]
+        return next(iter(signatures))
 
     def get_example_signature(self, dataset):
         return tuple(type(element) for element in dataset[0])

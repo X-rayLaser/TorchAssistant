@@ -27,13 +27,6 @@
                 }
             },
             {
-                "group": "collators",
-                "name": "my_collator",
-                "spec": {
-                    "class": "examples.mnist.MyCollator"
-                }
-            },
-            {
                 "group": "models",
                 "name": "LeNet5",
                 "spec": {

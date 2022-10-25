@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-from torchvision.transforms import ToTensor
-from torchassistant.collators import BatchDivide
 
 
 class LeNet5(nn.Module):
@@ -23,17 +21,6 @@ class LeNet5(nn.Module):
         x = torch.tanh(self.fc2(x))
         x = self.fc3(x)
         return [x]
-
-
-class MyCollator(BatchDivide):
-    def __call__(self, batch):
-        to_tensor = ToTensor()
-
-        images, labels = super().__call__(batch)
-
-        x = torch.stack([to_tensor(image) for image in images])
-
-        return x, torch.LongTensor(labels)
 
 
 class InputConverter:
