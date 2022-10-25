@@ -34,30 +34,6 @@
                 }
             },
             {
-                "group": "data_loaders",
-                "name": "training_loader",
-                "spec": {
-                    "dataset": "train_ds",
-                    "collator": "my_collator",
-                    "kwargs": {
-                        "batch_size": 32,
-                        "num_workers": 2
-                    }
-                }
-            },
-            {
-                "group": "data_loaders",
-                "name": "test_loader",
-                "spec": {
-                    "dataset": "test_ds",
-                    "collator": "my_collator",
-                    "kwargs": {
-                        "batch_size": 32,
-                        "num_workers": 2
-                    }
-                }
-            },
-            {
                 "group": "models",
                 "name": "LeNet5",
                 "spec": {

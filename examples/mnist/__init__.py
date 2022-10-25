@@ -32,6 +32,7 @@ class MyCollator(BatchDivide):
         images, labels = super().__call__(batch)
 
         x = torch.stack([to_tensor(image) for image in images])
+
         return x, torch.LongTensor(labels)
 
 
@@ -39,4 +40,4 @@ class InputConverter:
     def __call__(self, image_path):
         from PIL import Image
         with Image.open(image_path) as im:
-            return im.copy(), None
+            return im.copy(), 11

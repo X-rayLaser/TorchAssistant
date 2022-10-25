@@ -1,6 +1,6 @@
 {
     "session_dir": "pretrained",
-    "inference_pipeline": "evaluation_pipeline",
+    "inference_pipeline": "validation",
     "inputs_meta": [
         {
             "input_converter": {

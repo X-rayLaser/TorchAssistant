@@ -96,7 +96,7 @@ class State:
 
 class Session:
     def __init__(self):
-        self.datasets = {}
+        self.datasets = OrderedDict()
         self.splits = {}
         self.preprocessors = {}
         self.collators = {}
@@ -437,7 +437,27 @@ class SessionInitializer:
 
 class DefinitionAutoCompleter:
     def autocomplete(self, session):
+        self.autocomplete_data_loaders(session)
         self.autocomplete_loss_and_metrics(session)
+
+    def autocomplete_data_loaders(self, session):
+        if session.data_loaders:
+            return
+
+        if len(session.collators) > 1:
+            raise BadSpecificationError(
+                f'Cannot automatically pick collator to use in data loader '
+                f'when more than one collator is defined. '
+                f'Found {len(session.collators)} collators: {list(session.collators.keys())}'
+            )
+
+        first_one = next(iter(session.collators.keys()))
+        loader = group_to_loader["data_loaders"]
+        for name in session.datasets:
+            kwargs = dict(batch_size=32)
+            spec = dict(dataset=name, collator=first_one, kwargs=kwargs)
+            loader_name = f'{name}_data_loader'
+            session.data_loaders[loader_name] = loader(session, spec)
 
     def autocomplete_loss_and_metrics(self, session):
         target_type = self.get_target_type(session)
