@@ -67,6 +67,10 @@ def seqs_to_tensor(token_lists):
     return torch.LongTensor(inputs)
 
 
+def stack_tensors(tensors):
+    return torch.stack(tensors)
+
+
 def no_transform(x):
     return x
 
