@@ -71,6 +71,39 @@ def add_cwd_to_python_path():
     sys.path.insert(0, os.getcwd())
 
 
+class Mask:
+    def __init__(self, lengths, max_length):
+        self.mask = torch.zeros(len(lengths), max_length, dtype=torch.bool)
+        self.lengths = lengths
+
+        for i, length in enumerate(lengths):
+            self.mask[i, :length] = True
+
+    @property
+    def device(self):
+        return self.mask.device
+
+    def to(self, device):
+        self.mask = self.mask.to(device)
+
+
+def add_padding(seq, size, filler):
+    seq = list(seq)
+    while len(seq) < size:
+        seq.append(filler)
+    return seq
+
+
+def pad_sequences(seqs, filler):
+    lengths = [len(seq) for seq in seqs]
+    max_length = max(lengths)
+
+    mask = Mask(lengths, max_length)
+
+    padded = [add_padding(seq, max_length, filler) for seq in seqs]
+    return padded, mask
+
+
 class GradientClipper:
     def __init__(self, model, clip_value=None, clip_norm=None):
         self.model = model
