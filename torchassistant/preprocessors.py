@@ -1,6 +1,7 @@
+import re
 from random import shuffle
-import torch
 
+import torch
 from torchvision.transforms import ToTensor
 from torchassistant.formatters import ProgressBar
 
@@ -43,6 +44,9 @@ class SimpleNormalizer(ValuePreprocessor):
 
 
 class TrainablePreprocessor(ValuePreprocessor):
+    def __init__(self, fit_index):
+        self.fit_index = fit_index
+
     def fit(self, dataset):
         progress_bar = ProgressBar()
 
@@ -50,8 +54,10 @@ class TrainablePreprocessor(ValuePreprocessor):
 
         total_steps = int(len(dataset) * 0.1)
         indices = indices[:total_steps]
-        gen = self._do_fit(dataset, indices)
-        for i, idx in enumerate(gen):
+
+        examples = (dataset[idx][self.fit_index] for idx in indices)
+        gen = self._do_fit(examples)
+        for i, data in enumerate(gen):
             if (i + 1) % 100 == 0:
                 step_number = i + 1
                 progress = progress_bar.updated(step_number, total_steps, cols=50)
@@ -69,30 +75,28 @@ class TrainablePreprocessor(ValuePreprocessor):
             indices = range(num_examples)
         return indices
 
-    def _do_fit(self, dataset, indices):
-        """A generator object that performs fitting and yields index of currently fit example"""
+    def _do_fit(self, column):
+        """A generator object that performs fitting and yields index of currently fit data"""
         yield 0
 
 
 class ImagePreprocessor(TrainablePreprocessor):
     def __init__(self, fit_index):
-        self.fit_index = fit_index
+        super().__init__(fit_index)
         self.mu = []
         self.sd = []
 
-    def _do_fit(self, dataset, indices):
+    def _do_fit(self, column):
         to_tensor = ToTensor()
 
         mu = []
         sd = []
 
-        for idx in indices:
-            example = dataset[idx]
-            pil_image = example[self.fit_index]
+        for pil_image in column:
             tensor = to_tensor(pil_image)
             mu.append(tensor.mean(dim=[1, 2]))  # channel-wise statistics
             sd.append(tensor.std(dim=[1, 2]))
-            yield idx
+            yield pil_image
 
         # todo: maybe find sd in terms of found mu in its formula
         self.mu = torch.stack(mu).mean(dim=0).tolist()
@@ -114,12 +118,55 @@ class ImagePreprocessor(TrainablePreprocessor):
         self.__dict__ = state_dict.copy()
 
 
-class TextPreprocessor(ValuePreprocessor):
-    def __init__(self, fit_index):
-        self.fit_index = fit_index
+class TextPreprocessor(TrainablePreprocessor):
+    sentence_start = '<start>'
+    sentence_end = '<end>'
+    out_of_vocab = '<OOV>'
 
-    def fit(self, dataset):
-        pass
+    def __init__(self, fit_index):
+        super().__init__(fit_index)
+        self.word_indices = {}
+        self.index2word = {}
+        self.num_words = 0
+
+    def _do_fit(self, column):
+        self._add_word(self.sentence_start)
+        self._add_word(self.sentence_end)
+        self._add_word(self.out_of_vocab)
+
+        for text in column:
+            self._fit_text(text)
+
+    def _fit_text(self, text):
+        words = re.findall(r'\w+', text)
+        for w in words:
+            self._add_word(w)
+
+    def _add_word(self, word):
+        self.index2word[self.num_words] = word
+        self.word_indices[word] = self.num_words
+        self.num_words += 1
 
     def process(self, value):
-        pass
+        words = re.findall(r'\w+', value)
+        start_token = self.encode_word(self.sentence_start)
+        end_token = self.encode_word(self.sentence_end)
+        text_tokens = [self.encode_word(w) for w in words]
+        return [start_token] + text_tokens + [end_token]
+
+    def encode_word(self, word):
+        return self.word_indices.get(word, self.out_of_vocab)
+
+    def decode_token(self, token):
+        return self.index2word.get(token, self.out_of_vocab)
+
+    def decode(self, tokens):
+        words = [self.decode_token(token) for token in tokens]
+        return ' '.join(words)
+
+    def state_dict(self):
+        return self.__dict__.copy()
+
+    def load_state_dict(self, state_dict):
+        self.__dict__ = state_dict.copy()
+        self.index2word = {int(k): v for k, v in self.index2word.items()}
