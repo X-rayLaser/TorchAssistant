@@ -1,0 +1,110 @@
+{
+    "session_dir": "pretrained",
+    "initialize": {
+        "definitions": {
+            "data":[{
+                "group": "datasets",
+                "name": "translation_ds",
+                "spec": {
+                    "class": "examples.language_translation.datasets.FrenchToEnglishDataset",
+                    "kwargs": {
+                        "path": "examples/language_translation/dataset/eng-fra.txt"
+                    }
+                }
+            }, {
+                "group": "collators",
+                "name": "my_collator",
+                "spec": {
+                    "factory_fn": "examples.language_translation.collators.build_collator2"
+                }
+            }],
+            "computation": [{
+                "group": "models",
+                "name": "encoder_model",
+                "spec": {
+                    "factory_fn": "examples.language_translation.models.build_encoder",
+                    "args": [],
+                    "kwargs": {
+                        "hidden_size": 32
+                    }
+                }
+            },
+            {
+                "group": "models",
+                "name": "decoder_model",
+                "spec": {
+                    "factory_fn": "examples.language_translation.models.build_decoder",
+                    "args": [],
+                    "kwargs": {
+                        "hidden_size": 32
+                    }
+                }
+            },
+            {
+                "group": "optimizers",
+                "name": "encoder_optimizer",
+                "spec": {
+                    "class": "SGD",
+                    "kwargs": {
+                        "lr": 0.001,
+                        "momentum": 0.9
+                    },
+                    "model": "encoder_model"
+                }
+            },
+            {
+                "group": "optimizers",
+                "name": "decoder_optimizer",
+                "spec": {
+                    "class": "SGD",
+                    "kwargs": {
+                        "lr": 0.001,
+                        "momentum": 0.9
+                    },
+                    "model": "decoder_model"
+                }
+            },
+            {
+                "group": "losses",
+                "name": "cross_entropy",
+                "spec": {
+                    "class": "CrossEntropyLoss",
+                    "kwargs": {
+                        "reduction": "sum"
+                    },
+                    "inputs": ["y_hat", "y"],
+                    "transform": "examples.language_translation.transforms.transform"
+                }
+            },
+            {
+                "group": "batch_processors",
+                "name": "neural_translator",
+                "spec": {
+                    "input_adapter": {
+                        "factory_fn": "examples.language_translation.adapters.build_input_adapter",
+                        "kwargs": {
+                            "hidden_size": 32
+                        }
+                    },
+                    "neural_graph": [
+                        {
+                            "model_name": "encoder_model",
+                            "inputs": ["x", "h"],
+                            "outputs": ["outputs", "h_e"],
+                            "optimizer_name": "encoder_optimizer"
+                        },
+                        {
+                            "model_name": "decoder_model",
+                            "inputs": ["y_shifted", "h_e"],
+                            "outputs": ["y_hat", "h_d"],
+                            "optimizer_name": "decoder_optimizer"
+                        }
+                    ],
+                    "output_adapter": {
+                        "class": "examples.language_translation.adapters.OutputAdapter"
+                    }
+                }
+            }]
+        }
+    }
+}

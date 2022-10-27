@@ -52,7 +52,7 @@ class TrainablePreprocessor(ValuePreprocessor):
 
         indices = self._try_shuffling_indices(dataset)
 
-        total_steps = int(len(dataset) * 0.1)
+        total_steps = self._get_truncated_steps(len(dataset))
         indices = indices[:total_steps]
 
         examples = (dataset[idx][self.fit_index] for idx in indices)
@@ -65,6 +65,18 @@ class TrainablePreprocessor(ValuePreprocessor):
 
         whitespaces = ' ' * 100
         print(f'\r{whitespaces}\rDone!')
+
+    def _get_truncated_steps(self, num_examples):
+        if num_examples > 10 ** 6:
+            fraction = 0.01
+        elif num_examples > 10 ** 4:
+            fraction = 0.1
+        elif num_examples > 10 ** 3:
+            fraction = 0.5
+        else:
+            fraction = 1.0
+
+        return int(num_examples * fraction)
 
     def _try_shuffling_indices(self, dataset):
         num_examples = len(dataset)
@@ -129,6 +141,10 @@ class TextPreprocessor(TrainablePreprocessor):
         self.index2word = {}
         self.num_words = 0
 
+    @property
+    def num_classes(self):
+        return self.num_words
+
     def _do_fit(self, column):
         self._add_word(self.sentence_start)
         self._add_word(self.sentence_end)
@@ -136,6 +152,7 @@ class TextPreprocessor(TrainablePreprocessor):
 
         for text in column:
             self._fit_text(text)
+            yield text
 
     def _fit_text(self, text):
         words = re.findall(r'\w+', text)
@@ -155,7 +172,7 @@ class TextPreprocessor(TrainablePreprocessor):
         return [start_token] + text_tokens + [end_token]
 
     def encode_word(self, word):
-        return self.word_indices.get(word, self.out_of_vocab)
+        return self.word_indices.get(word, self.word_indices[self.out_of_vocab])
 
     def decode_token(self, token):
         return self.index2word.get(token, self.out_of_vocab)

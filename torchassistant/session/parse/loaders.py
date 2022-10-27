@@ -342,10 +342,26 @@ class StageLoader(Loader):
         else:
             stop_condition = self.build_stop_condition(session)
 
-        eval_steps = spec.get("eval_steps", 1.0)
+        eval_steps = spec.get("eval_steps", self.default_eval_steps(session))
 
         return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines,
                      stop_condition, eval_steps)
+
+    def default_eval_steps(self, session):
+        """Simple heuristics to auto select appropriate value for eval_steps"""
+        min_steps = min(len(loader_factory.build())
+                        for loader_factory in session.data_loaders.values())
+        if min_steps > 10 ** 6:
+            fraction = 0.01
+        elif min_steps > 10 ** 4:
+            fraction = 0.1
+        elif min_steps > 10 ** 3:
+            fraction = 0.2
+        elif min_steps > 10 ** 2:
+            fraction = 0.5
+        else:
+            fraction = 1.0
+        return fraction
 
     def build_stop_condition(self, session):
         if session.pipelines:

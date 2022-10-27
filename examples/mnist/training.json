@@ -1,49 +1,52 @@
 {
     "session_dir": "pretrained",
     "initialize": {
-        "definitions": [
-            {
-                "group": "datasets",
-                "name": "train_ds",
-                "spec": {
-                    "class": "torchvision.datasets.MNIST",
-                    "args": ["data"],
-                    "kwargs": {
-                        "train": true,
-                        "download": true
+        "definitions": {
+            "data": [
+                {
+                    "group": "datasets",
+                    "name": "train_ds",
+                    "spec": {
+                        "class": "torchvision.datasets.MNIST",
+                        "args": ["data"],
+                        "kwargs": {
+                            "train": true,
+                            "download": true
+                        }
+                    }
+                },
+                {
+                    "group": "datasets",
+                    "name": "test_ds",
+                    "spec": {
+                        "class": "torchvision.datasets.MNIST",
+                        "args": ["data"],
+                        "kwargs": {
+                            "train": false,
+                            "download": true
+                        }
+                    }
+                }],
+            "computation": [
+                {
+                    "group": "models",
+                    "name": "LeNet5",
+                    "spec": {
+                        "class": "examples.mnist.LeNet5"
+                    }
+                },
+                {
+                    "group": "optimizers",
+                    "name": "optimizer",
+                    "spec": {
+                        "class": "Adam",
+                        "kwargs": {
+                            "lr": 0.001
+                        },
+                        "model": "LeNet5"
                     }
                 }
-            },
-            {
-                "group": "datasets",
-                "name": "test_ds",
-                "spec": {
-                    "class": "torchvision.datasets.MNIST",
-                    "args": ["data"],
-                    "kwargs": {
-                        "train": false,
-                        "download": true
-                    }
-                }
-            },
-            {
-                "group": "models",
-                "name": "LeNet5",
-                "spec": {
-                    "class": "examples.mnist.LeNet5"
-                }
-            },
-            {
-                "group": "optimizers",
-                "name": "optimizer",
-                "spec": {
-                    "class": "Adam",
-                    "kwargs": {
-                        "lr": 0.001
-                    },
-                    "model": "LeNet5"
-                }
-            }
-        ]
+            ]
+        }
     }
 }

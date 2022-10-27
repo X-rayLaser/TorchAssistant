@@ -125,11 +125,16 @@ def load_loss(session, spec, object_name=None):
     else:
         transform_fn = lambda *fn_args: fn_args
 
-    criterion_class = getattr(nn, loss_class_name)
     args = spec.get("args", [])
     kwargs = spec.get("kwargs", {})
 
-    return Metric('loss', criterion_class(*args, **kwargs), spec["inputs"], transform_fn)
+    if '.' in loss_class_name:
+        instance = instantiate_class(loss_class_name, *args, **kwargs)
+    else:
+        criterion_class = getattr(nn, loss_class_name)
+        instance = criterion_class(*args, **kwargs)
+
+    return Metric('loss', instance, spec["inputs"], transform_fn)
 
 
 @register("metrics")

@@ -21,3 +21,9 @@ def build_collator(session):
         session.preprocessors["french_encoder"].num_french_words,
         session.preprocessors["english_encoder"].num_english_words
     )
+
+
+def build_collator2(session):
+    from torchassistant.collators import ColumnWiseCollator, seqs_to_tensor
+    collator = ColumnWiseCollator([seqs_to_tensor, seqs_to_tensor])
+    return collator

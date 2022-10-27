@@ -146,6 +146,7 @@ def evaluate_pipeline(pipeline, num_batches=1.0):
         fraction = num_batches
         batches_total = len(data_generator)
         num_batches = int(round(batches_total * fraction))
+        num_batches = max(1, num_batches)
 
     moving_averages = {name: MovingAverage() for name in metrics}
 
