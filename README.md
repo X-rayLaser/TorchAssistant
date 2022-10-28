@@ -34,7 +34,7 @@ When possible, try to follow the recommended version range specified in parenthe
 
 You can install PyTorch and Torchvision together from 
 [here](https://pytorch.org/get-started/locally/).
-And you install TorchMetrics from 
+And you can install TorchMetrics from 
 [here](https://torchmetrics.readthedocs.io/en/stable/pages/quickstart.html).
 
 # Installation
