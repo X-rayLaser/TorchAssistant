@@ -53,44 +53,6 @@ TorchAssistant to train different kinds of neural networks.
 You can find all the documentation for the project 
 [here](https://github.com/X-rayLaser/TorchAssistant/wiki).
 
-# Usage
-
-### Create a new training session configured by a training spec file:
-```
-tainit <path_to_specification_file>
-```
-It should create a training session folder in a location specified in
-a spec file.
-
-### Start training (pass a location of the training session folder as an argument):
-```
-tatrain <path_to_training_session_folder>
-```
-
-The script automatically saves the states of all models and optimizers 
-at the end of every training epoch. That means that you may safely 
-interrupt this script. You can then resume training picking up from 
-where you left off by executing the above command.
-
-### Compute metrics on a trained model (pass a path to a specification file for evaluation):
-```
-taevaluate <path_to_evaluation_specification_file>
-```
-The script expects the specification file to contain the location of the 
-training session directory.
-
-### Test model predictions on your data:
-```
-tainfer <path_to_inference_specification_file> input1 input2 ... inputn
-```
-The first argument is the path to the specification file for inference.
-The rest are a variable number of user inputs. Usually, for each of those inputs, 
-you have to write a converter class that specifies how to
-turn them into a format consumable by the prediction pipeline.
-
-To learn more about the details of the format of different specification
-files, see the section on the specification in the documentation.
-
 # License
 
 This project has an MIT license.
