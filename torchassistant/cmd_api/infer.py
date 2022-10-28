@@ -63,7 +63,10 @@ def run_infer():
     saver = SessionSaver(session_dir)
     session = saver.load_from_latest_checkpoint(new_spec=config)
 
-    pipeline = session.pipelines[config["inference_pipeline"]]
+    if "inference_pipeline" in config:
+        pipeline = session.pipelines[config["inference_pipeline"]]
+    else:
+        pipeline = next(iter(session.pipelines.values()))
 
     graph = pipeline.graph
     graph.eval_mode()

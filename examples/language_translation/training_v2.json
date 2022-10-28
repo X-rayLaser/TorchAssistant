@@ -46,7 +46,7 @@
                 "spec": {
                     "class": "SGD",
                     "kwargs": {
-                        "lr": 0.001,
+                        "lr": 0.01,
                         "momentum": 0.9
                     },
                     "model": "encoder_model"
@@ -58,7 +58,7 @@
                 "spec": {
                     "class": "SGD",
                     "kwargs": {
-                        "lr": 0.001,
+                        "lr": 0.01,
                         "momentum": 0.9
                     },
                     "model": "decoder_model"
@@ -68,12 +68,9 @@
                 "group": "losses",
                 "name": "cross_entropy",
                 "spec": {
-                    "class": "CrossEntropyLoss",
-                    "kwargs": {
-                        "reduction": "sum"
-                    },
-                    "inputs": ["y_hat", "y"],
-                    "transform": "examples.language_translation.transforms.transform"
+                    "class": "torchassistant.loss_functions.MaskedCrossEntropy",
+                    "inputs": ["y_hat", "input_2"],
+                    "transform": "torchassistant.transforms.pad_targets"
                 }
             },
             {

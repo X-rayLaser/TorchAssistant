@@ -24,7 +24,8 @@ class DecodeText:
         target_tokenizer = ds.preprocessors[-1]
 
         y_hat = y_hat.argmax(dim=2).tolist()
-        ground_true = ground_true.tolist()
+        if type(ground_true) is torch.Tensor:
+            ground_true = ground_true.tolist()
 
         predicted_texts = []
         actual_texts = []
@@ -32,4 +33,4 @@ class DecodeText:
             predicted_texts.append(target_tokenizer.decode(predicted_tokens))
             actual_texts.append(target_tokenizer.decode(true_tokens))
 
-        return [predicted_texts], [actual_texts]
+        return predicted_texts, actual_texts

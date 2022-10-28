@@ -5,50 +5,51 @@
     },
     "initialize": {
         "definitions": {
-            "replace_strategy": "override",
-            "override_key": ["name"],
-            "options": [
-                {
-                    "name": "neural_translator",
-                    "spec": {
-                        "input_adapter": {
-                            "class": "examples.language_translation.adapters.BatchInferenceAdapter"
-                        },
-                        "neural_graph": {
-                            "replace_strategy": "override",
-                            "override_key": ["model_name"],
-                            "options": [
-                                {
-                                    "model_name": "decoder_model",
-                                    "inputs": ["sos", "h_e"],
-                                    "outputs": ["y_hat"]
-                                }
-                            ]
-                        },
-                        "output_adapter": {
-                            "class": "examples.language_translation.adapters.NullAdapter"
+            "data": {
+                "replace_strategy": "override",
+                "override_key": ["name"],
+                "options": [
+                    {
+                        "name": "my_collator",
+                        "spec": {
+                            "factory_fn": "examples.language_translation.collators.build_inference_collator"
                         }
                     }
-                }
-            ]
-        },
-        "pipelines": {
-            "inference": {
-                "graph": "batch_processing_graph",
-                "input_injector": [
+                ]
+            },
+            "computation": {
+                "replace_strategy": "override",
+                "override_key": ["name"],
+                "options": [
                     {
-                        "input_port": "input_batch",
-                        "variable_names": ["french_batch"],
-                        "data_loader": "training_loader"
+                        "name": "neural_translator",
+                        "spec": {
+                            "input_adapter": {
+                                "class": "examples.language_translation.adapters.BatchInferenceAdapter"
+                            },
+                            "neural_graph": {
+                                "replace_strategy": "override",
+                                "override_key": ["model_name"],
+                                "options": [
+                                    {
+                                        "model_name": "decoder_model",
+                                        "inputs": ["sos", "h_e"],
+                                        "outputs": ["y_hat"]
+                                    }
+                                ]
+                            },
+                            "output_adapter": {
+                                "class": "examples.language_translation.adapters.NullAdapter"
+                            }
+                        }
                     }
                 ]
             }
         }
     },
-    "inference_pipeline": "inference",
     "inputs_meta": [
         {
-            "input_port": "input_batch",
+            "input_port": "default_port",
             "input_converter": {
                 "class": "examples.language_translation.adapters.InputConverter"
             }

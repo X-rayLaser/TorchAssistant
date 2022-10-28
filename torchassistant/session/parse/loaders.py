@@ -144,21 +144,24 @@ class PipelineLoader(Loader):
             del kwargs["data_loader"]
 
             if "input_port" not in kwargs:
-                input_ports = set()
-                for g in session.batch_graphs.values():
-                    input_ports = input_ports.union(g.batch_input_names)
-
-                if not input_ports:
-                    kwargs["input_port"] = "default_port"
-                elif len(input_ports) == 1:
-                    kwargs["input_port"] = input_ports.pop()
-                else:
-                    raise BadSpecificationError(
-                        f'Cannot build a pipeline. The value for "input_port" missing.'
-                    )
+                kwargs["input_port"] = self.guess_input_port(session)
 
             input_loaders.append(InputLoader(**kwargs))
         return input_loaders
+
+    def guess_input_port(self, session):
+        input_ports = set()
+        for g in session.batch_graphs.values():
+            input_ports = input_ports.union(g.batch_input_names)
+
+        if not input_ports:
+            return "default_port"
+        elif len(input_ports) == 1:
+            return input_ports.pop()
+        else:
+            raise BadSpecificationError(
+                f'Cannot build a pipeline. The value for "input_port" missing.'
+            )
 
     def parse_graph(self, session, spec, input_loaders):
         if "graph" not in spec and len(session.batch_graphs) > 1:
@@ -229,6 +232,7 @@ class PipelineLoader(Loader):
 
     def parse_metrics(self, session, pipeline_spec):
         metrics = {}
+
         for spec in pipeline_spec.get("metrics", []):
             name = spec["metric_name"]
             display_name = spec.get("display_name", name)
