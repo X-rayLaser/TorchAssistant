@@ -3,7 +3,7 @@ from torchassistant.utils import pad_sequences
 
 
 def reverse_onehot(y_hat, ground_true):
-    return y_hat.argmax(dim=-1), torch.LongTensor(ground_true)
+    return y_hat.argmax(dim=-1), ground_true
 
 
 def pad_targets(y_hat, ground_true):

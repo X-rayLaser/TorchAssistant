@@ -85,6 +85,7 @@ class Mask:
 
     def to(self, device):
         self.mask = self.mask.to(device)
+        return self
 
 
 def add_padding(seq, size, filler):

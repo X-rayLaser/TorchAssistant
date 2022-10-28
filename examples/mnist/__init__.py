@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from PIL import Image
 
 
 class LeNet5(nn.Module):
@@ -25,6 +26,5 @@ class LeNet5(nn.Module):
 
 class InputConverter:
     def __call__(self, image_path):
-        from PIL import Image
         with Image.open(image_path) as im:
             return im.copy(), 11
