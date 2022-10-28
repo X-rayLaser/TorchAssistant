@@ -1,0 +1,52 @@
+{
+    "session_dir": "pretrained",
+    "initialize": {
+        "definitions": {
+            "data": [
+                {
+                    "group": "datasets",
+                    "name": "train_ds",
+                    "spec": {
+                        "class": "torchvision.datasets.CIFAR10",
+                        "args": ["data"],
+                        "kwargs": {
+                            "train": true,
+                            "download": true
+                        }
+                    }
+                },
+                {
+                    "group": "datasets",
+                    "name": "test_ds",
+                    "spec": {
+                        "class": "torchvision.datasets.CIFAR10",
+                        "args": ["data"],
+                        "kwargs": {
+                            "train": false,
+                            "download": true
+                        }
+                    }
+                }],
+            "computation": [
+                {
+                    "group": "models",
+                    "name": "my_model",
+                    "spec": {
+                        "class": "examples.cifar.Model"
+                    }
+                },
+                {
+                    "group": "optimizers",
+                    "name": "optimizer",
+                    "spec": {
+                        "class": "Adam",
+                        "kwargs": {
+                            "lr": 0.001
+                        },
+                        "model": "my_model"
+                    }
+                }
+            ]
+        }
+    }
+}

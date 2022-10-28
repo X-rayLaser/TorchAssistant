@@ -1,0 +1,11 @@
+{
+    "session_dir": "pretrained",
+    "inference_pipeline": "validation",
+    "inputs_meta": [
+        {
+            "input_converter": {
+                "class": "examples.cifar.InputConverter"
+            }
+        }
+    ]
+}
