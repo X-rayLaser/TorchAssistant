@@ -1,0 +1,444 @@
+{
+    "session_dir": "pretrained",
+    "initialize": {
+        "definitions": {
+            "data": [{
+                    "group": "preprocessors",
+                    "name": "weak_augment_normalize",
+                    "spec": {
+                        "class": "examples.htr_self_training.preprocessors.WeakAugmentorNormalizer"
+                    }
+                },
+                {
+                    "group": "preprocessors",
+                    "name": "strong_augment_normalize",
+                    "spec": {
+                        "class": "examples.htr_self_training.preprocessors.StrongAugmentorNormalizer"
+                    }
+                },
+                {
+                    "group": "preprocessors",
+                    "name": "normalize",
+                    "spec": {
+                        "class": "examples.htr_self_training.preprocessors.Normalizer"
+                    }
+                },
+                {
+                    "group": "preprocessors",
+                    "name": "tokenize",
+                    "spec": {
+                        "class": "examples.htr_self_training.preprocessors.CharacterTokenizer",
+                        "kwargs": {
+                            "charset": "english"
+                        }
+                    }
+                },
+                {
+                    "group": "datasets",
+                    "name": "synthetic",
+                    "spec": {
+                        "class": "examples.htr_self_training.datasets.SyntheticDataset",
+                        "args": ["examples/htr_self_training/synthetic_data"],
+                        "preprocessors": ["", "tokenize"]
+                    }
+                },
+                {
+                    "group": "datasets",
+                    "name": "unlabeled",
+                    "spec": {
+                        "class": "examples.htr_self_training.datasets.UnlabeledDataset",
+                        "args": ["examples/htr_self_training/iam/iam_train.txt"]
+                    }
+                },
+                {
+                    "group": "datasets",
+                    "name": "pseudo_labeled",
+                    "spec": {
+                        "class": "examples.htr_self_training.datasets.LabeledDataset",
+                        "args": ["examples/htr_self_training/iam/pseudo_labels.txt"],
+                        "preprocessors": ["", "", "tokenize"]
+                    }
+                },
+                {
+                    "group": "datasets",
+                    "name": "iam_test_dataset",
+                    "spec": {
+                        "class": "examples.htr_self_training.datasets.LabeledDataset",
+                        "args": ["examples/htr_self_training/iam/iam_val.txt"],
+                        "preprocessors": ["", "tokenize"]
+                    }
+                },
+                {
+                    "group": "collators",
+                    "name": "unpack_batch",
+                    "spec": {
+                        "class": "torchassistant.collators.BatchDivide"
+                    }
+                },
+                {
+                    "group": "collators",
+                    "name": "collate_synthetic",
+                    "spec": {
+                        "class": "examples.htr_self_training.collators.ZeroPadImages",
+                        "args": [0]
+                    }
+                },
+                {
+                    "group": "collators",
+                    "name": "collate_unlabeled",
+                    "spec": {
+                        "class": "examples.htr_self_training.collators.ZeroPadImages",
+                        "args": [1]
+                    }
+                },
+                {
+                    "group": "collators",
+                    "name": "collate_pseudo_labeled",
+                    "spec": {
+                        "class": "examples.htr_self_training.collators.ZeroPadImages",
+                        "args": [[0, 1]]
+                    }
+                },
+                {
+                    "group": "collators",
+                    "name": "collate_test_dataset",
+                    "spec": {
+                        "class": "examples.htr_self_training.collators.ZeroPadImages",
+                        "args": [0]
+                    }
+                },
+                {
+                    "group": "data_loaders",
+                    "name": "synthetic_loader",
+                    "spec": {
+                        "dataset": "synthetic",
+                        "collator": "unpack_batch",
+                        "kwargs": {
+                            "batch_size": 4
+                        }
+                    }
+                },
+                {
+                    "group": "data_loaders",
+                    "name": "unlabeled_loader",
+                    "spec": {
+                        "dataset": "unlabeled",
+                        "collator": "unpack_batch",
+                        "kwargs": {
+                            "batch_size": 4
+                        }
+                    }
+                },
+                {
+                    "group": "data_loaders",
+                    "name": "pseudo_labeled_loader",
+                    "spec": {
+                        "dataset": "pseudo_labeled",
+                        "collator": "unpack_batch",
+                        "kwargs": {
+                            "batch_size": 4
+                        }
+                    }
+                },
+                {
+                    "group": "data_loaders",
+                    "name": "test_loader",
+                    "spec": {
+                        "dataset": "iam_test_dataset",
+                        "collator": "unpack_batch",
+                        "kwargs": {
+                            "batch_size": 4
+                        }
+                    }
+                }
+            ],
+            "computation": [
+                {
+                    "group": "models",
+                    "name": "encoder",
+                    "spec": {
+                        "factory_fn": "examples.htr_self_training.models.build_encoder",
+                        "kwargs": {
+                            "image_height": 64,
+                            "hidden_size": 32
+                        }
+                    }
+                },
+                {
+                    "group": "models",
+                    "name": "decoder",
+                    "spec": {
+                        "factory_fn": "examples.htr_self_training.models.build_decoder"
+                    }
+                },
+                {
+                    "group": "optimizers",
+                    "name": "encoder_optimizer",
+                    "spec": {
+                        "class": "Adam",
+                        "kwargs": {
+                            "lr": 0.001
+                        },
+                        "model": "encoder"
+                    }
+                },
+                {
+                    "group": "optimizers",
+                    "name": "decoder_optimizer",
+                    "spec": {
+                        "class": "Adam",
+                        "kwargs": {
+                            "lr": 0.001
+                        },
+                        "model": "decoder"
+                    }
+                },
+                {
+                    "group": "losses",
+                    "name": "cross_entropy",
+                    "spec": {
+                        "class": "torchassistant.loss_functions.MaskedCrossEntropy",
+                        "inputs": ["y_hat", "y"],
+                        "transform": "torchassistant.transforms.pad_targets"
+                    }
+                },
+                {
+                    "group": "metrics",
+                    "name": "cer",
+                    "spec": {
+                        "class": "CharErrorRate",
+                        "inputs": ["y_hat", "y"],
+                        "transform": "examples.htr_self_training.preprocessors.DecodeCharacterString"
+                    }
+                },
+                {
+                    "group": "metrics",
+                    "name": "wer",
+                    "spec": {
+                        "class": "WordErrorRate",
+                        "inputs": ["y_hat", "y"],
+                        "transform": "examples.htr_self_training.preprocessors.DecodeCharacterString"
+                    }
+                },
+                {
+                    "group": "batch_processors",
+                    "name": "synth_trainable_processor",
+                    "spec": {
+                        "input_adapter": {
+                            "factory_fn": "examples.htr_self_training.adapters.build_synthetic_image_input_adapter",
+                            "kwargs": {
+                                "hidden_size": 256
+                            }
+                        },
+                        "neural_graph": [
+                            {
+                                "model_name": "encoder",
+                                "inputs": ["x"],
+                                "outputs": ["encodings", "h_e"],
+                                "optimizer_name": "encoder_optimizer"
+                            },
+                            {
+                                "model_name": "decoder",
+                                "inputs": ["encodings", "tf_seq"],
+                                "outputs": ["y_hat", "h_d"],
+                                "optimizer_name": "decoder_optimizer"
+                            }
+                        ],
+                        "output_adapter": {
+                            "class": "examples.htr_self_training.adapters.BaseOutputAdapter"
+                        }
+                    }
+                }, {
+                    "group": "batch_processors",
+                    "name": "label_predicting_processor",
+                    "spec": {
+                        "input_adapter": {
+                            "factory_fn": "examples.htr_self_training.adapters.build_predictor_input_adapter",
+                            "kwargs": {
+                                 "hidden_size": 256
+                            }
+                        },
+                        "neural_graph": [
+                            {
+                                "model_name": "encoder",
+                                "inputs": ["x"],
+                                "outputs": ["encodings", "h_e"],
+                                "optimizer_name": "encoder_optimizer"
+                            },
+                            {
+                                "model_name": "decoder",
+                                "inputs": ["encodings"],
+                                "outputs": ["y_hat", "h_d"],
+                                "optimizer_name": "decoder_optimizer"
+                            }
+                        ],
+                        "output_adapter": {
+                            "class": "examples.htr_self_training.adapters.PredictionOutputAdapter"
+                        }
+                    }
+                },
+                {
+                    "group": "batch_processors",
+                    "name": "weakly_augmented_image_processor",
+                    "spec": {
+                        "input_adapter": {
+                            "factory_fn": "examples.htr_self_training.adapters.build_weakly_augmented_image_input_adapter",
+                            "kwargs": {
+                                "hidden_size": 256
+                            }
+                        },
+                        "neural_graph": [
+                            {
+                                "model_name": "encoder",
+                                "inputs": ["x"],
+                                "outputs": ["encodings", "h_e"],
+                                "optimizer_name": "encoder_optimizer"
+                            },
+                            {
+                                "model_name": "decoder",
+                                "inputs": ["encodings", "tf_seq"],
+                                "outputs": ["y_hat", "h_d"],
+                                "optimizer_name": "decoder_optimizer"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "group": "batch_processors",
+                    "name": "strongly_augmented_image_processor",
+                    "spec": {
+                        "input_adapter": {
+                            "factory_fn": "examples.htr_self_training.adapters.build_strongly_augmented_image_input_adapter",
+                            "kwargs": {
+                                "hidden_size": 256
+                            }
+                        },
+                        "neural_graph": [
+                            {
+                                "model_name": "encoder",
+                                "inputs": ["x"],
+                                "outputs": ["encodings", "h_e"],
+                                "optimizer_name": "encoder_optimizer"
+                            },
+                            {
+                                "model_name": "decoder",
+                                "inputs": ["encodings", "tf_seq"],
+                                "outputs": ["y_hat", "h_d"],
+                                "optimizer_name": "decoder_optimizer"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "group": "batch_graphs",
+                    "name": "synth_training_graph",
+                    "spec": {
+                        "nodes": ["synth_trainable_processor"],
+                        "input_ports": ["default_port"],
+                        "ingoing_edges": {
+                            "synth_trainable_processor": ["default_port"]
+                        }
+                    }
+                },
+                {
+                    "group": "batch_graphs",
+                    "name": "label_prediction_graph",
+                    "spec": {
+                        "nodes": ["label_predicting_processor"],
+                        "input_ports": ["default_port"],
+                        "ingoing_edges": {
+                            "label_predicting_processor": ["default_port"]
+                        }
+                    }
+                },
+                {
+                    "group": "batch_graphs",
+                    "name": "real_data_training_graph",
+                    "spec": {
+                        "nodes": ["weakly_augmented_image_processor", "strongly_augmented_image_processor"],
+                        "input_ports": ["default_port"],
+                        "ingoing_edges": {
+                            "weakly_augmented_image_processor": ["default_port"],
+                            "strongly_augmented_image_processor": ["default_port"]
+                        }
+                    }
+                }
+            ]
+        },
+        "pipelines": {
+             "fit_synthetic": {
+                 "graph": "synth_training_graph",
+                 "input_injector": [
+                     {
+                         "data_loader": "synthetic_loader"
+                     }
+                 ],
+                 "losses": [
+                     {
+                         "node_name": "synth_trainable_processor",
+                         "loss_name": "cross_entropy",
+                         "loss_display_name": "synth loss"
+                     }
+                 ],
+                 "metrics": [
+                     {
+                         "node_name": "synth_trainable_processor",
+                         "metric_name": "cer"
+                     },
+                     {
+                         "node_name": "synth_trainable_processor",
+                         "metric_name": "wer"
+                     }
+                 ]
+            },
+            "predict_pseudo_labels": {
+                "graph": "label_prediction_graph",
+                "input_injector": [
+                     {
+                         "data_loader": "unlabeled_loader"
+                     }
+                 ]
+            },
+            "fit_pseudo_labeled": {
+                "graph": "real_data_training_graph",
+                "input_injector": [
+                     {
+                         "data_loader": "pseudo_labeled_loader"
+                     }
+                 ]
+            }
+        }
+    },
+    "train": {
+        "stages": [{
+            "training_pipelines": [
+                "fit_synthetic"
+            ],
+            "validation_pipelines": [
+                "fit_synthetic"
+            ],
+            "eval_steps": 0.1,
+            "stop_condition": {
+                "class": "torchassistant.stop_conditions.EpochsCompleted",
+                "kwargs": {
+                    "num_epochs": 10
+                }
+            }
+        }, {
+            "run_before_epoch": ["predict_pseudo_labels"],
+            "training_pipelines": [
+                "fit_pseudo_labeled"
+            ],
+            "validation_pipelines": [
+                "fit_pseudo_labeled"
+            ],
+            "eval_steps": 0.1,
+            "stop_condition": {
+                "class": "torchassistant.stop_conditions.EpochsCompleted",
+                "kwargs": {
+                    "num_epochs": 50
+                }
+            }
+        }]
+    }
+}

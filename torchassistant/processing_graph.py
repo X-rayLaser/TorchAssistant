@@ -70,7 +70,8 @@ class NeuralBatchProcessor(BatchProcessor):
         try:
             inputs = self.input_adapter(data_frame)
         except Exception as e:
-            raise InputAdapterError(repr(e))
+            import traceback
+            raise InputAdapterError(traceback.format_exc())
 
         self.change_model_device()
 

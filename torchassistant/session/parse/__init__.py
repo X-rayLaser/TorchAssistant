@@ -50,6 +50,7 @@ def load_preprocessor(session, spec, object_name=None):
 
 @register("data_loaders")
 def load_data_factory(session, spec, object_name=None):
+    # todo: consider to use default collator when it is omitted
     dataset = session.datasets[spec["dataset"]]
     collator = session.collators[spec["collator"]]
 

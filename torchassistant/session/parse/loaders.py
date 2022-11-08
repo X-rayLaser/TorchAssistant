@@ -346,7 +346,10 @@ class StageLoader(Loader):
         else:
             stop_condition = self.build_stop_condition(session)
 
-        eval_steps = spec.get("eval_steps", self.default_eval_steps(session))
+        if "eval_steps" in spec:
+            eval_steps = spec["eval_steps"]
+        else:
+            eval_steps = self.default_eval_steps(session)
 
         return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines,
                      stop_condition, eval_steps)
