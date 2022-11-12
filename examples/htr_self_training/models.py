@@ -100,8 +100,8 @@ class AttendingDecoder(nn.Module):
 
         if y_shifted is None:
             # close loop inference
-            sos = torch.zeros(len(encodings), 1, self.y_size, dtype=encodings.dtype, device=encodings.device)
-            sos[:, 0, self.sos_token] = 1
+            sos = torch.zeros(len(encodings), self.y_size, dtype=encodings.dtype, device=encodings.device)
+            sos[:, self.sos_token] = 1
             return self.run_inference(encodings, decoder_hidden, sos)
 
         # teacher forcing
@@ -122,15 +122,19 @@ class AttendingDecoder(nn.Module):
 
         y_hat_prev = sos
 
+        batch_size = len(encodings)
+        batch_indices = range(batch_size)
+
         for t in range(20):
             scores, decoder_hidden = self.predict_next(decoder_hidden, encodings, y_hat_prev)
 
-            top = scores[0].argmax()
+            top = scores.argmax(dim=1)
 
-            y_hat_prev = torch.zeros(1, self.y_size)
-            y_hat_prev[0, top] = 1.0
-            outputs.append(top)
-        return [outputs]
+            y_hat_prev = torch.zeros(batch_size, self.y_size)
+            y_hat_prev[batch_indices, top] = 1.0
+            outputs.append(scores)
+
+        return [torch.stack(outputs, dim=1)]
 
     def predict_next(self, decoder_hidden, encoder_outputs, y_hat_prev):
         c = self.attention(decoder_hidden, encoder_outputs)

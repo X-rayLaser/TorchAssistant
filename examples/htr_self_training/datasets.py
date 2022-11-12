@@ -1,6 +1,8 @@
 import os
 from PIL import Image
+
 from torchvision.transforms.functional import rgb_to_grayscale
+from torchvision.transforms import Resize
 
 
 class SyntheticDataset:
@@ -21,10 +23,14 @@ class SyntheticDataset:
 
 
 class IAMWordsDataset:
-    def __init__(self, index_path):
+    def __init__(self, index_path, target_height=64):
         self.index_path = index_path
         self.iam_index = []
+        self.target_height = target_height
 
+        self.re_build()
+
+    def re_build(self):
         with open(self.index_path) as f:
             for line in f:
                 path, gray_level, transcript = line.split(',')
@@ -38,7 +44,16 @@ class IAMWordsDataset:
         image = Image.open(path)
         image = clean_image(image, gray_level)
 
-        return path, image, transcript
+        w = image.width
+        h = image.height
+
+        scaler = self.target_height / h
+
+        target_width = int(round(scaler * w))
+
+        resizer = Resize((self.target_height, target_width))
+        image = resizer(image)
+        return path, gray_level, image, transcript
 
     def __len__(self):
         return len(self.iam_index)
@@ -46,13 +61,13 @@ class IAMWordsDataset:
 
 class UnlabeledDataset(IAMWordsDataset):
     def __getitem__(self, idx):
-        path, image, transcript = super().__getitem__(idx)
-        return path, image
+        path, gray_level, image, transcript = super().__getitem__(idx)
+        return path, gray_level, image
 
 
 class LabeledDataset(IAMWordsDataset):
     def __getitem__(self, idx):
-        path, image, transcript = super().__getitem__(idx)
+        path, gray_level, image, transcript = super().__getitem__(idx)
         return image, transcript
 
 

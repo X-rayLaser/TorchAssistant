@@ -15,13 +15,14 @@ class DebugPipeline:
 
 class Stage:
     def __init__(self, mode, training_pipelines,
-                 validation_pipelines, debug_pipelines, stop_condition, eval_steps):
+                 validation_pipelines, debug_pipelines, stop_condition, eval_steps, run_before_epoch=None):
         self.mode = mode
         self.training_pipelines = training_pipelines
         self.validation_pipelines = validation_pipelines
         self.debug_pipelines = debug_pipelines
         self.stop_condition = stop_condition
         self.eval_steps = eval_steps
+        self.run_before_epoch = run_before_epoch or []
 
 
 class InputLoader:

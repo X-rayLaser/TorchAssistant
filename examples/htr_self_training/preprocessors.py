@@ -68,7 +68,7 @@ class CharacterTokenizer(ValuePreprocessor):
     def _decode(self, token):
         return self.index2char.get(token, self.out_of_charset)
 
-    def decode_to_string(self, tokens):
+    def decode_to_string(self, tokens, clean_output=False):
         s = ''.join([self._decode(token) for token in tokens[1:-1]])
 
         first_char = self._decode(tokens[0])
@@ -79,6 +79,11 @@ class CharacterTokenizer(ValuePreprocessor):
 
         if last_char != self.end:
             s += last_char
+
+        if clean_output:
+            s = s.replace(self.start, '')
+            s = s.replace(self.end, '')
+            s = s.replace(self.out_of_charset, '')
 
         return s
 

@@ -56,7 +56,7 @@
                     "spec": {
                         "class": "examples.htr_self_training.datasets.LabeledDataset",
                         "args": ["examples/htr_self_training/iam/pseudo_labels.txt"],
-                        "preprocessors": ["", "", "tokenize"]
+                        "preprocessors": ["", "tokenize"]
                     }
                 },
                 {
@@ -203,6 +203,15 @@
                     }
                 },
                 {
+                    "group": "losses",
+                    "name": "consistency_loss",
+                    "spec": {
+                        "class": "examples.htr_self_training.ConsistencyLoss",
+                        "inputs": ["y_hat_weak", "y_hat_strong", "y"],
+                        "transform": "examples.htr_self_training.transforms.pad_targets"
+                    }
+                },
+                {
                     "group": "metrics",
                     "name": "cer",
                     "spec": {
@@ -225,10 +234,7 @@
                     "name": "synth_trainable_processor",
                     "spec": {
                         "input_adapter": {
-                            "factory_fn": "examples.htr_self_training.adapters.build_synthetic_image_input_adapter",
-                            "kwargs": {
-                                "hidden_size": 256
-                            }
+                            "factory_fn": "examples.htr_self_training.adapters.build_synthetic_image_input_adapter"
                         },
                         "neural_graph": [
                             {
@@ -253,10 +259,7 @@
                     "name": "label_predicting_processor",
                     "spec": {
                         "input_adapter": {
-                            "factory_fn": "examples.htr_self_training.adapters.build_predictor_input_adapter",
-                            "kwargs": {
-                                 "hidden_size": 256
-                            }
+                            "factory_fn": "examples.htr_self_training.adapters.build_predictor_input_adapter"
                         },
                         "neural_graph": [
                             {
@@ -273,7 +276,11 @@
                             }
                         ],
                         "output_adapter": {
-                            "class": "examples.htr_self_training.adapters.PredictionOutputAdapter"
+                            "factory_fn": "examples.htr_self_training.adapters.build_prediction_output_adapter",
+                            "kwargs": {
+                                "pseudo_labels_path": "examples/htr_self_training/iam/pseudo_labels.txt",
+                                "threshold": 0.4
+                            }
                         }
                     }
                 },
@@ -282,10 +289,7 @@
                     "name": "weakly_augmented_image_processor",
                     "spec": {
                         "input_adapter": {
-                            "factory_fn": "examples.htr_self_training.adapters.build_weakly_augmented_image_input_adapter",
-                            "kwargs": {
-                                "hidden_size": 256
-                            }
+                            "factory_fn": "examples.htr_self_training.adapters.build_weakly_augmented_image_input_adapter"
                         },
                         "neural_graph": [
                             {
@@ -308,10 +312,7 @@
                     "name": "strongly_augmented_image_processor",
                     "spec": {
                         "input_adapter": {
-                            "factory_fn": "examples.htr_self_training.adapters.build_strongly_augmented_image_input_adapter",
-                            "kwargs": {
-                                "hidden_size": 256
-                            }
+                            "factory_fn": "examples.htr_self_training.adapters.build_strongly_augmented_image_input_adapter"
                         },
                         "neural_graph": [
                             {
@@ -327,6 +328,48 @@
                                 "optimizer_name": "decoder_optimizer"
                             }
                         ]
+                    }
+                },
+                {
+                    "group": "batch_processors",
+                    "name": "labeled_image_processor",
+                    "spec": {
+                        "input_adapter": {
+                            "factory_fn": "examples.htr_self_training.adapters.build_augmentation_adapter"
+                        },
+                        "neural_graph": [
+                            {
+                                "model_name": "encoder",
+                                "inputs": ["x_weak"],
+                                "outputs": ["encodings_weak", "h_e_weak"],
+                                "optimizer_name": "encoder_optimizer",
+                                "alias": "encoder_weak"
+                            },
+                            {
+                                "model_name": "decoder",
+                                "inputs": ["encodings_weak", "tf_seq"],
+                                "outputs": ["y_hat_weak", "h_d_weak"],
+                                "optimizer_name": "decoder_optimizer",
+                                "alias": "decoder_weak"
+                            },
+                            {
+                                "model_name": "encoder",
+                                "inputs": ["x_strong"],
+                                "outputs": ["encodings_strong", "h_e_strong"],
+                                "optimizer_name": "encoder_optimizer",
+                                "alias": "encoder_strong"
+                            },
+                            {
+                                "model_name": "decoder",
+                                "inputs": ["encodings_strong", "tf_seq"],
+                                "outputs": ["y_hat_strong", "h_d_strong"],
+                                "optimizer_name": "decoder_optimizer",
+                                "alias": "decoder_strong"
+                            }
+                        ],
+                        "output_adapter": {
+                            "class": "examples.htr_self_training.adapters.BaseOutputAdapter"
+                        }
                     }
                 },
                 {
@@ -355,15 +398,30 @@
                     "group": "batch_graphs",
                     "name": "real_data_training_graph",
                     "spec": {
-                        "nodes": ["weakly_augmented_image_processor", "strongly_augmented_image_processor"],
+                        "nodes": ["labeled_image_processor"],
                         "input_ports": ["default_port"],
                         "ingoing_edges": {
-                            "weakly_augmented_image_processor": ["default_port"],
-                            "strongly_augmented_image_processor": ["default_port"]
+                            "labeled_image_processor": ["default_port"]
                         }
                     }
                 }
-            ]
+            ],
+            "callbacks": [{
+                "group": "callbacks",
+                "name": "erase_pseudo_labels",
+                "spec": {
+                    "class": "examples.htr_self_training.callbacks.ErasePseudoLabels",
+                    "kwargs": {
+                        "pseudo_labels_path": "examples/htr_self_training/iam/pseudo_labels.txt"
+                    }
+                }
+            }, {
+                "group": "callbacks",
+                "name": "rebuild_index",
+                "spec": {
+                    "class": "examples.htr_self_training.callbacks.RebuildIndex"
+                }
+            }]
         },
         "pipelines": {
              "fit_synthetic": {
@@ -402,10 +460,18 @@
             "fit_pseudo_labeled": {
                 "graph": "real_data_training_graph",
                 "input_injector": [
-                     {
-                         "data_loader": "pseudo_labeled_loader"
-                     }
-                 ]
+                    {
+                        "data_loader": "pseudo_labeled_loader"
+                    }
+                ],
+                "losses": [
+                    {
+                        "node_name": "labeled_image_processor",
+                        "loss_name": "consistency_loss",
+                        "loss_display_name": "consistency loss"
+                    }
+                ],
+                "metrics": []
             }
         }
     },
@@ -421,11 +487,11 @@
             "stop_condition": {
                 "class": "torchassistant.stop_conditions.EpochsCompleted",
                 "kwargs": {
-                    "num_epochs": 10
+                    "num_epochs": 1
                 }
             }
         }, {
-            "run_before_epoch": ["predict_pseudo_labels"],
+            "run_before_epoch": ["erase_pseudo_labels", "predict_pseudo_labels", "rebuild_index"],
             "training_pipelines": [
                 "fit_pseudo_labeled"
             ],
@@ -436,7 +502,7 @@
             "stop_condition": {
                 "class": "torchassistant.stop_conditions.EpochsCompleted",
                 "kwargs": {
-                    "num_epochs": 50
+                    "num_epochs": 1
                 }
             }
         }]

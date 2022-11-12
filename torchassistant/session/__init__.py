@@ -116,6 +116,7 @@ class Session:
         self.batch_graphs = {}
         self.losses = {}
         self.metrics = {}
+        self.callbacks = {}
 
         self.training_pipelines = {}
         self.debug_pipelines = {}
@@ -323,6 +324,10 @@ class SessionInitializer:
         computation_definitions = definitions["computation"]
 
         for d in computation_definitions:
+            self.build_object(session, d)
+
+        callback_definitions = definitions.get("callbacks", [])
+        for d in callback_definitions:
             self.build_object(session, d)
 
         auto_completer.autocomplete_loss_and_metrics(session)

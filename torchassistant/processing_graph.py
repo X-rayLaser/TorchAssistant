@@ -89,7 +89,8 @@ class NeuralBatchProcessor(BatchProcessor):
         try:
             res = self.output_adapter(result_dict)
         except Exception as e:
-            raise OutputAdapterError(repr(e))
+            import traceback
+            raise OutputAdapterError(traceback.format_exc())
 
         return res
 
@@ -109,6 +110,8 @@ class NeuralBatchProcessor(BatchProcessor):
                 model.optimizer.zero_grad()
 
     def update(self):
+        # todo: handle correctly case where there are models-duplicates (step only once per each model)
+
         for node in self.neural_nodes:
             if node.optimizer:
                 node.optimizer.step()

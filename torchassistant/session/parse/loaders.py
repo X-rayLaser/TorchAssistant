@@ -108,9 +108,10 @@ class BatchProcessorLoader(Loader):
             inputs = node_dict['inputs']
             outputs = node_dict['outputs']
             optimizer_name = node_dict.get('optimizer_name', '')
+            alias = node_dict.get('alias')
 
-            NodeSpec = namedtuple('NodeSpec', ['model_name', 'inputs', 'outputs', 'optimizer_name'])
-            node_spec = NodeSpec(model_name, inputs, outputs, optimizer_name)
+            NodeSpec = namedtuple('NodeSpec', ['model_name', 'inputs', 'outputs', 'optimizer_name', 'alias'])
+            node_spec = NodeSpec(model_name, inputs, outputs, optimizer_name, alias=alias)
             node = self.node_from_spec(session, node_spec)
             nodes.append(node)
         return nodes
@@ -118,7 +119,8 @@ class BatchProcessorLoader(Loader):
     def node_from_spec(self, session, node_spec):
         model = session.models[node_spec.model_name]
         optimizer = session.optimizers.get(node_spec.optimizer_name)
-        return Node(name=node_spec.model_name,
+        name = node_spec.alias or node_spec.model_name
+        return Node(name=name,
                     model=model, optimizer=optimizer,
                     inputs=node_spec.inputs, outputs=node_spec.outputs)
 
@@ -351,8 +353,18 @@ class StageLoader(Loader):
         else:
             eval_steps = self.default_eval_steps(session)
 
+        callback_names = spec.get("run_before_epoch", [])
+
+        run_before_epoch = []
+        for cb_name in callback_names:
+            if cb_name in session.callbacks:
+                obj = session.callbacks[cb_name]
+            else:
+                obj = session.pipelines[cb_name]
+            run_before_epoch.append(obj)
+
         return Stage(mode, training_pipelines, validation_pipelines, debug_pipelines,
-                     stop_condition, eval_steps)
+                     stop_condition, eval_steps, run_before_epoch)
 
     def default_eval_steps(self, session):
         """Simple heuristics to auto select appropriate value for eval_steps"""

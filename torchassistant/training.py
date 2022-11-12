@@ -7,6 +7,7 @@ from torchassistant.session import StopTrainingError
 from .data import InputInjector
 from .utils import Debugger
 from torchassistant.formatters import ProgressBar
+from torchassistant.session.data_classes import TrainingPipeline
 
 
 def train(session, log_metrics, save_checkpoint, stat_ivl=1):
@@ -33,6 +34,8 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
     history = []
     for epoch in range(start_epoch, start_epoch + 1000):
+        run_callbacks(session, stage.run_before_epoch, epoch)
+
         calculators = [MetricsSetCalculator(metrics, stat_ivl) for metrics in metric_dicts]
 
         train_on_data(session, stage.training_pipelines, debuggers, calculators, epoch)
@@ -54,6 +57,32 @@ def train_stage(session, stage_number, log_metrics, save_checkpoint, stat_ivl=10
 
         if should_stop:
             break
+
+
+def run_callbacks(session, callbacks, epoch):
+    for callback in callbacks:
+        if isinstance(callback, TrainingPipeline):
+            run_pipeline(callback)
+        else:
+            callback(session, epoch)
+
+
+def run_pipeline(pipeline):
+    data_generator = InputInjector(pipeline.input_loaders)
+
+    whitespaces = ' ' * 150
+    print(f'\r{whitespaces}', end='')
+
+    progress_bar = ProgressBar()
+    num_batches = len(data_generator)
+
+    with torch.no_grad():
+        for i, graph_inputs in enumerate(data_generator):
+            results = pipeline.graph(graph_inputs)
+
+            step_number = i + 1
+            progress = progress_bar.updated(step_number, num_batches, cols=50)
+            print(f'\rRunning callback: {progress} {step_number}/{num_batches}', end='')
 
 
 def train_on_data(session, training_pipelines, debuggers, metric_calculators, epoch):

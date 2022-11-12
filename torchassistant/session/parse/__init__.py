@@ -155,3 +155,9 @@ def load_metric(session, spec, object_name=None):
         metric = metric_functions[metric_class]
 
     return Metric(object_name, metric, spec["inputs"], transform_fn)
+
+
+@register("callbacks")
+def load_callback(session, spec, object_name=None):
+    instance = Loader().load(session, spec, object_name)
+    return instance
