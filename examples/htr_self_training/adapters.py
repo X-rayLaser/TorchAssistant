@@ -164,14 +164,6 @@ class PredictorInputAdapter(TrainableProcessorInputAdapter):
         return None
 
 
-class WeaklyAugmentedImageInputAdapter(TrainableProcessorInputAdapter):
-    pass
-
-
-class StronglyAugmentedImageInputAdapter(TrainableProcessorInputAdapter):
-    pass
-
-
 class BaseOutputAdapter:
     def __call__(self, data_frame):
         transcripts = data_frame["input_2"]
@@ -245,16 +237,6 @@ def build_synthetic_image_input_adapter(session, **kwargs):
 def build_predictor_input_adapter(session, **kwargs):
     num_classes = session.preprocessors["tokenize"].charset_size
     return PredictorInputAdapter(num_classes=num_classes, **kwargs)
-
-
-def build_weakly_augmented_image_input_adapter(session, **kwargs):
-    num_classes = session.preprocessors["tokenize"].charset_size
-    return WeaklyAugmentedImageInputAdapter(num_classes=num_classes, **kwargs)
-
-
-def build_strongly_augmented_image_input_adapter(session, **kwargs):
-    num_classes = session.preprocessors["tokenize"].charset_size
-    return StronglyAugmentedImageInputAdapter(num_classes=num_classes, **kwargs)
 
 
 def build_augmentation_adapter(session, **kwargs):

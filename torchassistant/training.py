@@ -83,6 +83,7 @@ def run_pipeline(pipeline):
             step_number = i + 1
             progress = progress_bar.updated(step_number, num_batches, cols=50)
             print(f'\rRunning callback: {progress} {step_number}/{num_batches}', end='')
+    print(f'\r{whitespaces}', end='')
 
 
 def train_on_data(session, training_pipelines, debuggers, metric_calculators, epoch):
