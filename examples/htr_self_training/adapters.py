@@ -93,6 +93,11 @@ class StrongAugmentation(WeakAugmentation):
         return all_transforms[idx]
 
 
+class WithoutAugmentation(WeakAugmentation):
+    def augment(self, images):
+        return self.pad_images(images)
+
+
 def identity(image): return image
 
 
@@ -112,14 +117,15 @@ def solarize(image):
 
 
 class TrainableProcessorInputAdapter:
+    image_preprocessor = WithoutAugmentation()
+
     def __init__(self, num_classes):
         self.num_classes = num_classes
 
     def __call__(self, batch: dict) -> dict:
         images = self.get_images(batch)
 
-        preprocessor = WeakAugmentation()
-        tensors = preprocessor.prepare_images(images)
+        tensors = self.image_preprocessor.prepare_images(images)
 
         transcripts_tensor = self.get_teacher_forcing_tensor(batch)
 
@@ -227,6 +233,10 @@ class AugmentationInputAdapter(TrainableProcessorInputAdapter):
         }
 
 
+class EvaluationProcessorAdapter(TrainableProcessorInputAdapter):
+    image_preprocessor = WithoutAugmentation()
+
+
 def build_synthetic_image_input_adapter(session, **kwargs):
     num_classes = session.preprocessors["tokenize"].charset_size
     return SyntheticInputAdapter(num_classes=num_classes, **kwargs)
@@ -255,3 +265,8 @@ def build_augmentation_adapter(session, **kwargs):
 def build_prediction_output_adapter(session, **kwargs):
     tokenizer = session.preprocessors["tokenize"]
     return PredictionOutputAdapter(tokenizer, **kwargs)
+
+
+def build_evaluation_input_adapter(session, **kwargs):
+    num_classes = session.preprocessors["tokenize"].charset_size
+    return EvaluationProcessorAdapter(num_classes)
