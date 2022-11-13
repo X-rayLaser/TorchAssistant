@@ -110,11 +110,15 @@ class NeuralBatchProcessor(BatchProcessor):
                 model.optimizer.zero_grad()
 
     def update(self):
-        # todo: handle correctly case where there are models-duplicates (step only once per each model)
+        # todo: double check this
+        # ignore all duplicate optimizers to prevent updating the same optimizer more than once
+        optimizers = [node.optimizer for node in self.neural_nodes if node.optimizer]
 
-        for node in self.neural_nodes:
-            if node.optimizer:
-                node.optimizer.step()
+        id2opt = {id(opt): opt for opt in optimizers}
+        unique_optimizers = id2opt.values()
+
+        for optimizer in unique_optimizers:
+            optimizer.step()
 
     def train_mode(self):
         for node in self.neural_nodes:

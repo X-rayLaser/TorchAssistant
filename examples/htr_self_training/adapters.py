@@ -4,6 +4,8 @@ from torch.nn.functional import softmax
 from torchassistant.utils import pad_sequences
 from torchassistant.collators import one_hot_tensor
 from torchvision import transforms
+from random import randrange, uniform
+import math
 
 
 class ImagePreprocessor:
@@ -55,7 +57,58 @@ class WeakAugmentation(ImagePreprocessor):
 
 
 class StrongAugmentation(WeakAugmentation):
-    pass
+    brightness = transforms.ColorJitter(brightness=(0.05, 0.95))
+    contrast = transforms.ColorJitter(contrast=(0.05, 0.95))
+    equalize = transforms.RandomEqualize(1)
+    rotate = transforms.RandomRotation((-30, 30), fill=255)
+
+    degrees_range = (math.degrees(-0.3), math.degrees(0.3))
+    shear_x = transforms.RandomAffine(0, shear=degrees_range)
+    shear_y = transforms.RandomAffine(0, shear=(0, 0) + degrees_range)
+    auto_contrast = transforms.RandomAutocontrast(1)
+    translate_x = transforms.RandomAffine(0, translate=(0.3, 0), fill=255)
+    translate_y = transforms.RandomAffine(0, translate=(0, 0.3), fill=255)
+
+    transforms_per_image = 2
+
+    def augment(self, images):
+        images = [self.transform_image(im) for im in images]
+        return self.pad_images(images)
+
+    def transform_image(self, image):
+        transformations = self.get_random_transformations(self.transforms_per_image)
+        for transform_func in transformations:
+            image = transform_func(image)
+        return image
+
+    def get_random_transformations(self, n):
+        return [self.random_transformation() for _ in range(n)]
+
+    def random_transformation(self):
+        all_transforms = [self.auto_contrast, self.brightness, self.contrast,
+                          self.equalize, identity, posterize, self.rotate,
+                          adjust_sharpness, self.shear_x, self.shear_y,
+                          solarize, self.translate_x, self.translate_y]
+        idx = randrange(0, len(all_transforms))
+        return all_transforms[idx]
+
+
+def identity(image): return image
+
+
+def posterize(image):
+    bits = randrange(4, 8 + 1)
+    return transforms.RandomPosterize(bits, p=1)(image)
+
+
+def adjust_sharpness(image):
+    factor = uniform(0.05, 0.95)
+    return transforms.RandomAdjustSharpness(factor, p=1)(image)
+
+
+def solarize(image):
+    threshold = int(round(uniform(0, 1) * 255))
+    return transforms.RandomSolarize(threshold, p=1)(image)
 
 
 class TrainableProcessorInputAdapter:
