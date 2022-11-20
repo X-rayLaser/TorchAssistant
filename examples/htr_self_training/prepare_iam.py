@@ -3,9 +3,14 @@ import re
 import shutil
 import argparse
 import random
+import PIL
+from PIL import Image
 
 
 def prepare_iam_dataset(iam_location, output_dir, max_words=None, train_fraction=0.8):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
     transcripts_file = os.path.join(iam_location, 'ascii', 'words.txt')
     words_dir = os.path.join(iam_location, 'words')
 
@@ -43,6 +48,12 @@ def prepare_iam_dataset(iam_location, output_dir, max_words=None, train_fraction
             if not path:
                 lines_skipped += 1
                 raise Exception(f'File not found: {path}. Line {line}')
+
+            try:
+                Image.open(path)
+            except PIL.UnidentifiedImageError:
+                print('Bad image file')
+                continue
 
             if i + 1 % 10000:
                 print('Words processed:', i + 1)

@@ -243,7 +243,7 @@ class AttendingDecoder(nn.Module):
 
             top = scores.argmax(dim=1)
 
-            y_hat_prev = torch.zeros(batch_size, self.y_size)
+            y_hat_prev = torch.zeros(batch_size, self.y_size, device=encodings.device)
             y_hat_prev[batch_indices, top] = 1.0
             outputs.append(scores)
 
