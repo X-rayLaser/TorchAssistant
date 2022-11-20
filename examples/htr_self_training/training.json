@@ -15,10 +15,19 @@
                 },
                 {
                     "group": "datasets",
-                    "name": "synthetic",
+                    "name": "synthetic_train",
                     "spec": {
                         "class": "examples.htr_self_training.datasets.SyntheticDataset",
-                        "args": ["examples/htr_self_training/synthetic_data"],
+                        "args": ["examples/htr_self_training/synthetic_data/train"],
+                        "preprocessors": ["", "tokenize"]
+                    }
+                },
+                {
+                    "group": "datasets",
+                    "name": "synthetic_val",
+                    "spec": {
+                        "class": "examples.htr_self_training.datasets.SyntheticDataset",
+                        "args": ["examples/htr_self_training/synthetic_data/val"],
                         "preprocessors": ["", "tokenize"]
                     }
                 },
@@ -57,9 +66,20 @@
                 },
                 {
                     "group": "data_loaders",
-                    "name": "synthetic_loader",
+                    "name": "synthetic_train_loader",
                     "spec": {
-                        "dataset": "synthetic",
+                        "dataset": "synthetic_train",
+                        "collator": "unpack_batch",
+                        "kwargs": {
+                            "batch_size": 4
+                        }
+                    }
+                },
+                {
+                    "group": "data_loaders",
+                    "name": "synthetic_val_loader",
+                    "spec": {
+                        "dataset": "synthetic_val",
                         "collator": "unpack_batch",
                         "kwargs": {
                             "batch_size": 4
@@ -367,7 +387,7 @@
                  "graph": "synth_training_graph",
                  "input_injector": [
                      {
-                         "data_loader": "synthetic_loader"
+                         "data_loader": "synthetic_train_loader"
                      }
                  ],
                  "losses": [
@@ -385,6 +405,33 @@
                      {
                          "node_name": "synth_trainable_processor",
                          "metric_name": "wer"
+                     }
+                 ]
+            },
+            "evaluate_on_synthetic": {
+                 "graph": "synth_training_graph",
+                 "input_injector": [
+                     {
+                         "data_loader": "synthetic_val_loader"
+                     }
+                 ],
+                 "losses": [
+                     {
+                         "node_name": "synth_trainable_processor",
+                         "loss_name": "cross_entropy",
+                         "loss_display_name": "val synth loss"
+                     }
+                 ],
+                 "metrics": [
+                     {
+                         "node_name": "synth_trainable_processor",
+                         "metric_name": "cer",
+                         "display_name": "val cer"
+                     },
+                     {
+                         "node_name": "synth_trainable_processor",
+                         "metric_name": "wer",
+                         "display_name": "val wer"
                      }
                  ]
             },
@@ -445,7 +492,7 @@
                 "fit_synthetic"
             ],
             "validation_pipelines": [
-                "fit_synthetic"
+                "fit_synthetic", "evaluate_on_synthetic"
             ],
             "eval_steps": 0.1,
             "stop_condition": {
