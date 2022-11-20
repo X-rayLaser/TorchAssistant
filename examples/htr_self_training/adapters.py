@@ -186,7 +186,7 @@ class PredictionOutputAdapter:
         for i in range(len(indices)):
             transcript = self.tokenizer.decode_to_string(indices[i, :], clean_output=True)
 
-            if mean_confidence[i] > 0:
+            if mean_confidence[i] > self.threshold:
                 image_path = data_frame["input_1"]
                 gray_level = data_frame["input_2"]
                 self.save_example(image_path[i], gray_level[i], transcript)
