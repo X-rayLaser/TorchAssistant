@@ -1,6 +1,5 @@
 import os
 import re
-import shutil
 import argparse
 import random
 import PIL
@@ -47,12 +46,14 @@ def prepare_iam_dataset(iam_location, output_dir, max_words=None, train_fraction
             path = locate_image(words_dir, image_id)
             if not path:
                 lines_skipped += 1
-                raise Exception(f'File not found: {path}. Line {line}')
+                print(f'File not found: {path}. Line {line}')
+                continue
 
             try:
                 Image.open(path)
             except PIL.UnidentifiedImageError:
                 print('Bad image file')
+                lines_skipped += 1
                 continue
 
             if i + 1 % 10000:
