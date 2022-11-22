@@ -14,6 +14,8 @@ class SyntheticDataset:
         file_name = self.files[idx]
         path = os.path.join(self.root_path, file_name)
         transcript, _ = os.path.splitext(file_name)
+        transcript = transcript.split('_')[0]
+
         image = Image.open(path)
         image = rgb_to_grayscale(image)
         return image, transcript

@@ -102,7 +102,7 @@ class DecodeCharacterString:
         actual_texts = []
 
         for predicted_tokens, true_tokens in zip(y_hat, ground_true):
-            predicted_texts.append(tokenizer.decode_to_string(predicted_tokens))
-            actual_texts.append(tokenizer.decode_to_string(true_tokens))
+            predicted_texts.append(tokenizer.decode_to_string(predicted_tokens, clean_output=True))
+            actual_texts.append(tokenizer.decode_to_string(true_tokens, clean_output=True))
 
         return predicted_texts, actual_texts

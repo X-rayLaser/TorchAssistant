@@ -1,0 +1,4 @@
+{
+  "session_dir": "pretrained",
+  "validation_pipelines": ["fit_synthetic", "evaluate_on_synthetic"]
+}

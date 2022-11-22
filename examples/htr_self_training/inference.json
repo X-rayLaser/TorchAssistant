@@ -1,0 +1,14 @@
+{
+    "session_dir": "pretrained",
+    "inference_pipeline": "evaluate_on_synthetic",
+    "post_processor": {
+      "class":"examples.htr_self_training.PostProcessor"
+    },
+    "inputs_meta": [
+        {
+            "input_converter": {
+                "class": "examples.htr_self_training.adapters.InputConverter"
+            }
+        }
+    ]
+}

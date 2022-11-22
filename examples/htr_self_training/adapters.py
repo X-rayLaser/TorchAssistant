@@ -1,11 +1,14 @@
+from random import randrange, uniform
+import math
 import torch
+
 from torch.nn.functional import softmax
+from PIL import Image
+from torchvision.transforms.functional import rgb_to_grayscale
+from torchvision import transforms
 
 from torchassistant.utils import pad_sequences
 from torchassistant.collators import one_hot_tensor
-from torchvision import transforms
-from random import randrange, uniform
-import math
 
 
 class ImagePreprocessor:
@@ -252,3 +255,10 @@ def build_prediction_output_adapter(session, **kwargs):
 def build_evaluation_input_adapter(session, **kwargs):
     num_classes = session.preprocessors["tokenize"].charset_size
     return EvaluationProcessorAdapter(num_classes)
+
+
+class InputConverter:
+    def __call__(self, image_path):
+        with Image.open(image_path) as im:
+            im = rgb_to_grayscale(im)
+            return im.copy(), ''

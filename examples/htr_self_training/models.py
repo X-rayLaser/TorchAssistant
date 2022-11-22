@@ -202,7 +202,7 @@ class AttendingDecoder(nn.Module):
             # close loop inference
             sos = torch.zeros(len(encodings), self.y_size, dtype=encodings.dtype, device=encodings.device)
             sos[:, self.sos_token] = 1
-            return self.run_inference(encodings, decoder_hidden, sos)
+            return self.close_loop_inference(encodings, decoder_hidden, sos)
 
         # teacher forcing
         batch_size, num_steps, num_classes = y_shifted.size()
@@ -223,7 +223,7 @@ class AttendingDecoder(nn.Module):
         y_hat = torch.stack(outputs, dim=1)
         return [y_hat]
 
-    def run_inference(self, encodings, decoder_hidden, sos):
+    def close_loop_inference(self, encodings, decoder_hidden, sos):
         outputs = []
 
         y_hat_prev = sos
