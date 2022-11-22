@@ -355,7 +355,7 @@
                 },
                 {
                     "group": "batch_graphs",
-                    "name": "graph_to_evaluate_on_iam",
+                    "name": "evaluation_without_validation_graph",
                     "spec": {
                         "nodes": ["evaluation_processor"],
                         "input_ports": ["default_port"],
@@ -409,7 +409,7 @@
                  ]
             },
             "evaluate_on_synthetic": {
-                 "graph": "synth_training_graph",
+                 "graph": "evaluation_without_validation_graph",
                  "input_injector": [
                      {
                          "data_loader": "synthetic_val_loader"
@@ -417,19 +417,19 @@
                  ],
                  "losses": [
                      {
-                         "node_name": "synth_trainable_processor",
+                         "node_name": "evaluation_processor",
                          "loss_name": "cross_entropy",
                          "loss_display_name": "val synth loss"
                      }
                  ],
                  "metrics": [
                      {
-                         "node_name": "synth_trainable_processor",
+                         "node_name": "evaluation_processor",
                          "metric_name": "cer",
                          "display_name": "val cer"
                      },
                      {
-                         "node_name": "synth_trainable_processor",
+                         "node_name": "evaluation_processor",
                          "metric_name": "wer",
                          "display_name": "val wer"
                      }
@@ -460,7 +460,7 @@
                 "metrics": []
             },
             "evaluate_on_iam": {
-                "graph": "graph_to_evaluate_on_iam",
+                "graph": "evaluation_without_validation_graph",
                 "input_injector": [
                     {
                         "data_loader": "test_loader"
