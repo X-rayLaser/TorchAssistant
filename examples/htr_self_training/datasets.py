@@ -17,7 +17,6 @@ class SyntheticDataset:
         transcript = transcript.split('_')[0]
 
         image = Image.open(path)
-        image = rgb_to_grayscale(image)
         return image, transcript
 
     def __len__(self):

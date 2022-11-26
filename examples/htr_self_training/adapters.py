@@ -187,7 +187,8 @@ class PredictionOutputAdapter:
         mean_confidence = values.mean(dim=1)
 
         for i in range(len(indices)):
-            transcript = self.tokenizer.decode_to_string(indices[i, :], clean_output=True)
+            tokens = indices[i].tolist()
+            transcript = self.tokenizer.decode_to_string(tokens, clean_output=True)
 
             if mean_confidence[i] > self.threshold:
                 image_path = data_frame["input_1"]
