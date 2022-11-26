@@ -458,7 +458,7 @@
                 "graph": "label_prediction_graph",
                 "input_injector": [
                      {
-                         "data_loader": "unlabeled_impostor_loader"
+                         "data_loader": "unlabeled_loader"
                      }
                  ]
             },
@@ -495,11 +495,13 @@
                 "metrics": [
                     {
                         "node_name": "evaluation_processor",
-                        "metric_name": "cer"
+                        "metric_name": "cer",
+                        "display_name": "iam test CER"
                     },
                     {
                         "node_name": "evaluation_processor",
-                        "metric_name": "wer"
+                        "metric_name": "wer",
+                        "display_name": "iam test WER"
                     }
                 ]
             }

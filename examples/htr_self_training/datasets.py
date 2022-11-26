@@ -32,6 +32,7 @@ class IAMWordsDataset:
         self.re_build()
 
     def re_build(self):
+        self.iam_index = []
         with open(self.index_path) as f:
             for line in f:
                 path, gray_level, transcript = line.split(',')

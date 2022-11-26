@@ -184,13 +184,23 @@ class PredictionOutputAdapter:
         y_hat = data_frame["y_hat"]
         pmf = softmax(y_hat, dim=2)
         values, indices = pmf.max(dim=2)
-        mean_confidence = values.mean(dim=1)
 
+        end_token = self.tokenizer._encode(self.tokenizer.end)
         for i in range(len(indices)):
             tokens = indices[i].tolist()
+
+            try:
+                first_n = tokens.index(end_token)
+            except ValueError:
+                first_n = len(tokens)
+
+            # todo: usually, first predicted token is <s>,
+            #  perhaps it should also be excluded from confidence calculation
+            mean_confidence = values[i, :first_n].mean()
+
             transcript = self.tokenizer.decode_to_string(tokens, clean_output=True)
 
-            if mean_confidence[i] > self.threshold:
+            if mean_confidence > self.threshold:
                 image_path = data_frame["input_1"]
                 gray_level = data_frame["input_2"]
                 self.save_example(image_path[i], gray_level[i], transcript)
