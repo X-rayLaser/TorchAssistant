@@ -58,6 +58,14 @@
                     }
                 },
                 {
+                    "group": "datasets",
+                    "name": "unlabeled_impostor",
+                    "spec": {
+                        "class": "examples.htr_self_training.datasets.UnlabeledImpostorDataset",
+                        "args": ["examples/htr_self_training/synthetic_data/train"]
+                    }
+                },
+                {
                     "group": "collators",
                     "name": "unpack_batch",
                     "spec": {
@@ -113,6 +121,17 @@
                     "name": "test_loader",
                     "spec": {
                         "dataset": "iam_test_dataset",
+                        "collator": "unpack_batch",
+                        "kwargs": {
+                            "batch_size": 4
+                        }
+                    }
+                },
+                {
+                    "group": "data_loaders",
+                    "name": "unlabeled_impostor_loader",
+                    "spec": {
+                        "dataset": "unlabeled_impostor",
                         "collator": "unpack_batch",
                         "kwargs": {
                             "batch_size": 4
@@ -439,7 +458,7 @@
                 "graph": "label_prediction_graph",
                 "input_injector": [
                      {
-                         "data_loader": "unlabeled_loader"
+                         "data_loader": "unlabeled_impostor_loader"
                      }
                  ]
             },
