@@ -75,7 +75,7 @@ class CharacterTokenizer(ValuePreprocessor):
         last_char = self._decode(tokens[-1])
 
         if first_char != self.start:
-            s += first_char
+            s = first_char + s
 
         if last_char != self.end:
             s += last_char

@@ -224,7 +224,7 @@ class AttendingDecoder(nn.Module):
         return [y_hat]
 
     def close_loop_inference(self, encodings, decoder_hidden, sos):
-        outputs = []
+        outputs = [sos]
 
         y_hat_prev = sos
 
@@ -248,6 +248,12 @@ class AttendingDecoder(nn.Module):
             outputs.append(scores)
 
         return [torch.stack(outputs, dim=1)]
+
+    def run_inference(self, encodings):
+        decoder_hidden = torch.zeros(1, len(encodings), self.hidden_size, device=encodings.device)
+        sos = torch.zeros(len(encodings), self.y_size, dtype=encodings.dtype, device=encodings.device)
+        sos[:, self.sos_token] = 1
+        return self.close_loop_inference(encodings, decoder_hidden, sos)
 
     def predict_next(self, decoder_hidden, encoder_outputs, prev_attention_weights, y_hat_prev):
         new_attention_weights = self.attention(decoder_hidden, encoder_outputs, prev_attention_weights)
