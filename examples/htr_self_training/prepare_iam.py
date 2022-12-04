@@ -89,11 +89,11 @@ def locate_image(words_dir, image_id):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Train ML pipeline according to a specified configuration file'
+        description='Prepare a dataset of handwritten words taken from IAM database'
     )
     parser.add_argument('iam_home', type=str, help='Path to the location of IAM database directory')
     parser.add_argument('output_dir', type=str, help='Path to the output directory')
-    parser.add_argument('--max-words', type=int, default=None, help='Path to the output directory')
+    parser.add_argument('--max-words', type=int, default=None, help='Total # of words to prepare')
 
     args = parser.parse_args()
     prepare_iam_dataset(args.iam_home, args.output_dir, max_words=args.max_words)
