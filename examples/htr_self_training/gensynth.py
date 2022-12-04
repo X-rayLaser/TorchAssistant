@@ -77,6 +77,6 @@ if __name__ == '__main__':
     os.makedirs(args.output_dir, exist_ok=True)
 
     for i, (img, label) in enumerate(generate_data(args.fonts_dir, args.max_words)):
-        img.save(os.path.join(args.output_dir, f'{label}_{i}.png'))
+        img.save(os.path.join(args.output_dir, f'{label}_{i}.jpg'))
         if i % 100 == 0:
             print(f'progress: {i} out of {args.max_words}')
