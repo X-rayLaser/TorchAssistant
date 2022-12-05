@@ -1,6 +1,11 @@
 import random
 import os
 from trdg.generators import GeneratorFromDict
+import datetime
+import sys
+
+sys.path.insert(0, './')
+from torchassistant.formatters import ProgressBar
 
 
 def int2hex(v):
@@ -76,7 +81,15 @@ if __name__ == '__main__':
 
     os.makedirs(args.output_dir, exist_ok=True)
 
+    bar = ProgressBar()
+
+    prefix = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
     for i, (img, label) in enumerate(generate_data(args.fonts_dir, args.max_words)):
-        img.save(os.path.join(args.output_dir, f'{label}_{i}.jpg'))
+        save_path = os.path.join(args.output_dir, f'{label}_{prefix}_{i}.jpg')
+        img.save(save_path)
         if i % 100 == 0:
-            print(f'progress: {i} out of {args.max_words}')
+            progress_bar = bar.updated(i, args.max_words, cols=50)
+            print(f'\rProgress: {progress_bar} {i} out of {args.max_words}', end='')
+
+    spaces = ' ' * 100
+    print(f'\r{spaces}\rDone')
