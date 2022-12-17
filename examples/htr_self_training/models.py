@@ -7,7 +7,7 @@ from torchvision.models import vgg19_bn
 class VGG19Truncated(nn.Module):
     def __init__(self):
         super().__init__()
-        original_vgg = vgg19_bn()
+        original_vgg = vgg19_bn(pretrained=True)
         self.truncated_vgg = nn.Sequential(*list(original_vgg.children())[:-2])
 
     def forward(self, x):
@@ -23,6 +23,7 @@ class ImageEncoder(nn.Module):
         self.hidden_size = hidden_size
         self.vgg = VGG19Truncated()
         self.gru1 = nn.GRU(input_size, hidden_size, bidirectional=True, batch_first=True)
+        self.dropout = nn.Dropout(0.5)
         self.gru2 = nn.GRU(hidden_size * 2, hidden_size, bidirectional=True, batch_first=True)
 
     def forward(self, x):
@@ -31,6 +32,8 @@ class ImageEncoder(nn.Module):
         x = output.transpose(1, 3).resize(batch_size, w, h * f_maps)
 
         x, hidden = self.gru1(x)
+
+        x = self.dropout(x)
 
         x, hidden = self.gru2(x)
 

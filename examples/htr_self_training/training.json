@@ -79,7 +79,7 @@
                         "dataset": "synthetic_train",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 4
+                            "batch_size": 32
                         }
                     }
                 },
@@ -90,7 +90,7 @@
                         "dataset": "synthetic_val",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 4
+                            "batch_size": 32
                         }
                     }
                 },
@@ -101,7 +101,7 @@
                         "dataset": "unlabeled",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 4
+                            "batch_size": 32
                         }
                     }
                 },
@@ -112,7 +112,7 @@
                         "dataset": "pseudo_labeled",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 4
+                            "batch_size": 32
                         }
                     }
                 },
@@ -123,7 +123,7 @@
                         "dataset": "iam_test_dataset",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 4
+                            "batch_size": 32
                         }
                     }
                 },
@@ -134,7 +134,7 @@
                         "dataset": "unlabeled_impostor",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 4
+                            "batch_size": 32
                         }
                     }
                 }
@@ -147,7 +147,7 @@
                         "factory_fn": "examples.htr_self_training.models.build_encoder",
                         "kwargs": {
                             "image_height": 64,
-                            "hidden_size": 32
+                            "hidden_size": 512
                         }
                     }
                 },
@@ -164,7 +164,7 @@
                     "spec": {
                         "class": "Adam",
                         "kwargs": {
-                            "lr": 0.001
+                            "lr": 0.0002
                         },
                         "model": "encoder"
                     }
@@ -175,7 +175,7 @@
                     "spec": {
                         "class": "Adam",
                         "kwargs": {
-                            "lr": 0.001
+                            "lr": 0.0002
                         },
                         "model": "decoder"
                     }
@@ -186,7 +186,11 @@
                     "spec": {
                         "class": "torchassistant.loss_functions.MaskedCrossEntropy",
                         "inputs": ["y_hat", "y"],
-                        "transform": "torchassistant.transforms.pad_targets"
+                        "transform": "torchassistant.transforms.pad_targets",
+                        "kwargs": {
+                            "reduction": "sum",
+                            "label_smoothing": 0.4
+                        }
                     }
                 },
                 {
@@ -513,7 +517,7 @@
                 "fit_synthetic"
             ],
             "validation_pipelines": [
-                "fit_synthetic", "evaluate_on_synthetic"
+                "fit_synthetic", "evaluate_on_synthetic", "evaluate_on_iam"
             ],
             "eval_steps": 0.1,
             "stop_condition": {
