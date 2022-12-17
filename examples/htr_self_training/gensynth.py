@@ -47,7 +47,8 @@ def create_generator(fonts_dir):
         random_blur=True,
         fonts=fonts,
         size=64,
-        image_mode='L'
+        image_mode='L',
+        fit=True
     )
 
 

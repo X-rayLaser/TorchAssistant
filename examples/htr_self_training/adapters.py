@@ -6,6 +6,7 @@ from torch.nn.functional import softmax
 from PIL import Image
 from torchvision.transforms.functional import rgb_to_grayscale
 from torchvision import transforms
+from torchvision.transforms import Compose, PILToTensor, ToPILImage
 
 from torchassistant.utils import pad_sequences
 from torchassistant.collators import one_hot_tensor
@@ -50,12 +51,14 @@ class ImagePreprocessor:
 
 class WeakAugmentation(ImagePreprocessor):
     def augment(self, images):
-        affine = transforms.RandomAffine(degrees=[-15, 15], scale=[0.75, 1.1], fill=255)
-        blur = transforms.GaussianBlur(7, sigma=[2, 2])
+        affine = transforms.RandomAffine(degrees=[-5, 5], scale=[0.9, 1.1], fill=255)
+        blur = transforms.GaussianBlur(3, sigma=[2, 2])
+        add_noise = gaussian_noise(sigma=20)
 
         images = [affine(im) for im in images]
         images = self.pad_images(images)
         images = [blur(im) for im in images]
+        images = [add_noise(im) for im in images]
         return images
 
 
@@ -117,6 +120,15 @@ def adjust_sharpness(image):
 def solarize(image):
     threshold = int(round(uniform(0, 1) * 255))
     return transforms.RandomSolarize(threshold, p=1)(image)
+
+
+def gaussian_noise(sigma):
+    def add_noise(tensor):
+        noisy = tensor + sigma * torch.randn_like(tensor.to(torch.float32))
+        noisy = torch.clamp(noisy, 0, 255)
+        return noisy.to(tensor.dtype)
+
+    return Compose([PILToTensor(), add_noise, ToPILImage()])
 
 
 class TrainableProcessorInputAdapter:
