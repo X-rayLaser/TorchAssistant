@@ -168,7 +168,7 @@ class TrainableProcessorInputAdapter:
 
 
 class SyntheticInputAdapter(TrainableProcessorInputAdapter):
-    pass
+    image_preprocessor = WeakAugmentation()
 
 
 class PredictorInputAdapter(TrainableProcessorInputAdapter):
