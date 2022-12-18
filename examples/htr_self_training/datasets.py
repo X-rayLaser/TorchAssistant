@@ -1,8 +1,25 @@
 import os
 from PIL import Image
 
-from torchvision.transforms.functional import rgb_to_grayscale
 from torchvision.transforms import Resize
+from examples.htr_self_training.gensynth import generate_data
+
+
+class SyntheticOnlineDataset:
+    def __init__(self, fonts_dir, size):
+        self.size = size
+        self.fonts_dir = fonts_dir
+        self.iterator = iter(generate_data(fonts_dir, size))
+
+    def __getitem__(self, idx):
+        try:
+            return next(self.iterator)
+        except StopIteration:
+            self.iterator = iter(generate_data(self.fonts_dir, self.size))
+            return next(self.iterator)
+
+    def __len__(self):
+        return self.size
 
 
 class SyntheticDataset:

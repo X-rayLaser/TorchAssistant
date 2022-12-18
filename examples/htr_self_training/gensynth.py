@@ -64,7 +64,7 @@ def generate_data(fonts_dir, num_words, reset_ivl=40):
         except StopIteration:
             generator = create_generator(fonts_dir)
         except Exception as e:
-            print('exception', repr(e))
+            pass
 
 
 if __name__ == '__main__':
