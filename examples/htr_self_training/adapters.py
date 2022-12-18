@@ -69,8 +69,8 @@ class StrongAugmentation(WeakAugmentation):
     rotate = transforms.RandomRotation((-30, 30), fill=255)
 
     degrees_range = (math.degrees(-0.3), math.degrees(0.3))
-    shear_x = transforms.RandomAffine(0, shear=degrees_range)
-    shear_y = transforms.RandomAffine(0, shear=(0, 0) + degrees_range)
+    shear_x = transforms.RandomAffine(0, shear=degrees_range, fill=255)
+    shear_y = transforms.RandomAffine(0, shear=(0, 0) + degrees_range, fill=255)
     auto_contrast = transforms.RandomAutocontrast(1)
     translate_x = transforms.RandomAffine(0, translate=(0.3, 0), fill=255)
     translate_y = transforms.RandomAffine(0, translate=(0, 0.3), fill=255)
