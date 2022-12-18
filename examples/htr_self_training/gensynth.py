@@ -42,7 +42,7 @@ def create_generator(fonts_dir):
         distorsion_type=0,
         text_color=color,
         stroke_fill=color,
-        background_type=0,
+        background_type=1,
         blur=1,
         random_blur=True,
         fonts=fonts,
