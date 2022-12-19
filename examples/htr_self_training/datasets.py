@@ -90,16 +90,5 @@ class LabeledDataset(IAMWordsDataset):
         return image, transcript
 
 
-# only for testing the self training stage
-class UnlabeledImpostorDataset(IAMWordsDataset):
-    def re_build(self):
-        synth_dir = self.index_path
-        for file_name in os.listdir(synth_dir):
-            path = os.path.join(synth_dir, file_name)
-            transcript, _ = os.path.splitext(file_name)
-            transcript = transcript.split('_')[0]
-            self.iam_index.append((path, 255, transcript))
-
-
 def clean_image(image, gray_level):
     return image.point(lambda p: 255 if p > gray_level else p)

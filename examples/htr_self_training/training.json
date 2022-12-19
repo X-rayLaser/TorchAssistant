@@ -17,8 +17,8 @@
                     "group": "datasets",
                     "name": "synthetic_train",
                     "spec": {
-                        "class": "examples.htr_self_training.datasets.SyntheticDataset",
-                        "args": ["examples/htr_self_training/synthetic_data/train"],
+                        "class": "examples.htr_self_training.datasets.SyntheticOnlineDataset",
+                        "args": ["examples/htr_self_training/fonts", 300000],
                         "preprocessors": ["", "tokenize"]
                     }
                 },
@@ -26,8 +26,8 @@
                     "group": "datasets",
                     "name": "synthetic_val",
                     "spec": {
-                        "class": "examples.htr_self_training.datasets.SyntheticDataset",
-                        "args": ["examples/htr_self_training/synthetic_data/val"],
+                        "class": "examples.htr_self_training.datasets.SyntheticOnlineDataset",
+                        "args": ["examples/htr_self_training/fonts", 20000],
                         "preprocessors": ["", "tokenize"]
                     }
                 },
@@ -55,14 +55,6 @@
                         "class": "examples.htr_self_training.datasets.LabeledDataset",
                         "args": ["examples/htr_self_training/iam/iam_val.txt"],
                         "preprocessors": ["", "tokenize"]
-                    }
-                },
-                {
-                    "group": "datasets",
-                    "name": "unlabeled_impostor",
-                    "spec": {
-                        "class": "examples.htr_self_training.datasets.UnlabeledImpostorDataset",
-                        "args": ["examples/htr_self_training/synthetic_data/train"]
                     }
                 },
                 {
@@ -121,17 +113,6 @@
                     "name": "test_loader",
                     "spec": {
                         "dataset": "iam_test_dataset",
-                        "collator": "unpack_batch",
-                        "kwargs": {
-                            "batch_size": 32
-                        }
-                    }
-                },
-                {
-                    "group": "data_loaders",
-                    "name": "unlabeled_impostor_loader",
-                    "spec": {
-                        "dataset": "unlabeled_impostor",
                         "collator": "unpack_batch",
                         "kwargs": {
                             "batch_size": 32
