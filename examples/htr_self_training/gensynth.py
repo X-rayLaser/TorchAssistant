@@ -37,8 +37,6 @@ def create_generator(fonts_dir):
     return GeneratorFromDict(
         stroke_width=stroke_width,
         character_spacing=char_spacing,
-        skewing_angle=10,
-        random_skew=True,
         distorsion_type=0,
         text_color=color,
         stroke_fill=color,
