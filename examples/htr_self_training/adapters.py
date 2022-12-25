@@ -99,7 +99,7 @@ class StrongAugmentation(WeakAugmentation):
         return all_transforms[idx]
 
 
-class WithoutAugmentation(WeakAugmentation):
+class WithoutAugmentation(ImagePreprocessor):
     def augment(self, images):
         return self.pad_images(images)
 

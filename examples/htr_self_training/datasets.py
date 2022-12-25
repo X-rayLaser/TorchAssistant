@@ -11,6 +11,10 @@ class SyntheticOnlineDataset:
         self.fonts_dir = fonts_dir
         self.iterator = iter(generate_data(fonts_dir, size))
 
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
     def __getitem__(self, idx):
         try:
             return next(self.iterator)

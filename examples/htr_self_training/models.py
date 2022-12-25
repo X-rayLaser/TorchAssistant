@@ -7,7 +7,7 @@ from torchvision.models import vgg19_bn
 class VGG19Truncated(nn.Module):
     def __init__(self):
         super().__init__()
-        original_vgg = vgg19_bn(pretrained=True)
+        original_vgg = vgg19_bn()
         self.truncated_vgg = nn.Sequential(*list(original_vgg.children())[:-2])
 
     def forward(self, x):

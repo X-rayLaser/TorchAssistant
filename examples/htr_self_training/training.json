@@ -18,7 +18,7 @@
                     "name": "synthetic_train",
                     "spec": {
                         "class": "examples.htr_self_training.datasets.SyntheticOnlineDataset",
-                        "args": ["examples/htr_self_training/fonts", 300000],
+                        "args": ["examples/htr_self_training/fonts", 50000],
                         "preprocessors": ["", "tokenize"]
                     }
                 },
@@ -27,7 +27,7 @@
                     "name": "synthetic_val",
                     "spec": {
                         "class": "examples.htr_self_training.datasets.SyntheticOnlineDataset",
-                        "args": ["examples/htr_self_training/fonts", 20000],
+                        "args": ["examples/htr_self_training/fonts", 5000],
                         "preprocessors": ["", "tokenize"]
                     }
                 },
@@ -504,7 +504,7 @@
             "stop_condition": {
                 "class": "torchassistant.stop_conditions.EpochsCompleted",
                 "kwargs": {
-                    "num_epochs": 1
+                    "num_epochs": 260
                 }
             }
         }, {
@@ -519,7 +519,7 @@
             "stop_condition": {
                 "class": "torchassistant.stop_conditions.EpochsCompleted",
                 "kwargs": {
-                    "num_epochs": 1
+                    "num_epochs": 50
                 }
             }
         }]
