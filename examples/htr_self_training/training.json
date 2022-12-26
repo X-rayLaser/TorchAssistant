@@ -500,7 +500,11 @@
             "validation_pipelines": [
                 "fit_synthetic", "evaluate_on_synthetic", "evaluate_on_iam"
             ],
-            "eval_steps": 0.1,
+            "eval_steps": {
+                "fit_synthetic": 0.1,
+                "evaluate_on_synthetic": 1.0,
+                "evaluate_on_iam": 1.0
+            },
             "stop_condition": {
                 "class": "torchassistant.stop_conditions.EpochsCompleted",
                 "kwargs": {
