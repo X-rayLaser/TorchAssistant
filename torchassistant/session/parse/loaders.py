@@ -136,7 +136,8 @@ class PipelineLoader(Loader):
         loss_fns = {}
         self.parse_loss_functions(session, spec, loss_fns, metric_fns)
 
-        return TrainingPipeline(graph, input_loaders, loss_fns, metric_fns)
+        object_name = object_name or "unnamed_pipeline"
+        return TrainingPipeline(graph, input_loaders, loss_fns, metric_fns, name=object_name)
 
     def parse_input_loaders(self, session, spec):
         input_loaders = []

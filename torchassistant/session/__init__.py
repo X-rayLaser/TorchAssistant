@@ -359,7 +359,7 @@ class SessionInitializer:
     def prepare_pipelines(self, session, spec, loader, section):
         pipelines = {}
         for name, pipeline_spec in spec.items():
-            pipeline = loader.load(session, pipeline_spec)
+            pipeline = loader.load(session, pipeline_spec, object_name=name)
             pipelines[name] = pipeline
 
         setattr(session, section, pipelines)

@@ -19,7 +19,7 @@ class ImagePreprocessor:
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
         images = self.augment(images)
-        tensors = [normalize(self.to_rgb(to_tensor(im))) for im in images]
+        tensors = [self.to_rgb(to_tensor(im)) for im in images]
         return torch.stack(tensors)
 
     def to_rgb(self, image):

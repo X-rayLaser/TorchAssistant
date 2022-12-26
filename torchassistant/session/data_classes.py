@@ -32,4 +32,6 @@ class InputLoader:
         self.variable_names = variable_names
 
 
-TrainingPipeline = namedtuple('TrainingPipeline', ["graph", "input_loaders", "loss_fns", "metric_fns"])
+TrainingPipeline = namedtuple('TrainingPipeline',
+                              ["graph", "input_loaders", "loss_fns", "metric_fns", "name"],
+                              defaults=["unnamed_pipeline"])

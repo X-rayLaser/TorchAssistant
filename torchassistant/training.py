@@ -109,10 +109,27 @@ def train_on_data(session, training_pipelines, debuggers, metric_calculators, ep
 def compute_and_log_metrics(stage):
     computed_metrics = {}
     for pipeline in stage.validation_pipelines:
-        metrics = evaluate_pipeline(pipeline, stage.eval_steps)
+        num_batches = get_num_batches(pipeline, stage.eval_steps)
+        metrics = evaluate_pipeline(pipeline, num_batches)
         computed_metrics.update(metrics)
 
     return computed_metrics
+
+
+def get_num_batches(pipeline, eval_steps):
+    """Get number of batches to use to evaluate a pipeline.
+
+    if eval_steps is a number, it will be retrieved as is; if it is a mapping "pipeline_name -> number",
+    the function will retrieve a number using currently passed pipeline name as a key
+
+    """
+    if isinstance(eval_steps, dict):
+        try:
+            eval_steps = eval_steps[pipeline.name]
+        except KeyError:
+            eval_steps = next(iter(eval_steps.values()))
+
+    return eval_steps
 
 
 def log_computed_metrics(computed_metrics, stage_number, epoch, log_fn):
