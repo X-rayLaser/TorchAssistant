@@ -57,8 +57,8 @@ class WeakAugmentation(ImagePreprocessor):
 
         images = [affine(im) for im in images]
         images = self.pad_images(images)
-        images = [blur(im) for im in images]
         images = [add_noise(im) for im in images]
+        images = [blur(im) for im in images]
         return images
 
 
