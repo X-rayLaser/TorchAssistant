@@ -35,11 +35,11 @@ def create_generator(fonts_dir):
     ]
 
     return GeneratorFromDict(
-        stroke_width=stroke_width,
-        character_spacing=char_spacing,
+        #stroke_width=stroke_width,
+        #character_spacing=char_spacing,
         distorsion_type=0,
-        text_color=color,
-        stroke_fill=color,
+        #text_color=color,
+        #stroke_fill=color,
         background_type=1,
         blur=1,
         random_blur=True,
@@ -54,13 +54,8 @@ def generate_data(fonts_dir, num_words, reset_ivl=40):
     generator = create_generator(fonts_dir)
 
     for i in range(num_words):
-        if i % reset_ivl == 0:
-            generator = create_generator(fonts_dir)
-
         try:
             yield next(generator)
-        except StopIteration:
-            generator = create_generator(fonts_dir)
         except Exception as e:
             pass
 

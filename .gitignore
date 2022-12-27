@@ -14,3 +14,4 @@ examples/htr_self_training/synthetic_data/
 examples/htr_self_training/iam/
 examples/htr_self_training/fonts
 debug_pipeline.py
+examples/htr_self_training/words.txt
