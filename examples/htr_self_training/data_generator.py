@@ -56,29 +56,35 @@ class SimpleRandomWordGenerator:
         min_degrees, max_degrees = self.rotation_range
         rotate = transforms.RandomRotation(degrees=[min_degrees, max_degrees], expand=True, fill=background)
 
-        with Image.new("L", (width, height)) as im:
-            draw = ImageDraw.Draw(im)
+        with Image.new("L", (width, height)) as image:
+            draw = ImageDraw.Draw(image)
             bbox = draw.textbbox((padding, padding), word, font=font)
-            draw.rectangle((0, 0, im.width, im.height), fill=background)
+            draw.rectangle((0, 0, image.width, image.height), fill=background)
             draw.text((padding, padding), word, fill=color, font=font, stroke_width=stroke_width, stroke_fill=stroke_fill)
 
             x0, y0, x, y = bbox
             padded_bbox = (max(0, x0 - padding), max(0, y0 - padding), min(width, x + padding), min(height, y + padding))
-            image = im.crop(padded_bbox)
+
+            # todo: make this work
+            shear_x = transforms.RandomAffine(0, shear=(35, 35), fill=255)
+
+            image = image.crop(padded_bbox)
+            #image = shear_x(image)
+
             return rotate(image)
 
 
 if __name__ == '__main__':
     # simple benchmark
     word_gen = SimpleRandomWordGenerator("examples/htr_self_training/words.txt",
-                                         "examples/htr_self_training/fonts", font_size_range=(58, 70))
+                                         "examples/htr_self_training/fonts", font_size_range=(58, 70), rotation_range=(-10, 10))
 
     it = iter(word_gen)
     t = time.time()
 
     for i in range(1000):
         im, tr = next(it)
-        print(tr)
+        #print(tr)
         #im.show()
     im.show()
     print(time.time() - t, (time.time() - t) / 100 / 10)
