@@ -2,7 +2,6 @@ import os
 from PIL import Image
 
 from torchvision.transforms import Resize
-from examples.htr_self_training.gensynth import generate_data
 from examples.htr_self_training.data_generator import SimpleRandomWordGenerator
 
 
@@ -13,7 +12,8 @@ class SyntheticOnlineDataset:
         self.image_height = image_height
 
         dictionary = os.path.join("examples/htr_self_training/words.txt")
-        simple_generator = SimpleRandomWordGenerator(dictionary, self.fonts_dir, size=image_height)
+        simple_generator = SimpleRandomWordGenerator(dictionary, self.fonts_dir,
+                                                     font_size_range=(image_height, image_height))
         self.iterator = iter(simple_generator)
 
     def __iter__(self):

@@ -71,7 +71,8 @@
                         "dataset": "synthetic_train",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 32
+                            "batch_size": 32,
+                            "num_workers": 4
                         }
                     }
                 },
@@ -82,7 +83,8 @@
                         "dataset": "synthetic_val",
                         "collator": "unpack_batch",
                         "kwargs": {
-                            "batch_size": 32
+                            "batch_size": 32,
+                            "num_workers": 4
                         }
                     }
                 },
