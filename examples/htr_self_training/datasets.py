@@ -13,7 +13,7 @@ class SyntheticOnlineDataset:
 
         dictionary = os.path.join("examples/htr_self_training/words.txt")
         simple_generator = SimpleRandomWordGenerator(dictionary, self.fonts_dir,
-                                                     font_size_range=(image_height, image_height))
+                                                     font_size_range=(58, 70), rotation_range=(-5, 5))
         self.iterator = iter(simple_generator)
 
     def __iter__(self):

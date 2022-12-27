@@ -3,12 +3,13 @@ import time
 
 import os
 import random
+from torchvision import transforms
 
 
 class SimpleRandomWordGenerator:
     def __init__(self, dictionary, font_dir, font_size_range=(64, 64),
                  bg_range=(240, 255), color_range=(0, 15), stroke_width_range=(0, 2),
-                 stroke_fill_range=(0, 15), max_word_len=14):
+                 stroke_fill_range=(0, 15), rotation_range=(0, 0), max_word_len=14):
         if isinstance(dictionary, list):
             self.dictionary = dictionary
         else:
@@ -24,6 +25,7 @@ class SimpleRandomWordGenerator:
         self.color_range = color_range
         self.stroke_width_range = stroke_width_range
         self.stroke_fill_range = stroke_fill_range
+        self.rotation_range = rotation_range
 
     def __iter__(self):
         while True:
@@ -43,16 +45,27 @@ class SimpleRandomWordGenerator:
             except Exception:
                 pass
 
-    def create_image(self, word, font, size=64, background=255, color=0, stroke_width=1, stroke_fill=0):
+    def create_image(self, word, font, size=64, background=255, color=0,
+                     stroke_width=1, stroke_fill=0):
+        padding = stroke_width
         char_size = size
         num_chars = len(word)
-        width = char_size * num_chars
-        with Image.new("L", (width, size + 20)) as im:
+        width = char_size * num_chars + padding * 2
+        height = size + 20 + padding * 2
+
+        min_degrees, max_degrees = self.rotation_range
+        rotate = transforms.RandomRotation(degrees=[min_degrees, max_degrees], expand=True, fill=background)
+
+        with Image.new("L", (width, height)) as im:
             draw = ImageDraw.Draw(im)
-            bbox = draw.textbbox((0, 0), word, font=font)
-            draw.rectangle(bbox, fill=background)
-            draw.text((0, 0), word, fill=color, font=font, stroke_width=stroke_width, stroke_fill=stroke_fill)
-            return im.crop(bbox)
+            bbox = draw.textbbox((padding, padding), word, font=font)
+            draw.rectangle((0, 0, im.width, im.height), fill=background)
+            draw.text((padding, padding), word, fill=color, font=font, stroke_width=stroke_width, stroke_fill=stroke_fill)
+
+            x0, y0, x, y = bbox
+            padded_bbox = (max(0, x0 - padding), max(0, y0 - padding), min(width, x + padding), min(height, y + padding))
+            image = im.crop(padded_bbox)
+            return rotate(image)
 
 
 if __name__ == '__main__':
@@ -65,7 +78,7 @@ if __name__ == '__main__':
 
     for i in range(1000):
         im, tr = next(it)
-        #print(tr)
+        print(tr)
         #im.show()
-
+    im.show()
     print(time.time() - t, (time.time() - t) / 100 / 10)
