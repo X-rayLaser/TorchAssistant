@@ -3,12 +3,10 @@ from PIL import Image
 
 from torchvision.transforms import Resize
 from examples.htr_self_training.data_generator import SimpleRandomWordGenerator
-from torch.utils.data import IterableDataset
 
 
-class SyntheticOnlineDataset(IterableDataset):
+class SyntheticOnlineDataset:
     def __init__(self, fonts_dir, size, image_height=64):
-        super().__init__()
         self.size = size
         self.fonts_dir = fonts_dir
         self.image_height = image_height
@@ -21,6 +19,9 @@ class SyntheticOnlineDataset(IterableDataset):
     def __iter__(self):
         for i in range(len(self)):
             yield self.generate_example()
+
+    def __getitem__(self, idx):
+        return self.generate_example()
 
     def generate_example(self):
         im, word = next(self.iterator)
