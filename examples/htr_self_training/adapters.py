@@ -12,7 +12,21 @@ from torchassistant.utils import pad_sequences
 from torchassistant.collators import one_hot_tensor
 
 
+def equal_padding(max_length, length):
+    len_diff = max_length - length
+    padding1 = len_diff // 2
+    padding2 = len_diff - padding1
+    return padding1, padding2
+
+
+def one_sided_padding(max_length, length):
+    len_diff = max_length - length
+    return 0, len_diff
+
+
 class ImagePreprocessor:
+    padding_strategy = equal_padding
+
     def prepare_images(self, images):
         # apply the same normalization to images that was applied for training VGG19_BN
         to_tensor = transforms.ToTensor()
@@ -34,19 +48,13 @@ class ImagePreprocessor:
 
         padded = []
         for im in images:
-            padding_top, padding_bottom = self.calculate_padding(max_height, im.height)
-            padding_left, padding_right = self.calculate_padding(max_width, im.width)
+            padding_top, padding_bottom = self.padding_strategy(max_height, im.height)
+            padding_left, padding_right = self.padding_strategy(max_width, im.width)
 
             pad = transforms.Pad((padding_left, padding_top, padding_right, padding_bottom), fill=255)
             padded.append(pad(im))
 
         return padded
-
-    def calculate_padding(self, max_length, length):
-        len_diff = max_length - length
-        padding1 = len_diff // 2
-        padding2 = len_diff - padding1
-        return padding1, padding2
 
 
 class WeakAugmentation(ImagePreprocessor):

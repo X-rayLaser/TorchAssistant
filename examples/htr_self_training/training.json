@@ -72,7 +72,7 @@
                         "collator": "unpack_batch",
                         "kwargs": {
                             "batch_size": 32,
-                            "num_workers": 4
+                            "num_workers": 2
                         }
                     }
                 },
@@ -84,7 +84,7 @@
                         "collator": "unpack_batch",
                         "kwargs": {
                             "batch_size": 32,
-                            "num_workers": 4
+                            "num_workers": 2
                         }
                     }
                 },

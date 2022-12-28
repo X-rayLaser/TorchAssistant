@@ -71,7 +71,9 @@ class SimpleRandomWordGenerator:
             image = image.crop(padded_bbox)
             #image = shear_x(image)
 
-            return rotate(image)
+            if self.rotation_range != (0, 0):
+                image = rotate(image)
+            return image
 
 
 if __name__ == '__main__':
