@@ -6,14 +6,14 @@ from examples.htr_self_training.data_generator import SimpleRandomWordGenerator
 
 
 class SyntheticOnlineDataset:
-    def __init__(self, fonts_dir, size, image_height=100):
+    def __init__(self, fonts_dir, size, image_height=75):
         self.size = size
         self.fonts_dir = fonts_dir
         self.image_height = image_height
 
         dictionary = os.path.join("examples/htr_self_training/words.txt")
         simple_generator = SimpleRandomWordGenerator(dictionary, self.fonts_dir,
-                                                     bg_range=(200, 255),
+                                                     bg_range=(255, 255),
                                                      color_range=(0, 100),
                                                      font_size_range=(58, 70), rotation_range=(0, 0))
         self.iterator = iter(simple_generator)
@@ -54,7 +54,7 @@ class SyntheticDataset:
 
 
 class IAMWordsDataset:
-    def __init__(self, index_path, target_height=100):
+    def __init__(self, index_path, target_height=75):
         self.index_path = index_path
         self.iam_index = []
         self.target_height = target_height

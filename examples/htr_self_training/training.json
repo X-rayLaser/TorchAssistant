@@ -27,7 +27,7 @@
                     "name": "synthetic_val",
                     "spec": {
                         "class": "examples.htr_self_training.datasets.SyntheticOnlineDataset",
-                        "args": ["examples/htr_self_training/fonts", 5000],
+                        "args": ["examples/htr_self_training/fonts", 2500],
                         "preprocessors": ["", "tokenize"]
                     }
                 },
@@ -129,7 +129,7 @@
                     "spec": {
                         "factory_fn": "examples.htr_self_training.models.build_encoder",
                         "kwargs": {
-                            "image_height": 100,
+                            "image_height": 75,
                             "hidden_size": 256
                         }
                     }
@@ -441,7 +441,7 @@
                      {
                          "node_name": "synth_trainable_processor",
                          "loss_name": "cross_entropy",
-                         "loss_display_name": "synth loss_augmented"
+                         "loss_display_name": "val synth loss_augmented"
                      }
                 ],
                 "metrics": [

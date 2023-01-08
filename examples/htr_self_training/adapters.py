@@ -44,7 +44,7 @@ class ImagePreprocessor:
 
     def pad_images(self, images):
         #max_height = max([im.height for im in images])
-        max_height = 100
+        max_height = 75
         max_width = max([im.width for im in images])
 
         padded = []
@@ -60,17 +60,17 @@ class ImagePreprocessor:
 
 class WeakAugmentation(ImagePreprocessor):
     def augment(self, images):
-        rotate = transforms.RandomRotation(degrees=[-10, 10], expand=True)
-        affine = transforms.RandomAffine(degrees=0, scale=[0.9, 1.0], fill=255)
+        rotate = transforms.RandomRotation(degrees=[-10, 10], expand=True, fill=255)
+        affine = transforms.RandomAffine(degrees=0, scale=[0.8, 1.0], fill=255)
         blur = transforms.GaussianBlur(3, sigma=[2, 2])
         add_noise = gaussian_noise(sigma=20)
 
         images = [affine(im) for im in images]
         images = [rotate(im) for im in images]
 
+        images = self.pad_images(images)
         images = [add_noise(im) for im in images]
         images = [blur(im) for im in images]
-        images = self.pad_images(images)
 
         return images
 
