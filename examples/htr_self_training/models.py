@@ -17,7 +17,8 @@ class VGG19Truncated(nn.Module):
 class ImageEncoder(nn.Module):
     def __init__(self, image_height, hidden_size):
         super().__init__()
-        out_feature_maps = 512
+
+        out_feature_maps = 512 # vgg outputs 512 feature maps
         feature_height = image_height // 2**5
         input_size = feature_height * out_feature_maps
         self.hidden_size = hidden_size

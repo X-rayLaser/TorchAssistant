@@ -25,7 +25,7 @@ def one_sided_padding(max_length, length):
 
 
 class ImagePreprocessor:
-    padding_strategy = equal_padding
+    padding_strategy = one_sided_padding
 
     def prepare_images(self, images):
         # apply the same normalization to images that was applied for training VGG19_BN
@@ -43,13 +43,14 @@ class ImagePreprocessor:
         raise NotImplementedError
 
     def pad_images(self, images):
-        max_height = max([im.height for im in images])
+        #max_height = max([im.height for im in images])
+        max_height = 100
         max_width = max([im.width for im in images])
 
         padded = []
         for im in images:
-            padding_top, padding_bottom = self.padding_strategy(max_height, im.height)
-            padding_left, padding_right = self.padding_strategy(max_width, im.width)
+            padding_top, padding_bottom = ImagePreprocessor.padding_strategy(max_height, im.height)
+            padding_left, padding_right = ImagePreprocessor.padding_strategy(max_width, im.width)
 
             pad = transforms.Pad((padding_left, padding_top, padding_right, padding_bottom), fill=255)
             padded.append(pad(im))
@@ -59,15 +60,18 @@ class ImagePreprocessor:
 
 class WeakAugmentation(ImagePreprocessor):
     def augment(self, images):
-        #rotate = transforms.RandomRotation(degrees=[-5, 5], expand=True)
-        #affine = transforms.RandomAffine(degrees=0, scale=[0.9, 1.1], fill=255)
+        rotate = transforms.RandomRotation(degrees=[-10, 10], expand=True)
+        affine = transforms.RandomAffine(degrees=0, scale=[0.9, 1.0], fill=255)
         blur = transforms.GaussianBlur(3, sigma=[2, 2])
         add_noise = gaussian_noise(sigma=20)
 
-        #images = [affine(im) for im in images]
-        images = self.pad_images(images)
+        images = [affine(im) for im in images]
+        images = [rotate(im) for im in images]
+
         images = [add_noise(im) for im in images]
         images = [blur(im) for im in images]
+        images = self.pad_images(images)
+
         return images
 
 

@@ -65,11 +65,10 @@ class SimpleRandomWordGenerator:
             x0, y0, x, y = bbox
             padded_bbox = (max(0, x0 - padding), max(0, y0 - padding), min(width, x + padding), min(height, y + padding))
 
-            # todo: make this work
-            shear_x = transforms.RandomAffine(0, shear=(35, 35), fill=255)
+            shear_x = transforms.RandomAffine(0, shear=(-10, 30), fill=background)
 
             image = image.crop(padded_bbox)
-            #image = shear_x(image)
+            image = shear_x(image)
 
             if self.rotation_range != (0, 0):
                 image = rotate(image)
