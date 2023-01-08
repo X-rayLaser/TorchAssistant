@@ -15,7 +15,7 @@ class SyntheticOnlineDataset:
         simple_generator = SimpleRandomWordGenerator(dictionary, self.fonts_dir,
                                                      bg_range=(255, 255),
                                                      color_range=(0, 100),
-                                                     font_size_range=(58, 70), rotation_range=(0, 0))
+                                                     font_size_range=(64, 86), rotation_range=(0, 0))
         self.iterator = iter(simple_generator)
 
     def __iter__(self):
