@@ -43,8 +43,8 @@ class ImagePreprocessor:
         raise NotImplementedError
 
     def pad_images(self, images):
-        #max_height = max([im.height for im in images])
-        max_height = 75
+        max_height = max([im.height for im in images])
+        #max_height = 75
         max_width = max([im.width for im in images])
 
         padded = []

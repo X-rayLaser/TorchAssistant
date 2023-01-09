@@ -129,7 +129,7 @@
                     "spec": {
                         "factory_fn": "examples.htr_self_training.models.build_encoder",
                         "kwargs": {
-                            "image_height": 75,
+                            "image_height": 64,
                             "hidden_size": 256
                         }
                     }

@@ -6,7 +6,7 @@ from examples.htr_self_training.data_generator import SimpleRandomWordGenerator
 
 
 class SyntheticOnlineDataset:
-    def __init__(self, fonts_dir, size, image_height=75):
+    def __init__(self, fonts_dir, size, image_height=64):
         self.size = size
         self.fonts_dir = fonts_dir
         self.image_height = image_height
@@ -23,12 +23,14 @@ class SyntheticOnlineDataset:
             yield self.generate_example()
 
     def __getitem__(self, idx):
-        return self.generate_example()
+        if 0 <= idx < len(self):
+            return self.generate_example()
+        else:
+            raise IndexError()
 
     def generate_example(self):
         im, word = next(self.iterator)
-        if im.height > self.image_height:
-            im = scale_image(im, target_height=self.image_height)
+        im = scale_image(im, target_height=self.image_height)
         return im, word
 
     def __len__(self):
@@ -75,8 +77,7 @@ class IAMWordsDataset:
         path, gray_level, transcript = self.iam_index[idx]
         image = Image.open(path)
         image = clean_image(image, gray_level)
-        if image.height > self.target_height:
-            image = scale_image(image, self.target_height)
+        image = scale_image(image, self.target_height)
         return path, gray_level, image, transcript
 
     def __len__(self):
