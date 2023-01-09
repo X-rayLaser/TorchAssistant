@@ -423,10 +423,6 @@
                      {
                          "node_name": "synth_trainable_processor",
                          "metric_name": "cer"
-                     },
-                     {
-                         "node_name": "synth_trainable_processor",
-                         "metric_name": "wer"
                      }
                  ]
             },
