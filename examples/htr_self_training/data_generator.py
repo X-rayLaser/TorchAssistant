@@ -41,7 +41,8 @@ class SimpleRandomWordGenerator:
                 image = self.create_image(word, font, font_size,
                                           background=background, color=color,
                                           stroke_width=stroke_width, stroke_fill=stroke_fill)
-                yield image, word
+                if image.height > 0 and image.width > 0:
+                    yield image, word
             except Exception:
                 pass
 
