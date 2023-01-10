@@ -26,7 +26,7 @@
                     "group": "datasets",
                     "name": "synthetic_val",
                     "spec": {
-                        "class": "examples.htr_self_training.datasets.SyntheticOnlineDataset",
+                        "class": "examples.htr_self_training.datasets.SyntheticOnlineDatasetCached",
                         "args": ["examples/htr_self_training/fonts", 2500],
                         "preprocessors": ["", "tokenize"]
                     }
@@ -168,7 +168,7 @@
                     "name": "encoder_clipper",
                     "spec": {
                         "model": "encoder",
-                        "clip_value": 200
+                        "clip_value": 30
                     }
                 },
                 {
@@ -176,7 +176,7 @@
                     "name": "decoder_clipper",
                     "spec": {
                         "model": "decoder",
-                        "clip_value": 200
+                        "clip_value": 30
                     }
                 },
                 {
