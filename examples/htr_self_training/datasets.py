@@ -18,10 +18,6 @@ class SyntheticOnlineDataset:
                                                      font_size_range=(50, 100), rotation_range=(0, 0))
         self.iterator = iter(simple_generator)
 
-    def __iter__(self):
-        for i in range(len(self)):
-            yield self.generate_example()
-
     def __getitem__(self, idx):
         if 0 <= idx < len(self):
             return self.generate_example()
@@ -35,6 +31,19 @@ class SyntheticOnlineDataset:
 
     def __len__(self):
         return self.size
+
+
+class SyntheticOnlineDatasetCached(SyntheticOnlineDataset):
+    def __init__(self, fonts_dir, size, image_height=64):
+        super().__init__(fonts_dir, size, image_height)
+
+        self.cache = {}
+
+    def __getitem__(self, idx):
+        if idx not in self.cache:
+            self.cache[idx] = super().__getitem__(idx)
+
+        return self.cache[idx]
 
 
 class SyntheticDataset:

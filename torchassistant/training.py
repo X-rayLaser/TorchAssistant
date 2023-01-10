@@ -173,13 +173,15 @@ def prepare_trainers(session, pipelines):
     return trainers
 
 
-def evaluate_pipeline(pipeline, num_batches=1.0):
+def evaluate_pipeline(pipeline, num_batches=1.0, supress_errors=True):
     """Compute metrics specified for this pipeline.
 
     :param pipeline: instance of TrainingPipeline
     :param num_batches: Number of batches used to compute metrics on.
     Integer value is interpreted as precise number batches.
     Floating point number in 0-1 range is interpreted as a fraction of all batches in the pipeline.
+    :param supress_errors: When set to True (by default), it will silently catch exceptions
+    such as torch.cuda.OutOfMemoryError. Otherwise, exceptions will propagate to the caller.
     :return: a dictionary mapping names of metrics to their computed values
     """
     graph = pipeline.graph
@@ -207,7 +209,12 @@ def evaluate_pipeline(pipeline, num_batches=1.0):
             if i >= num_batches:
                 break
 
-            results_batch = graph(graph_inputs)
+            try:
+                results_batch = graph(graph_inputs)
+            except torch.cuda.OutOfMemoryError:
+                if not supress_errors:
+                    raise
+                continue
             update_running_metrics(moving_averages, metrics, results_batch)
 
             step_number = i + 1
@@ -258,11 +265,12 @@ class IterationLogEntry:
 
 
 class Trainer:
-    def __init__(self, graph, data_generator, losses: dict, gradient_clippers):
+    def __init__(self, graph, data_generator, losses: dict, gradient_clippers, supress_errors=True):
         self.graph = graph
         self.data_generator = data_generator
         self.losses = losses
         self.gradient_clippers = gradient_clippers
+        self.supress_errors = supress_errors
 
         # calls train() on every model object in the graph
         self.graph.train_mode()
@@ -272,7 +280,13 @@ class Trainer:
 
         inputs = []
         for i, batches in enumerate(self.data_generator):
-            losses, results = self.train_one_iteration(batches)
+            try:
+                losses, results = self.train_one_iteration(batches)
+            except torch.cuda.OutOfMemoryError:
+                if not self.supress_errors:
+                    raise
+                continue
+
             outputs = results
             targets = results
             # todo: fix this (may get rid of inputs and targets)
