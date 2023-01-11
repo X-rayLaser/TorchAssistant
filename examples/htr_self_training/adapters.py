@@ -74,6 +74,9 @@ class WeakAugmentation(ImagePreprocessor):
     def augment(self, images):
         return self._random_augment(images)
 
+    def _no_augment(self, images):
+        return self.pad_images(images)
+
     def _full_augment(self, images):
         rotate = transforms.RandomRotation(degrees=self.rotation_degrees_range,
                                            expand=False, fill=self.fill)
