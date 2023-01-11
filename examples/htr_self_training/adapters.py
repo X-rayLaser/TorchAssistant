@@ -95,15 +95,18 @@ class WeakAugmentation(ImagePreprocessor):
         blur = transforms.GaussianBlur(self.blur_size, sigma=self.blur_sigma)
         add_noise = gaussian_noise(sigma=self.noise_sigma)
 
-        images = [rotate(im) if self._should_augment() else im for im in images]
+        images = self._augment_images(images, rotate)
 
         images = self.pad_images(images)
 
-        images = [add_noise(im) if self._should_augment() else im for im in images]
+        images = self._augment_images(images, add_noise)
 
-        images = [blur(im) if self._should_augment() else im for im in images]
+        images = self._augment_images(images, blur)
 
         return images
+
+    def _augment_images(self, images, augment_func):
+        return [augment_func(im) if self._should_augment() else im for im in images]
 
     def _should_augment(self):
         return random.random() < self.p_augment
