@@ -209,6 +209,7 @@ class AttendingDecoder(nn.Module):
             return self.close_loop_inference(encodings, decoder_hidden, sos)
 
         # teacher forcing
+
         batch_size, num_steps, num_classes = y_shifted.size()
         num_embeddings = encodings.shape[1]
 
@@ -228,6 +229,20 @@ class AttendingDecoder(nn.Module):
         return [y_hat]
 
     def close_loop_inference(self, encodings, decoder_hidden, sos):
+        outputs, _ = self._do_inference(encodings, decoder_hidden, sos)
+        return [outputs]
+
+    def debug_attention(self, encodings):
+        decoder_hidden = torch.zeros(1, len(encodings), self.hidden_size, device=encodings.device)
+        sos = torch.zeros(len(encodings), self.y_size, dtype=encodings.dtype, device=encodings.device)
+        sos[:, self.sos_token] = 1
+        return self._do_inference(encodings, decoder_hidden, sos)
+
+    def _do_inference(self, encodings, decoder_hidden, sos):
+        """Generates sequence of tokens in autoregressive way
+        Returns both predicted sequence of tokens and list of attention weight tensors,
+        one tensor for each predicted token
+        """
         outputs = [sos]
 
         y_hat_prev = sos
@@ -240,6 +255,7 @@ class AttendingDecoder(nn.Module):
             batch_size, num_embeddings, device=encodings.device
         )
 
+        attention_per_step = [attention_weights]
         for t in range(20):
             scores, decoder_hidden, attention_weights = self.predict_next(
                 decoder_hidden, encodings, attention_weights, y_hat_prev
@@ -251,7 +267,9 @@ class AttendingDecoder(nn.Module):
             y_hat_prev[batch_indices, top] = 1.0
             outputs.append(scores)
 
-        return [torch.stack(outputs, dim=1)]
+            attention_per_step.append(attention_weights)
+
+        return torch.stack(outputs, dim=1), attention_per_step
 
     def run_inference(self, encodings):
         decoder_hidden = torch.zeros(1, len(encodings), self.hidden_size, device=encodings.device)

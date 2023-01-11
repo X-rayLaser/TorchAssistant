@@ -44,8 +44,10 @@ class ImagePreprocessor:
 
     def pad_images(self, images):
         max_height = max([im.height for im in images])
-        #max_height = 75
         max_width = max([im.width for im in images])
+
+        if max_width % 32 != 0:
+            max_width = (max_width // 32 + 1) * 32
 
         padded = []
         for im in images:

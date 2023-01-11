@@ -10,6 +10,7 @@ examples/language_translation/data
 examples/gan
 pretrained/
 image_samples/
+attention_vis
 examples/htr_self_training/synthetic_data/
 examples/htr_self_training/iam/
 examples/htr_self_training/fonts
