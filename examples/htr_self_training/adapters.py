@@ -1,6 +1,7 @@
 from random import randrange, uniform
 import math
 import torch
+import random
 
 from torch.nn.functional import softmax
 from PIL import Image
@@ -10,6 +11,7 @@ from torchvision.transforms import Compose, PILToTensor, ToPILImage
 
 from torchassistant.utils import pad_sequences
 from torchassistant.collators import one_hot_tensor
+from examples.htr_self_training.datasets import scale_image
 
 
 def equal_padding(max_length, length):
@@ -61,11 +63,23 @@ class ImagePreprocessor:
 
 
 class WeakAugmentation(ImagePreprocessor):
+    p_augment = 0.4
+    target_height = 64
+    fill = 255
+    rotation_degrees_range = (-5, 5)
+    blur_size = 3
+    blur_sigma = [1, 1]
+    noise_sigma = 10
+
     def augment(self, images):
-        rotate = transforms.RandomRotation(degrees=[-5, 5], expand=False, fill=255)
-        affine = transforms.RandomAffine(degrees=0, scale=[0.8, 1.0], fill=255)
-        blur = transforms.GaussianBlur(3, sigma=[2, 2])
-        add_noise = gaussian_noise(sigma=20)
+        return self._random_augment(images)
+
+    def _full_augment(self, images):
+        rotate = transforms.RandomRotation(degrees=self.rotation_degrees_range,
+                                           expand=False, fill=self.fill)
+        affine = transforms.RandomAffine(degrees=0, scale=[0.8, 1.0], fill=self.fill)
+        blur = transforms.GaussianBlur(self.blur_size, sigma=self.blur_sigma)
+        add_noise = gaussian_noise(sigma=self.noise_sigma)
 
         #images = [affine(im) for im in images]
         images = [rotate(im) for im in images]
@@ -75,6 +89,33 @@ class WeakAugmentation(ImagePreprocessor):
         images = [blur(im) for im in images]
 
         return images
+
+    def _random_augment(self, images):
+        rotate = self._rotate_and_scale()
+        blur = transforms.GaussianBlur(self.blur_size, sigma=self.blur_sigma)
+        add_noise = gaussian_noise(sigma=self.noise_sigma)
+
+        images = [rotate(im) if self._should_augment() else im for im in images]
+
+        images = self.pad_images(images)
+
+        images = [add_noise(im) if self._should_augment() else im for im in images]
+
+        images = [blur(im) if self._should_augment() else im for im in images]
+
+        return images
+
+    def _should_augment(self):
+        return random.random() < self.p_augment
+
+    def _rotate_and_scale(self):
+        rotate = transforms.RandomRotation(degrees=self.rotation_degrees_range,
+                                           expand=True, fill=self.fill)
+
+        def transform_func(image):
+            return scale_image(rotate(image), target_height=self.target_height)
+
+        return transform_func
 
 
 class StrongAugmentation(WeakAugmentation):
