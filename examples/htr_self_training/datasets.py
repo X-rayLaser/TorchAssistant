@@ -65,7 +65,7 @@ class SyntheticDataset:
 
 
 class IAMWordsDataset:
-    def __init__(self, index_path, target_height=75):
+    def __init__(self, index_path, target_height=64):
         self.index_path = index_path
         self.iam_index = []
         self.target_height = target_height

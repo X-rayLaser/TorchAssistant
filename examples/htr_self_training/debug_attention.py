@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, '.')
 from torchassistant.session import SessionSaver
-from examples.htr_self_training.datasets import SyntheticOnlineDataset
+from examples.htr_self_training.datasets import SyntheticOnlineDataset, IAMWordsDataset
 from examples.htr_self_training.adapters import TrainableProcessorInputAdapter
 
 
@@ -20,6 +20,38 @@ def create_attention_overlay(original, attention_weights, scaler=32):
 
     original.paste(overlay, (0, 0), overlay)
     overlay.close()
+
+
+def get_prediction_with_attention(image, label, tokenizer, encoder, decoder):
+    num_classes = tokenizer.charset_size
+    adapter = TrainableProcessorInputAdapter(num_classes)
+    batch = [image]
+    actual_tokens = tokenizer.process(label)
+    inputs = adapter({"input_1": batch, "input_2": [actual_tokens]})
+    x = inputs["encoder"]["x"]
+
+    encodings, encoder_state = encoder(x)
+    outputs, attention = decoder.debug_attention(encodings)
+    tokens = outputs.argmax(dim=2).tolist()[0]
+
+    return tokens, attention
+
+
+def save_attention_map(image, tokens, attention, tokenizer, save_dir):
+    predicted_text = tokenizer.decode_to_string(tokens, clean_output=True)
+
+    sub_folder = os.path.join(save_dir, predicted_text)
+    os.makedirs(sub_folder, exist_ok=True)
+
+    for i in range(len(tokens)):
+        token = tokens[i]
+        attention_weights = attention[i][0]
+        decoded_token = tokenizer._decode(token)
+        im_copy = image.copy()
+        create_attention_overlay(im_copy, attention_weights)
+
+        image_path = os.path.join(sub_folder, f'{i}_{decoded_token}.png')
+        im_copy.save(image_path)
 
 
 def debug_attention():
@@ -37,37 +69,22 @@ def debug_attention():
     encoder = session.models["encoder"]
     decoder = session.models["decoder"]
 
+    encoder.eval()
+    decoder.eval()
+
     tokenizer = session.preprocessors["tokenize"]
     num_classes = tokenizer.charset_size
-    ds = SyntheticOnlineDataset("examples/htr_self_training/fonts", 1, 64)
+    #ds = SyntheticOnlineDataset("examples/htr_self_training/fonts", 1, 64)
+    #im, label = ds[0]
+    ds = IAMWordsDataset("examples/htr_self_training/iam/iam_val.txt")
 
-    im, label = ds[0]
+    for i, example in enumerate(ds):
+        if i > 10:
+            break
 
-    im.show()
-
-    adapter = TrainableProcessorInputAdapter(num_classes)
-    batch = [im]
-    actual_tokens = tokenizer.process(label)
-    inputs = adapter({"input_1": batch, "input_2": [actual_tokens]})
-    x = inputs["encoder"]["x"]
-
-    encodings, encoder_state = encoder(x)
-    outputs, attention = decoder.debug_attention(encodings)
-    tokens = outputs.argmax(dim=2).tolist()[0]
-    predicted_text = tokenizer.decode_to_string(tokens, clean_output=True)
-    print('prediction:', predicted_text)
-
-    os.makedirs('attention_vis', exist_ok=True)
-
-    for i in range(len(tokens)):
-        token = tokens[i]
-        attention_weights = attention[i][0]
-        decoded_token = tokenizer._decode(token)
-        im_copy = im.copy()
-        create_attention_overlay(im_copy, attention_weights)
-
-        image_path = os.path.join('attention_vis', f'{i}_{decoded_token}.png')
-        im_copy.save(image_path)
+        _, _, im, label = example
+        tokens, attention = get_prediction_with_attention(im, label, tokenizer, encoder, decoder)
+        save_attention_map(im, tokens, attention, tokenizer, 'attention_vis')
 
 
 if __name__ == '__main__':
