@@ -78,13 +78,24 @@ def debug_attention():
     #im, label = ds[0]
     ds = IAMWordsDataset("examples/htr_self_training/iam/iam_val.txt")
 
+    ground_true = []
+    predicted = []
     for i, example in enumerate(ds):
-        if i > 10:
+        if i > 50:
             break
 
         _, _, im, label = example
         tokens, attention = get_prediction_with_attention(im, label, tokenizer, encoder, decoder)
-        save_attention_map(im, tokens, attention, tokenizer, 'attention_vis')
+        predicted_text = tokenizer.decode_to_string(tokens, clean_output=True)
+
+        save_attention_map(im, tokens, attention, tokenizer, 'attention_vis2')
+
+        ground_true.append(label)
+        predicted.append(predicted_text)
+
+    from torchmetrics import CharErrorRate
+    m = CharErrorRate()
+    print("CER:", m(ground_true, predicted))
 
 
 if __name__ == '__main__':
