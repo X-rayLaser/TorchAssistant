@@ -82,8 +82,12 @@ class CharacterTokenizer(ValuePreprocessor):
 
         if clean_output:
             s = s.replace(self.start, '')
-            sentinel_idx = s.index(self.end)
-            s = s[:sentinel_idx]
+            try:
+                sentinel_idx = s.index(self.end)
+                s = s[:sentinel_idx]
+            except ValueError:
+                pass
+
             s = s.replace(self.out_of_charset, '')
 
         return s

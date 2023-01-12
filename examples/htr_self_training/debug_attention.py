@@ -81,7 +81,8 @@ def debug_attention():
     ground_true = []
     predicted = []
     for i, example in enumerate(ds):
-        if i > 50:
+        print('progress', i)
+        if i > 1000:
             break
 
         _, _, im, label = example
